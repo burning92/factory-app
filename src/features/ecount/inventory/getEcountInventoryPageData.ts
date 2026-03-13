@@ -29,14 +29,14 @@ export async function getEcountInventoryPageData(
   const [syncRes, invRes] = await Promise.all([
     supabase
       .from("ecount_sync_status")
-      .select("last_synced_at")
+      .select("last_synced_at, source_refreshed_at")
       .eq("sync_name", SYNC_NAME)
       .maybeSingle(),
     invQuery,
   ]);
 
-  const lastSyncedAt =
-    syncRes.data?.last_synced_at ?? null;
+  const lastSyncedAt = syncRes.data?.last_synced_at ?? null;
+  const sourceRefreshedAt = syncRes.data?.source_refreshed_at ?? null;
   let rows = (invRes.data ?? []) as {
     item_code: string;
     display_item_name: string | null;
@@ -69,6 +69,7 @@ export async function getEcountInventoryPageData(
 
   return {
     lastSyncedAt,
+    sourceRefreshedAt,
     totalCount: viewRows.length,
     tab,
     sort,

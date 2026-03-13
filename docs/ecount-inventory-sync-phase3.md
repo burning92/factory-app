@@ -11,7 +11,7 @@
 
 | 이름 | 필수 | 설명 |
 |------|------|------|
-| `NEXT_PUBLIC_SUPABASE_URL` | O | Supabase 프로젝트 URL |
+| `NEXT_PUBLIC_SUPABASE_URL` 또는 `SUPABASE_URL` | O | Supabase 프로젝트 URL (로컬 fallback: SUPABASE_URL) |
 | `SUPABASE_SERVICE_ROLE_KEY` | O | Supabase service role key (서버 전용, 노출 금지) |
 | `ECCOUNT_SYNC_SECRET` | O | sync API 인증용 토큰. Apps Script의 sync token과 동일한 값으로 설정 |
 
@@ -62,6 +62,6 @@
 
 - **URL:** `POST /api/internal/ecount-inventory/sync`
 - **인증:** `Authorization: Bearer <ECCOUNT_SYNC_SECRET>` 또는 헤더 `x-sync-token: <ECCOUNT_SYNC_SECRET>`
-- **Body:** `{ "masterRows": [...], "inventoryRows": [...] }`
+- **Body:** `{ "masterRows": [...], "inventoryRows": [...], "sourceRefreshedAt": "ISO 문자열(선택)" }`
 - **성공 시:** `ecount_item_master` upsert, `ecount_inventory_current` 전체 교체, `ecount_sync_status` upsert 후 200과 counts 반환.
 - **실패 시:** 401(인증 실패) 또는 500(처리 오류). 500이면 `ecount_sync_status`에 `last_status='failure'`, `message`에 오류 내용 기록.

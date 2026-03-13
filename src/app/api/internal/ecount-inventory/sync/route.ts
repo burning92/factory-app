@@ -37,6 +37,10 @@ export async function POST(req: NextRequest) {
 
   const masterRows = Array.isArray(body.masterRows) ? body.masterRows : [];
   const inventoryRows = Array.isArray(body.inventoryRows) ? body.inventoryRows : [];
+  const sourceRefreshedAt =
+    typeof body.sourceRefreshedAt === "string" && body.sourceRefreshedAt.trim()
+      ? body.sourceRefreshedAt.trim()
+      : null;
 
   const { rows: normalizedMaster, filtered: masterFiltered } =
     normalizeMasterRows(masterRows);
@@ -105,6 +109,7 @@ export async function POST(req: NextRequest) {
         last_status: "success",
         row_count: inventoryInserted,
         message: null,
+        source_refreshed_at: sourceRefreshedAt,
         updated_at: now,
       },
       { onConflict: "sync_name" }
@@ -128,6 +133,7 @@ export async function POST(req: NextRequest) {
         last_status: "failure",
         row_count: 0,
         message,
+        source_refreshed_at: sourceRefreshedAt,
         updated_at: now,
       },
       { onConflict: "sync_name" }

@@ -23,6 +23,8 @@ export type RawInventoryRow = {
 export type SyncPayload = {
   masterRows: RawMasterRow[];
   inventoryRows: RawInventoryRow[];
+  /** RAW 구글시트 마지막 갱신 시각 (ISO 문자열). 선택. */
+  sourceRefreshedAt?: string | null;
 };
 
 /** Normalized for ecount_item_master */

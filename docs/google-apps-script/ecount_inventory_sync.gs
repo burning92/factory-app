@@ -1,8 +1,8 @@
 /**
  * 이카운트 재고 동기화 (구글시트 → 앱 서버 → Supabase)
  * - 시트: 재고_품목마스터, 시리얼/로트No. 재고현황->원재료,부재료,반제품
- * - 1분 주기 time-driven trigger 전제. syncEcountInventory() 실행 함수.
- * - Spreadsheet ID, API URL, sync token은 Script Properties로 분리.
+ * - RAW 갱신시각: 시트 "동기화설정" B2 (ISO 문자열). 없으면 미전송.
+ * - 1분 주기: syncEcountInventory(). 이카운트에서 시트 덮어쓴 뒤 markEcountRawRefreshedAt() → syncEcountInventory() 권장.
  */
 
 var CONFIG = {
@@ -105,10 +105,18 @@ function syncEcountInventory() {
   var masterRows = sheetToRows(masterSheet).map(mapMasterRow);
   var inventoryRows = sheetToRows(inventorySheet).map(mapInventoryRow);
 
+  var sourceRefreshedAt = null;
+  var configSheet = spreadsheet.getSheetByName("동기화설정");
+  if (configSheet) {
+    var rawVal = configSheet.getRange("B2").getValue();
+    if (rawVal && typeof rawVal === "string" && rawVal.trim()) sourceRefreshedAt = rawVal.trim();
+  }
+
   var payload = {
     masterRows: masterRows,
     inventoryRows: inventoryRows,
   };
+  if (sourceRefreshedAt) payload.sourceRefreshedAt = sourceRefreshedAt;
 
   var options = {
     method: "post",
@@ -135,4 +143,26 @@ function syncEcountInventory() {
   } catch (e) {
     Logger.log("[syncEcountInventory] response: " + body);
   }
+}
+
+/**
+ * RAW 마지막 갱신시각을 "동기화설정" 시트 B2에 기록.
+ * 이카운트에서 구글시트에 데이터를 덮어쓴 뒤 이 함수를 실행한 다음 syncEcountInventory() 호출.
+ */
+function markEcountRawRefreshedAt() {
+  var spreadsheetId = getProperty("ECCOUNT_SYNC_SPREADSHEET_ID");
+  if (!spreadsheetId) {
+    Logger.log("[markEcountRawRefreshedAt] ECCOUNT_SYNC_SPREADSHEET_ID not set.");
+    return;
+  }
+  var spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+  var sheet = spreadsheet.getSheetByName("동기화설정");
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet("동기화설정");
+    sheet.getRange("A1").setValue("RAW 마지막 갱신시각 (ISO)");
+    sheet.getRange("B1").setValue("값");
+  }
+  var iso = new Date().toISOString();
+  sheet.getRange("B2").setValue(iso);
+  Logger.log("[markEcountRawRefreshedAt] B2 set to " + iso);
 }

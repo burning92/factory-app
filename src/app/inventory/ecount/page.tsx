@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDateTimeKorea } from "@/lib/formatDateTimeKorea";
 import { getEcountInventoryPageData } from "@/features/ecount/inventory/getEcountInventoryPageData";
 import { INVENTORY_TABS, INVENTORY_SORT_OPTIONS } from "@/features/ecount/inventory/types";
 import type { InventorySort } from "@/features/ecount/inventory/types";
@@ -6,19 +7,6 @@ import type { InventorySort } from "@/features/ecount/inventory/types";
 const TAB_PARAM = "tab";
 const Q_PARAM = "q";
 const SORT_PARAM = "sort";
-
-function formatDateTime(iso: string | null): string {
-  if (!iso) return "—";
-  try {
-    const d = new Date(iso);
-    return d.toLocaleString("ko-KR", {
-      dateStyle: "short",
-      timeStyle: "short",
-    });
-  } catch {
-    return "—";
-  }
-}
 
 function formatNumber(n: number): string {
   if (!Number.isFinite(n)) return "0";
@@ -46,14 +34,14 @@ export default async function InventoryEcountPage({ searchParams }: PageProps) {
   let data;
   try {
     data = await getEcountInventoryPageData(tab, q, sort);
-  } catch (err) {
+  } catch {
     return (
       <div className="p-4 max-w-2xl mx-auto">
         <p className="text-red-400 text-sm">
-          재고 데이터를 불러올 수 없습니다. 서버 설정을 확인하세요.
+          재고 데이터를 불러올 수 없습니다. 로컬 개발환경의 Supabase 설정을 확인하세요.
         </p>
         <p className="text-slate-500 text-xs mt-2">
-          {err instanceof Error ? err.message : String(err)}
+          .env.local에 NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY를 설정했는지 확인하세요.
         </p>
       </div>
     );
@@ -76,10 +64,13 @@ export default async function InventoryEcountPage({ searchParams }: PageProps) {
         이카운트 재고현황
       </h1>
 
-      {/* 상단 요약 */}
-      <div className="flex flex-wrap items-center gap-4 mb-4 p-3 rounded-lg bg-slate-800/60 border border-slate-700/60 text-sm">
+      {/* 상단 요약: 한국 시간 24시간제 */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4 p-3 rounded-lg bg-slate-800/60 border border-slate-700/60 text-sm">
         <span className="text-slate-400">마지막 동기화</span>
-        <span className="text-slate-200">{formatDateTime(data.lastSyncedAt)}</span>
+        <span className="text-slate-200">{formatDateTimeKorea(data.lastSyncedAt)}</span>
+        <span className="text-slate-500">|</span>
+        <span className="text-slate-400">RAW 갱신시각</span>
+        <span className="text-slate-200">{formatDateTimeKorea(data.sourceRefreshedAt)}</span>
         <span className="text-slate-500">|</span>
         <span className="text-slate-400">현재 탭</span>
         <span className="text-cyan-300 font-medium">{data.tab}</span>

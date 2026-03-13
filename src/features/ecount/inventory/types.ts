@@ -12,6 +12,7 @@ export type EcountInventoryViewRow = {
 /** 페이지 데이터 (서버 fetch 결과) */
 export type EcountInventoryPageData = {
   lastSyncedAt: string | null;
+  sourceRefreshedAt: string | null;
   totalCount: number;
   tab: "원재료" | "부자재" | "반제품";
   sort: InventorySort;
