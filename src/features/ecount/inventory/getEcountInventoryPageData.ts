@@ -1,13 +1,30 @@
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
-import type { EcountInventoryPageData, InventoryTab } from "./types";
+import type { EcountInventoryPageData, InventoryTab, InventorySort } from "./types";
 
 const SYNC_NAME = "ecount_inventory";
 
 export async function getEcountInventoryPageData(
   tab: InventoryTab,
-  searchQ?: string
+  searchQ?: string,
+  sort: InventorySort = "category"
 ): Promise<EcountInventoryPageData> {
   const supabase = getSupabaseAdmin();
+
+  let invQuery = supabase
+    .from("ecount_inventory_current")
+    .select("item_code, display_item_name, lot_no, qty, category, box_weight_g, unit_weight_g")
+    .eq("inventory_type", tab);
+
+  if (sort === "category") {
+    invQuery = invQuery
+      .order("category", { ascending: true, nullsFirst: false })
+      .order("display_item_name", { ascending: true })
+      .order("lot_no", { ascending: true });
+  } else {
+    invQuery = invQuery
+      .order("display_item_name", { ascending: true })
+      .order("lot_no", { ascending: true });
+  }
 
   const [syncRes, invRes] = await Promise.all([
     supabase
@@ -15,12 +32,7 @@ export async function getEcountInventoryPageData(
       .select("last_synced_at")
       .eq("sync_name", SYNC_NAME)
       .maybeSingle(),
-    supabase
-      .from("ecount_inventory_current")
-      .select("item_code, display_item_name, lot_no, qty, category, box_weight_g, unit_weight_g")
-      .eq("inventory_type", tab)
-      .order("display_item_name", { ascending: true })
-      .order("lot_no", { ascending: true }),
+    invQuery,
   ]);
 
   const lastSyncedAt =
@@ -59,6 +71,7 @@ export async function getEcountInventoryPageData(
     lastSyncedAt,
     totalCount: viewRows.length,
     tab,
+    sort,
     rows: viewRows,
   };
 }

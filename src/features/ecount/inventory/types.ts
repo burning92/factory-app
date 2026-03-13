@@ -14,8 +14,13 @@ export type EcountInventoryPageData = {
   lastSyncedAt: string | null;
   totalCount: number;
   tab: "원재료" | "부자재" | "반제품";
+  sort: InventorySort;
   rows: EcountInventoryViewRow[];
 };
 
 export const INVENTORY_TABS = ["원재료", "부자재", "반제품"] as const;
 export type InventoryTab = (typeof INVENTORY_TABS)[number];
+
+/** 정렬: 카테고리순(기본) | 품목명순 */
+export const INVENTORY_SORT_OPTIONS = ["category", "name"] as const;
+export type InventorySort = (typeof INVENTORY_SORT_OPTIONS)[number];
