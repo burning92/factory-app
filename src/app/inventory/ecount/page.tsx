@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { getEcountInventoryPageData } from "@/features/ecount/inventory/getEcountInventoryPageData";
-import { INVENTORY_TABS } from "@/features/ecount/inventory/types";
+import { INVENTORY_TABS, INVENTORY_SORT_OPTIONS } from "@/features/ecount/inventory/types";
+import type { InventorySort } from "@/features/ecount/inventory/types";
 
 const TAB_PARAM = "tab";
 const Q_PARAM = "q";
+const SORT_PARAM = "sort";
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return "—";
@@ -18,6 +20,11 @@ function formatDateTime(iso: string | null): string {
   }
 }
 
+function formatNumber(n: number): string {
+  if (!Number.isFinite(n)) return "0";
+  return n.toLocaleString("ko-KR");
+}
+
 type PageProps = {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 };
@@ -30,10 +37,15 @@ export default async function InventoryEcountPage({ searchParams }: PageProps) {
       ? (tabParam as "원재료" | "부자재" | "반제품")
       : "원재료";
   const q = typeof params[Q_PARAM] === "string" ? params[Q_PARAM] : "";
+  const sortParam = params[SORT_PARAM];
+  const sort: InventorySort =
+    typeof sortParam === "string" && INVENTORY_SORT_OPTIONS.includes(sortParam as InventorySort)
+      ? (sortParam as InventorySort)
+      : "category";
 
   let data;
   try {
-    data = await getEcountInventoryPageData(tab, q);
+    data = await getEcountInventoryPageData(tab, q, sort);
   } catch (err) {
     return (
       <div className="p-4 max-w-2xl mx-auto">
@@ -48,6 +60,15 @@ export default async function InventoryEcountPage({ searchParams }: PageProps) {
   }
 
   const basePath = "/inventory/ecount";
+
+  function buildQuery(t: string, searchQ: string, s: InventorySort) {
+    const sp = new URLSearchParams();
+    sp.set(TAB_PARAM, t);
+    if (searchQ) sp.set(Q_PARAM, searchQ);
+    if (s !== "category") sp.set(SORT_PARAM, s);
+    const qs = sp.toString();
+    return qs ? `${basePath}?${qs}` : basePath;
+  }
 
   return (
     <div className="min-h-[calc(100vh-3.5rem)] flex flex-col p-4 sm:p-6 max-w-6xl mx-auto">
@@ -72,11 +93,7 @@ export default async function InventoryEcountPage({ searchParams }: PageProps) {
         {INVENTORY_TABS.map((t) => (
           <Link
             key={t}
-            href={
-              q
-                ? `${basePath}?${TAB_PARAM}=${encodeURIComponent(t)}&${Q_PARAM}=${encodeURIComponent(q)}`
-                : `${basePath}?${TAB_PARAM}=${encodeURIComponent(t)}`
-            }
+            href={buildQuery(t, q, sort)}
             className={`px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors ${
               data.tab === t
                 ? "bg-slate-700/80 text-cyan-300 border-b-2 border-cyan-500 -mb-px"
@@ -88,6 +105,31 @@ export default async function InventoryEcountPage({ searchParams }: PageProps) {
         ))}
       </div>
 
+      {/* 정렬 */}
+      <div className="flex items-center gap-2 mb-3 text-sm">
+        <span className="text-slate-500">정렬:</span>
+        <Link
+          href={buildQuery(tab, q, "category")}
+          className={`px-3 py-1.5 rounded-lg transition-colors ${
+            sort === "category"
+              ? "bg-cyan-500/20 text-cyan-300 font-medium"
+              : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/60"
+          }`}
+        >
+          카테고리순
+        </Link>
+        <Link
+          href={buildQuery(tab, q, "name")}
+          className={`px-3 py-1.5 rounded-lg transition-colors ${
+            sort === "name"
+              ? "bg-cyan-500/20 text-cyan-300 font-medium"
+              : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/60"
+          }`}
+        >
+          품목명순
+        </Link>
+      </div>
+
       {/* 검색 */}
       <form
         method="get"
@@ -95,6 +137,7 @@ export default async function InventoryEcountPage({ searchParams }: PageProps) {
         className="mb-4 flex gap-2 flex-wrap"
       >
         <input type="hidden" name={TAB_PARAM} value={tab} />
+        {sort !== "category" && <input type="hidden" name={SORT_PARAM} value={sort} />}
         <input
           type="search"
           name={Q_PARAM}
@@ -111,7 +154,7 @@ export default async function InventoryEcountPage({ searchParams }: PageProps) {
         </button>
         {q && (
           <Link
-            href={`${basePath}?${TAB_PARAM}=${encodeURIComponent(tab)}`}
+            href={buildQuery(tab, "", sort)}
             className="px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 text-sm"
           >
             초기화
@@ -119,76 +162,113 @@ export default async function InventoryEcountPage({ searchParams }: PageProps) {
         )}
       </form>
 
-      {/* 표: 가로 스크롤 허용 */}
-      <div className="overflow-x-auto rounded-lg border border-slate-700/60 bg-slate-800/40">
-        <table className="w-full min-w-[720px] text-sm border-collapse">
-          <thead>
-            <tr className="border-b border-slate-600 bg-slate-800/80">
-              <th className="text-left py-3 px-3 text-slate-400 font-medium whitespace-nowrap">
-                품목코드
-              </th>
-              <th className="text-left py-3 px-3 text-slate-400 font-medium whitespace-nowrap">
-                품목명
-              </th>
-              <th className="text-left py-3 px-3 text-slate-400 font-medium whitespace-nowrap">
-                LOT
-              </th>
-              <th className="text-right py-3 px-3 text-slate-400 font-medium whitespace-nowrap">
-                재고수량
-              </th>
-              <th className="text-left py-3 px-3 text-slate-400 font-medium whitespace-nowrap">
-                카테고리
-              </th>
-              <th className="text-right py-3 px-3 text-slate-400 font-medium whitespace-nowrap">
-                1박스(g)
-              </th>
-              <th className="text-right py-3 px-3 text-slate-400 font-medium whitespace-nowrap">
-                1개(g)
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.rows.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={7}
-                  className="py-8 px-3 text-center text-slate-500"
-                >
-                  표시할 데이터가 없습니다.
-                </td>
+      {/* 모바일: 카드형 리스트 (품목명 / 소비기한 / 재고수량 중심) */}
+      <div className="space-y-2 md:hidden">
+        {data.rows.length === 0 ? (
+          <div className="py-8 px-3 text-center text-slate-500 border border-slate-700/60 rounded-lg bg-slate-800/40">
+            표시할 데이터가 없습니다.
+          </div>
+        ) : (
+          data.rows.map((row, i) => (
+            <div
+              key={`${row.item_code}-${row.lot_no}-${i}`}
+              className="rounded-lg border border-slate-700/70 bg-slate-800/60 px-3 py-2.5 flex flex-col gap-1.5"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-slate-50 font-medium text-sm leading-snug truncate">
+                  {row.display_item_name}
+                </p>
+                <p className="text-cyan-300 font-semibold text-base tabular-nums">
+                  {formatNumber(row.qty)}
+                </p>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-xs text-slate-400">
+                <span className="font-mono">
+                  소비기한: <span className="text-slate-200">{row.lot_no}</span>
+                </span>
+                {row.category && (
+                  <span className="truncate max-w-[40%] text-slate-500">
+                    {row.category}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* 데스크톱: 표 (품목코드 숨김, 가로 스크롤 허용) */}
+      <div className="hidden md:block">
+        <div className="overflow-x-auto rounded-lg border border-slate-700/60 bg-slate-800/40">
+          <table className="w-full min-w-[640px] text-sm border-collapse">
+            <thead>
+              <tr className="border-b border-slate-600 bg-slate-800/80">
+                <th className="text-left py-3 px-3 text-slate-400 font-medium whitespace-nowrap">
+                  품목명
+                </th>
+                <th className="text-left py-3 px-3 text-slate-400 font-medium whitespace-nowrap">
+                  LOT
+                </th>
+                <th className="text-right py-3 px-3 text-slate-400 font-medium whitespace-nowrap">
+                  재고수량
+                </th>
+                <th className="text-left py-3 px-3 text-slate-400 font-medium whitespace-nowrap">
+                  카테고리
+                </th>
+                <th className="text-right py-3 px-3 text-slate-400 font-medium whitespace-nowrap">
+                  1박스(g)
+                </th>
+                <th className="text-right py-3 px-3 text-slate-400 font-medium whitespace-nowrap">
+                  1개(g)
+                </th>
               </tr>
-            ) : (
-              data.rows.map((row, i) => (
-                <tr
-                  key={`${row.item_code}-${row.lot_no}-${i}`}
-                  className="border-b border-slate-700/50 hover:bg-slate-700/30"
-                >
-                  <td className="py-2.5 px-3 text-slate-200 font-mono text-xs whitespace-nowrap">
-                    {row.item_code}
-                  </td>
-                  <td className="py-2.5 px-3 text-slate-200 whitespace-nowrap max-w-[200px] truncate" title={row.display_item_name}>
-                    {row.display_item_name}
-                  </td>
-                  <td className="py-2.5 px-3 text-slate-300 font-mono text-xs whitespace-nowrap">
-                    {row.lot_no}
-                  </td>
-                  <td className="py-2.5 px-3 text-right text-slate-200 tabular-nums">
-                    {row.qty}
-                  </td>
-                  <td className="py-2.5 px-3 text-slate-400 whitespace-nowrap max-w-[120px] truncate" title={row.category ?? ""}>
-                    {row.category ?? "—"}
-                  </td>
-                  <td className="py-2.5 px-3 text-right text-slate-400 tabular-nums">
-                    {row.box_weight_g}
-                  </td>
-                  <td className="py-2.5 px-3 text-right text-slate-400 tabular-nums">
-                    {row.unit_weight_g}
+            </thead>
+            <tbody>
+              {data.rows.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="py-8 px-3 text-center text-slate-500"
+                  >
+                    표시할 데이터가 없습니다.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                data.rows.map((row, i) => (
+                  <tr
+                    key={`${row.item_code}-${row.lot_no}-${i}`}
+                    className="border-b border-slate-700/50 hover:bg-slate-700/30"
+                  >
+                    <td
+                      className="py-2.5 px-3 text-slate-200 whitespace-nowrap max-w-[220px] truncate"
+                      title={row.display_item_name}
+                    >
+                      {row.display_item_name}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-300 font-mono text-xs whitespace-nowrap">
+                      {row.lot_no}
+                    </td>
+                    <td className="py-2.5 px-3 text-right text-slate-200 tabular-nums font-semibold">
+                      {formatNumber(row.qty)}
+                    </td>
+                    <td
+                      className="py-2.5 px-3 text-slate-400 whitespace-nowrap max-w-[140px] truncate"
+                      title={row.category ?? ""}
+                    >
+                      {row.category ?? "—"}
+                    </td>
+                    <td className="py-2.5 px-3 text-right text-slate-400 tabular-nums">
+                      {formatNumber(row.box_weight_g)}
+                    </td>
+                    <td className="py-2.5 px-3 text-right text-slate-400 tabular-nums">
+                      {formatNumber(row.unit_weight_g)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
