@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { Package, Plus, List, Settings, ClipboardList, Calculator, FileText } from "lucide-react";
+import { Package, Plus, List, Settings, ClipboardList, Calculator, FileText, Boxes } from "lucide-react";
 
 const MENUS = [
   { href: "/production/outbound", label: "출고 입력", Icon: Package },
@@ -13,6 +13,7 @@ const MENUS = [
   { href: "/production/history/completed", label: "생산일지 목록", Icon: FileText },
   { href: "/production/dough-usage", label: "반죽사용량 입력", Icon: Plus },
   { href: "/production/dough-logs", label: "반죽 내역 관리", Icon: List },
+  { href: "/inventory/ecount", label: "재고 현황", Icon: Boxes },
   { href: "/production/admin", label: "기준 정보 관리", Icon: Settings },
 ] as const;
 
