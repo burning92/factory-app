@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { useMasterStore } from "@/store/useMasterStore";
 import DateWheelPicker from "@/components/DateWheelPicker";
+import { createSafeId } from "@/lib/createSafeId";
 
 interface OutboundRow {
   materialName: string;
@@ -100,7 +101,7 @@ function OutboundModal({
   const [rows, setRows] = useState<OutboundEntryRow[]>(() => {
     if (initialEntries?.length) {
       return initialEntries.map((e) => ({
-        id: crypto.randomUUID(),
+        id: createSafeId(),
         expiryDate: e.expiryDate || defaultExpiryDate,
         boxQty: String(e.boxQty),
         bagQty: String(e.bagQty),
@@ -109,7 +110,7 @@ function OutboundModal({
     }
     return [
       {
-        id: crypto.randomUUID(),
+        id: createSafeId(),
         expiryDate: defaultExpiryDate,
         boxQty: "",
         bagQty: "",
@@ -121,7 +122,7 @@ function OutboundModal({
   const addRow = useCallback(() => {
     setRows((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), expiryDate: defaultExpiryDate, boxQty: "", bagQty: "", remainderG: "" },
+      { id: createSafeId(), expiryDate: defaultExpiryDate, boxQty: "", bagQty: "", remainderG: "" },
     ]);
   }, [defaultExpiryDate]);
 

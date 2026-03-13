@@ -6,3 +6,4 @@ node_modules
 *.pem
 factory.key
 vercel
+.vercel

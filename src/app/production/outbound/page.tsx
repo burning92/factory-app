@@ -4,6 +4,7 @@ import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useMasterStore } from "@/store/useMasterStore";
 import DateWheelPicker from "@/components/DateWheelPicker";
 import { getAppRecentValue, setAppRecentValue } from "@/lib/appRecentValues";
+import { createSafeId } from "@/lib/createSafeId";
 
 /** 출고 입력 전용 최근 작성자명 (1차 마감과 분리). Supabase 우선, localStorage는 보조 fallback */
 const OUTBOUND_LAST_AUTHOR_KEY = "outbound-last-author-name";
@@ -121,12 +122,17 @@ function calcOutbound(
   return result;
 }
 
-function formatRequiredQty(row: OutboundRow): string {
-  if (row.quantityType === "g_only") return `${row.totalG.toLocaleString()}g`;
-  if (row.quantityType === "ea_only") return `${row.bagQty.toLocaleString()}개`;
+function formatRequiredQty(row: OutboundRow | null | undefined): string {
+  if (!row || typeof row !== "object") return "—";
+  const qty = row.quantityType;
+  const totalG = Number(row.totalG) || 0;
+  const boxQty = Number(row.boxQty) || 0;
+  const bagQty = Number(row.bagQty) || 0;
+  if (qty === "g_only") return `${totalG.toLocaleString()}g`;
+  if (qty === "ea_only") return `${bagQty.toLocaleString()}개`;
   const parts: string[] = [];
-  if (row.boxQty > 0) parts.push(`${row.boxQty}박스`);
-  if (row.bagQty > 0) parts.push(`${row.bagQty}개`);
+  if (boxQty > 0) parts.push(`${boxQty}박스`);
+  if (bagQty > 0) parts.push(`${bagQty}개`);
   return parts.length ? parts.join(" ") : "0박스";
 }
 
@@ -192,20 +198,29 @@ function OutboundModal({
   onClose: () => void;
   onSave: (entries: { expiryDate: string; boxQty: number; bagQty: number; remainderG: number }[]) => void;
 }) {
+  const safeExpiry = typeof defaultExpiryDate === "string" && defaultExpiryDate.trim() ? defaultExpiryDate.trim() : todayStr();
+  const safeType: "g_only" | "ea_only" | "box_ea" =
+    quantityType === "g_only" || quantityType === "ea_only" || quantityType === "box_ea" ? quantityType : "g_only";
+  const safeEntries = Array.isArray(initialEntries) ? initialEntries : [];
+
   const [rows, setRows] = useState<OutboundEntryRow[]>(() => {
-    if (initialEntries?.length) {
-      return initialEntries.map((e) => ({
-        id: crypto.randomUUID(),
-        expiryDate: e.expiryDate || defaultExpiryDate,
-        boxQty: String(e.boxQty),
-        bagQty: String(e.bagQty),
-        remainderG: String(e.remainderG),
-      }));
+    try {
+      if (safeEntries.length > 0) {
+        return safeEntries.map((e) => ({
+          id: createSafeId(),
+          expiryDate: (e && typeof e.expiryDate === "string" ? e.expiryDate : "") || safeExpiry,
+          boxQty: e && typeof e.boxQty === "number" ? String(e.boxQty) : "0",
+          bagQty: e && typeof e.bagQty === "number" ? String(e.bagQty) : "0",
+          remainderG: e && typeof e.remainderG === "number" ? String(e.remainderG) : "0",
+        }));
+      }
+    } catch (err) {
+      console.error("[OutboundModal] initialEntries map error:", err);
     }
     return [
       {
-        id: crypto.randomUUID(),
-        expiryDate: defaultExpiryDate,
+        id: createSafeId(),
+        expiryDate: safeExpiry,
         boxQty: "",
         bagQty: "",
         remainderG: "",
@@ -216,9 +231,9 @@ function OutboundModal({
   const addRow = useCallback(() => {
     setRows((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), expiryDate: defaultExpiryDate, boxQty: "", bagQty: "", remainderG: "" },
+      { id: createSafeId(), expiryDate: safeExpiry, boxQty: "", bagQty: "", remainderG: "" },
     ]);
-  }, [defaultExpiryDate]);
+  }, [safeExpiry]);
 
   const updateRow = useCallback((id: string, field: keyof OutboundEntryRow, value: string) => {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
@@ -226,12 +241,12 @@ function OutboundModal({
 
   const handleSave = useCallback(() => {
     const entries = rows
-      .filter((r) => r.expiryDate.trim() !== "")
+      .filter((r) => r && String(r.expiryDate ?? "").trim() !== "")
       .map((r) => ({
-        expiryDate: r.expiryDate,
-        boxQty: quantityType === "box_ea" ? (parseInt(r.boxQty, 10) || 0) : 0,
-        bagQty: quantityType === "g_only" ? 0 : (parseInt(r.bagQty, 10) || 0),
-        remainderG: parseInt(r.remainderG, 10) || 0,
+        expiryDate: String(r.expiryDate ?? "").trim(),
+        boxQty: safeType === "box_ea" ? (parseInt(String(r.boxQty ?? ""), 10) || 0) : 0,
+        bagQty: safeType === "g_only" ? 0 : (parseInt(String(r.bagQty ?? ""), 10) || 0),
+        remainderG: parseInt(String(r.remainderG ?? ""), 10) || 0,
       }));
     if (entries.length) {
       onSave(entries);
@@ -239,7 +254,7 @@ function OutboundModal({
     } else {
       alert("소비기한(날짜)을 입력해 주세요.");
     }
-  }, [rows, quantityType, onSave, onClose]);
+  }, [rows, safeType, onSave, onClose]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
@@ -248,17 +263,17 @@ function OutboundModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-5 border-b border-slate-600">
-          <h3 className="text-lg font-bold text-slate-100">{materialName}</h3>
+          <h3 className="text-lg font-bold text-slate-100">{materialName || "원료"}</h3>
           <p className="text-sm text-slate-400 mt-1">필요 수량: {requiredText}</p>
         </div>
         <div className="p-5 overflow-y-auto flex-1">
           <div className="space-y-4">
-            {rows.map((row, index) => (
+            {(Array.isArray(rows) ? rows : []).map((row, index) => (
               <div key={row.id} className="p-3 rounded-xl border border-slate-600 bg-space-900/80 space-y-2">
                 <span className="text-xs font-medium text-slate-500">소비기한 #{index + 1}</span>
                 <div className="grid grid-cols-2 gap-2">
                   {/* 1열: 박스 수량 / 낱개 수량 (수량 먼저 → tab 순서) */}
-                  {quantityType === "box_ea" && (
+                  {safeType === "box_ea" && (
                     <>
                       <div>
                         <label className="block text-xs text-slate-400 mb-0.5">박스 수량</label>
@@ -270,7 +285,7 @@ function OutboundModal({
                       </div>
                     </>
                   )}
-                  {quantityType === "ea_only" && (
+                  {safeType === "ea_only" && (
                     <div>
                       <label className="block text-xs text-slate-400 mb-0.5">낱개 수량</label>
                       <input type="number" min={0} inputMode="numeric" value={row.bagQty} onChange={(e) => updateRow(row.id, "bagQty", e.target.value)} placeholder="0" className="w-full px-2 py-1.5 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100 focus:ring-2 focus:ring-cyan-500/50" />
@@ -278,8 +293,8 @@ function OutboundModal({
                   )}
                   {/* 2열: 잔량(g) / 소비기한(날짜) — g 전용일 때도 수량이 위(먼저) */}
                   <div>
-                    <label className="block text-xs text-slate-400 mb-0.5">{quantityType === "g_only" ? "출고 잔량(g)" : "잔량(g)"}</label>
-                    <input type="number" min={0} inputMode="numeric" value={row.remainderG} onChange={(e) => updateRow(row.id, "remainderG", e.target.value)} placeholder={quantityType === "g_only" ? "g 입력" : "0"} className="w-full px-2 py-1.5 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100 focus:ring-2 focus:ring-cyan-500/50" />
+                    <label className="block text-xs text-slate-400 mb-0.5">{safeType === "g_only" ? "출고 잔량(g)" : "잔량(g)"}</label>
+                    <input type="number" min={0} inputMode="numeric" value={row.remainderG} onChange={(e) => updateRow(row.id, "remainderG", e.target.value)} placeholder={safeType === "g_only" ? "g 입력" : "0"} className="w-full px-2 py-1.5 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100 focus:ring-2 focus:ring-cyan-500/50" />
                   </div>
                   <div>
                     <label className="block text-xs text-slate-400 mb-0.5">소비기한(날짜)</label>
@@ -436,7 +451,7 @@ export default function OutboundPage() {
   };
 
   const getDefaultExpiry = (materialName: string) =>
-    lastUsedDates[materialName] || todayStr();
+    (lastUsedDates ?? {})[String(materialName ?? "")] || todayStr();
 
   const handleSaveToPending = (
     entries: { expiryDate: string; boxQty: number; bagQty: number; remainderG: number }[],
@@ -454,6 +469,28 @@ export default function OutboundPage() {
     }));
     setModal(null);
   };
+
+  const openOutboundModal = useCallback((row: OutboundRow) => {
+    try {
+      if (!row || typeof row !== "object") {
+        alert("선택한 원료 정보를 불러올 수 없습니다.");
+        return;
+      }
+      if (!row.materialName) {
+        alert("원료명이 없어 출고 입력을 열 수 없습니다.");
+        return;
+      }
+      const qty = row.quantityType;
+      if (qty !== "g_only" && qty !== "ea_only" && qty !== "box_ea") {
+        setModal({ row: { ...row, quantityType: "g_only" } });
+        return;
+      }
+      setModal({ row });
+    } catch (err) {
+      console.error("[Outbound] openOutboundModal error:", err);
+      alert("출고 입력을 열 수 없습니다. 콘솔을 확인해 주세요.");
+    }
+  }, []);
 
   const handleFinalSave = async () => {
     const list = Object.values(pendingOutbound);
@@ -675,7 +712,7 @@ export default function OutboundPage() {
                         </p>
                         <button
                           type="button"
-                          onClick={() => setModal({ row })}
+                          onClick={() => openOutboundModal(row)}
                           className={pending ? "mt-3 w-full inline-flex items-center justify-center px-4 py-3 rounded-lg bg-emerald-500/80 text-space-900 text-sm font-medium shadow-glow hover:bg-emerald-400 transition-colors" : "mt-3 w-full inline-flex items-center justify-center px-4 py-3 rounded-lg bg-cyan-500 text-space-900 text-sm font-medium shadow-glow hover:bg-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 transition-colors"}
                         >
                           {pending ? "✅ 입력 완료 (수정)" : "출고 입력"}
@@ -728,7 +765,7 @@ export default function OutboundPage() {
                               <td className="px-4 py-3 text-center">
                                 <button
                                   type="button"
-                                  onClick={() => setModal({ row })}
+                                  onClick={() => openOutboundModal(row)}
                                   className={pending ? "inline-flex items-center justify-center px-4 py-2 rounded-lg bg-emerald-500/80 text-space-900 text-sm font-medium shadow-glow hover:bg-emerald-400 transition-colors" : "inline-flex items-center justify-center px-4 py-2 rounded-lg bg-cyan-500 text-space-900 text-sm font-medium shadow-glow hover:bg-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 transition-colors"}
                                 >
                                   {pending ? "✅ 입력 완료 (수정)" : "출고 입력"}
@@ -766,15 +803,15 @@ export default function OutboundPage() {
           </>
         )}
 
-        {modal && (
+        {modal?.row && (
           <OutboundModal
-            materialName={modal.row.materialName}
+            materialName={String(modal.row.materialName ?? "")}
             requiredText={formatRequiredQty(modal.row)}
             defaultExpiryDate={getDefaultExpiry(modal.row.materialName)}
-            initialEntries={pendingOutbound[modal.row.materialName]?.entries}
-            quantityType={modal.row.quantityType}
+            initialEntries={Array.isArray(pendingOutbound[modal.row.materialName]?.entries) ? pendingOutbound[modal.row.materialName].entries : undefined}
+            quantityType={modal.row.quantityType === "g_only" || modal.row.quantityType === "ea_only" || modal.row.quantityType === "box_ea" ? modal.row.quantityType : "g_only"}
             onClose={() => setModal(null)}
-            onSave={(entries) => handleSaveToPending(entries, { productionDate, productName: productName.trim(), materialName: modal.row.materialName })}
+            onSave={(entries) => handleSaveToPending(entries, { productionDate, productName: productName.trim(), materialName: String(modal.row.materialName ?? "") })}
           />
         )}
       </div>
