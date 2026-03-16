@@ -14,6 +14,8 @@ import type {
   UnresolvedExtraParbake,
   BaseWasteResult,
   BaseUsageResult,
+  BaseWasteRow,
+  BaseUsageRow,
   FifoLotRow,
 } from "./types";
 import { getDoughBaseRowsFromGeneralBom } from "./bomAdapter";
@@ -282,8 +284,8 @@ function calculateParbakeAndDough(
   };
 }
 
-/** 날짜 기준 파베이크 종류 집합. participatesInParbakeTypeInference === true 인 제품만 포함 (브레드 제외) */
-function getDateParbakeTypes(productSummaries: ProductSummary[]): string[] {
+/** 날짜 기준 파베이크 종류 집합. participatesInParbakeTypeInference === true 인 제품만 포함 (브레드 제외). 총괄/혼합 베이스 판별용으로 export */
+export function getDateParbakeTypes(productSummaries: ProductSummary[]): string[] {
   const set = new Set<string>();
   for (const p of productSummaries) {
     if (p.participatesInParbakeTypeInference && p.inferredParbakeName) {
@@ -392,7 +394,30 @@ function getAstronautSaleLabels(
   };
 }
 
-/** 베이스(도우소스) 폐기량 g: parbakeWasteQty × 가중평균 g/ea. 1종일 때만 계산 */
+/** 단일 파베이크 종류에 대한 가중 g/ea 및 베이스 소스명 */
+function getWeightedBaseSauceForType(
+  parbakeName: string,
+  productSummaries: ProductSummary[]
+): { baseSauceMaterialName: string; weightedBaseSaucePerUnitQty: number } | null {
+  const candidates = productSummaries.filter(
+    (p) =>
+      p.requiresBaseSauceBom &&
+      p.inferredParbakeName === parbakeName &&
+      p.inferredBaseSaucePerUnitQty != null
+  );
+  if (candidates.length === 0) return null;
+  let totalQty = 0;
+  let weightedSum = 0;
+  for (const p of candidates) {
+    totalQty += p.finishedQty;
+    weightedSum += p.finishedQty * (p.inferredBaseSaucePerUnitQty ?? 0);
+  }
+  const weightedBaseSaucePerUnitQty = totalQty > 0 ? weightedSum / totalQty : 0;
+  const baseSauceMaterialName = candidates[0]!.inferredBaseSauceMaterialName ?? "";
+  return { baseSauceMaterialName, weightedBaseSaucePerUnitQty };
+}
+
+/** 베이스(도우소스) 폐기량 g: parbakeWasteQty × 가중평균 g/ea. 1종일 때만 계산 (레거시 단일 결과용) */
 function calculateBaseWaste(
   parbakeWasteQty: number,
   productSummaries: ProductSummary[],
@@ -410,39 +435,154 @@ function calculateBaseWaste(
   }
 
   const parbakeName = dateParbakeTypes[0]!;
-  const candidates = productSummaries.filter(
-    (p) =>
-      p.requiresBaseSauceBom &&
-      p.inferredParbakeName === parbakeName &&
-      p.inferredBaseSaucePerUnitQty != null
-  );
-  if (candidates.length === 0) {
+  const meta = getWeightedBaseSauceForType(parbakeName, productSummaries);
+  if (!meta) {
     warnings.push(
       `파베이크 [${parbakeName}] 제품에 도우소스 BOM g/ea가 없어 베이스 폐기량을 계산할 수 없습니다.`
     );
     return { resolved: false, warnings };
   }
 
-  let totalQty = 0;
-  let weightedSum = 0;
-  for (const p of candidates) {
-    const qty = p.finishedQty;
-    totalQty += qty;
-    weightedSum += qty * (p.inferredBaseSaucePerUnitQty ?? 0);
-  }
-  const weightedBaseSaucePerUnitQty =
-    totalQty > 0 ? weightedSum / totalQty : 0;
-  const baseSauceMaterialName = candidates[0]!.inferredBaseSauceMaterialName ?? undefined;
-  const baseWasteQty = Math.round(parbakeWasteQty * weightedBaseSaucePerUnitQty);
-
+  const baseWasteQty = Math.round(parbakeWasteQty * meta.weightedBaseSaucePerUnitQty);
   return {
     resolved: true,
     parbakeName,
-    baseSauceMaterialName: baseSauceMaterialName ?? undefined,
-    weightedBaseSaucePerUnitQty,
+    baseSauceMaterialName: meta.baseSauceMaterialName,
+    weightedBaseSaucePerUnitQty: meta.weightedBaseSaucePerUnitQty,
     baseWasteQty,
     warnings,
   };
+}
+
+/**
+ * 혼합 베이스 날: 총 파베이크 폐기량(개)을 타입별 생산수량 비중으로 자동 안분.
+ * - 안분 기준: 각 베이스 타입에 속한 당일 생산수량(finishedQty) 합계 비율
+ * - 정수 처리: 먼저 floor, 남는 개수는 소수부가 큰 타입부터 1개씩 배정. 합계 = totalParbakeWasteQty 보장.
+ */
+function allocateParbakeWasteByRatio(
+  totalParbakeWasteQty: number,
+  dateParbakeTypes: string[],
+  productSummaries: ProductSummary[]
+): Map<string, number> {
+  const result = new Map<string, number>();
+  if (dateParbakeTypes.length === 0) return result;
+  const totalInt = Math.max(0, Math.floor(totalParbakeWasteQty));
+  if (totalInt === 0) {
+    for (const t of dateParbakeTypes) result.set(t, 0);
+    return result;
+  }
+
+  const typeQty = new Map<string, number>();
+  let totalQty = 0;
+  for (const parbakeName of dateParbakeTypes) {
+    const sum = productSummaries
+      .filter(
+        (p) =>
+          p.participatesInParbakeTypeInference && p.inferredParbakeName === parbakeName
+      )
+      .reduce((s, p) => s + p.finishedQty, 0);
+    typeQty.set(parbakeName, sum);
+    totalQty += sum;
+  }
+
+  if (totalQty <= 0) {
+    const perType = Math.floor(totalInt / dateParbakeTypes.length);
+    let remainder = totalInt - perType * dateParbakeTypes.length;
+    for (const t of dateParbakeTypes) {
+      const add = remainder > 0 ? 1 : 0;
+      result.set(t, perType + add);
+      if (remainder > 0) remainder--;
+    }
+    return result;
+  }
+
+  const raw: { parbakeName: string; raw: number; floor: number; frac: number }[] = [];
+  let sumFloored = 0;
+  for (const parbakeName of dateParbakeTypes) {
+    const q = typeQty.get(parbakeName) ?? 0;
+    const ratio = q / totalQty;
+    const rawVal = totalInt * ratio;
+    const fl = Math.floor(rawVal);
+    raw.push({ parbakeName, raw: rawVal, floor: fl, frac: rawVal - fl });
+    sumFloored += fl;
+  }
+  const remainder = totalInt - sumFloored;
+  raw.sort((a, b) => b.frac - a.frac);
+  for (let i = 0; i < raw.length; i++) {
+    const add = i < remainder ? 1 : 0;
+    result.set(raw[i]!.parbakeName, raw[i]!.floor + add);
+  }
+  return result;
+}
+
+/** 총괄(P1) 베이스 폐기량 행 배열. 단일 종류면 1행(자동). 혼합이면 타입별 1행(자동 안분 또는 parbakeWasteByType override) */
+function calculateBaseWasteRows(
+  state: DateGroupInput,
+  parbakeWasteQty: number,
+  productSummaries: ProductSummary[],
+  dateParbakeTypes: string[]
+): { rows: BaseWasteRow[]; warnings: string[] } {
+  const warnings: string[] = [];
+  if (dateParbakeTypes.length === 0) {
+    return { rows: [], warnings };
+  }
+
+  if (dateParbakeTypes.length === 1) {
+    const single = calculateBaseWaste(parbakeWasteQty, productSummaries, dateParbakeTypes);
+    warnings.push(...single.warnings);
+    return {
+      rows: [
+        {
+          resolved: single.resolved,
+          parbakeName: single.parbakeName,
+          baseSauceMaterialName: single.baseSauceMaterialName,
+          weightedBaseSaucePerUnitQty: single.weightedBaseSaucePerUnitQty,
+          baseWasteQty: single.baseWasteQty,
+        },
+      ],
+      warnings,
+    };
+  }
+
+  // 혼합 베이스: 1) 사용자가 모든 타입에 대해 parbakeWasteByType 입력 시 → 그 값 사용. 2) 아니면 총량을 생산수량 비중으로 자동 안분.
+  const byType = state.secondClosure.parbakeWasteByType ?? [];
+  const typedMap = new Map<string, number>();
+  for (const t of byType) {
+    if (t.parbakeName?.trim() && typeof t.wasteQty === "number" && Number.isFinite(t.wasteQty)) {
+      typedMap.set(t.parbakeName.trim(), Math.max(0, Math.floor(t.wasteQty)));
+    }
+  }
+  const hasFullOverride = dateParbakeTypes.every((name) => typedMap.has(name));
+  const parbakeWasteByTypeFinal =
+    hasFullOverride
+      ? typedMap
+      : allocateParbakeWasteByRatio(
+          Math.max(0, Math.floor(parbakeWasteQty)),
+          dateParbakeTypes,
+          productSummaries
+        );
+
+  const rows: BaseWasteRow[] = [];
+  for (const parbakeName of dateParbakeTypes) {
+    const meta = getWeightedBaseSauceForType(parbakeName, productSummaries);
+    if (!meta) {
+      warnings.push(
+        `파베이크 [${parbakeName}] 제품에 도우소스 BOM이 없어 베이스 폐기량을 계산할 수 없습니다.`
+      );
+      rows.push({ resolved: false });
+      continue;
+    }
+    const wasteQty = parbakeWasteByTypeFinal.get(parbakeName) ?? 0;
+    const baseWasteQty = Math.round(wasteQty * meta.weightedBaseSaucePerUnitQty);
+    rows.push({
+      resolved: true,
+      parbakeName,
+      baseSauceMaterialName: meta.baseSauceMaterialName,
+      weightedBaseSaucePerUnitQty: meta.weightedBaseSaucePerUnitQty,
+      baseWasteQty,
+    });
+  }
+  return { rows, warnings };
 }
 
 /** 베이스(도우소스) LOT에 FIFO로 폐기 차감 적용 */
@@ -623,58 +763,74 @@ export function calculateUsageSummary(
     );
   allWarnings.push(...labelWarnings);
 
-  const baseWasteResult = calculateBaseWaste(
+  const { rows: baseWasteRows, warnings: baseWasteWarnings } = calculateBaseWasteRows(
+    dateGroup,
     parbakeDough.parbakeWasteQty,
     productSummaries,
     dateParbakeTypes
   );
-  allWarnings.push(...baseWasteResult.warnings);
+  allWarnings.push(...baseWasteWarnings);
 
-  let baseUsage: BaseUsageResult = { resolved: false };
-  if (
-    baseWasteResult.resolved &&
-    baseWasteResult.baseSauceMaterialName != null &&
-    baseWasteResult.baseWasteQty != null &&
-    baseWasteResult.baseWasteQty > 0
-  ) {
-    const fifoResult = applyBaseWasteFifo(
-      lotUsages,
-      baseWasteResult.baseWasteQty,
-      baseWasteResult.baseSauceMaterialName
-    );
-    allWarnings.push(...fifoResult.warnings);
-    baseUsage = {
-      resolved: true,
-      baseSauceMaterialName: baseWasteResult.baseSauceMaterialName,
-      totalBaseActualUsageBeforeWasteQty:
-        fifoResult.totalBaseActualUsageBeforeWasteQty,
-      totalBaseUsageAfterWasteQty: fifoResult.totalBaseUsageAfterWasteQty,
-      fifoLots: fifoResult.fifoLots,
-      displayLabel: fifoResult.displayLabel,
-    };
-  } else if (
-    baseWasteResult.resolved &&
-    baseWasteResult.baseSauceMaterialName != null
-  ) {
-    const baseLots = lotUsages.filter(
-      (l) => l.materialName === baseWasteResult.baseSauceMaterialName
-    );
-    const totalBase = baseLots.reduce((s, l) => s + l.actualUsageQty, 0);
-    baseUsage = {
-      resolved: true,
-      baseSauceMaterialName: baseWasteResult.baseSauceMaterialName,
-      totalBaseActualUsageBeforeWasteQty: totalBase,
-      totalBaseUsageAfterWasteQty: totalBase,
-      fifoLots: baseLots.map((l) => ({
-        lotRowId: l.lotRowId,
-        expiryDate: l.expiryDate,
-        actualUsageQty: l.actualUsageQty,
-        fifoDeductedWasteQty: 0,
-        effectiveUsageAfterWasteQty: l.actualUsageQty,
-      })),
-      displayLabel: `${baseWasteResult.baseSauceMaterialName} ${totalBase.toLocaleString()}g`,
-    };
+  // 베이스 종류별 사용량 행: 폐기 행 기준으로 FIFO 적용 또는 사용량만 합산
+  const baseUsageRows: BaseUsageRow[] = [];
+  for (const wasteRow of baseWasteRows) {
+    if (!wasteRow.resolved || !wasteRow.baseSauceMaterialName) {
+      baseUsageRows.push({ resolved: false });
+      continue;
+    }
+    const totalBaseActualFromLots = lotUsages
+      .filter((l) => l.materialName === wasteRow.baseSauceMaterialName)
+      .reduce((s, l) => s + l.actualUsageQty, 0);
+    const effectiveWasteQty =
+      totalBaseActualFromLots === 0 ? 0 : (wasteRow.baseWasteQty ?? 0);
+
+    if (effectiveWasteQty > 0) {
+      const fifoResult = applyBaseWasteFifo(
+        lotUsages,
+        effectiveWasteQty,
+        wasteRow.baseSauceMaterialName
+      );
+      allWarnings.push(...fifoResult.warnings);
+      baseUsageRows.push({
+        resolved: true,
+        baseSauceMaterialName: wasteRow.baseSauceMaterialName,
+        totalBaseActualUsageBeforeWasteQty: fifoResult.totalBaseActualUsageBeforeWasteQty,
+        totalBaseUsageAfterWasteQty: fifoResult.totalBaseUsageAfterWasteQty,
+        fifoLots: fifoResult.fifoLots,
+        displayLabel: fifoResult.displayLabel,
+      });
+    } else {
+      const baseLots = lotUsages.filter(
+        (l) => l.materialName === wasteRow.baseSauceMaterialName
+      );
+      const totalBase = baseLots.reduce((s, l) => s + l.actualUsageQty, 0);
+      baseUsageRows.push({
+        resolved: true,
+        baseSauceMaterialName: wasteRow.baseSauceMaterialName,
+        totalBaseActualUsageBeforeWasteQty: totalBase,
+        totalBaseUsageAfterWasteQty: totalBase,
+        fifoLots: baseLots.map((l) => ({
+          lotRowId: l.lotRowId,
+          expiryDate: l.expiryDate,
+          actualUsageQty: l.actualUsageQty,
+          fifoDeductedWasteQty: 0,
+          effectiveUsageAfterWasteQty: l.actualUsageQty,
+        })),
+        displayLabel: `${wasteRow.baseSauceMaterialName} ${totalBase.toLocaleString()}g`,
+      });
+    }
   }
+
+  const firstWaste = baseWasteRows[0];
+  const firstUsage = baseUsageRows[0];
+  const totalBaseActualFirst =
+    firstWaste?.resolved && firstWaste.baseSauceMaterialName != null
+      ? lotUsages
+          .filter((l) => l.materialName === firstWaste.baseSauceMaterialName)
+          .reduce((s, l) => s + l.actualUsageQty, 0)
+      : 0;
+  const effectiveFirstWasteQty =
+    totalBaseActualFirst === 0 ? 0 : (firstWaste?.baseWasteQty ?? 0);
 
   return {
     totalFinishedQty: totals.totalFinishedQty,
@@ -702,14 +858,17 @@ export function calculateUsageSummary(
     resolvedExtraParbakes: resolvedExtra,
     unresolvedExtraParbakes: unresolvedExtra,
 
+    baseWasteRows,
+    baseUsageRows,
+
     baseWaste: {
-      resolved: baseWasteResult.resolved,
-      parbakeName: baseWasteResult.parbakeName,
-      baseSauceMaterialName: baseWasteResult.baseSauceMaterialName,
-      weightedBaseSaucePerUnitQty: baseWasteResult.weightedBaseSaucePerUnitQty,
-      baseWasteQty: baseWasteResult.baseWasteQty,
+      resolved: firstWaste?.resolved ?? false,
+      parbakeName: firstWaste?.parbakeName,
+      baseSauceMaterialName: firstWaste?.baseSauceMaterialName,
+      weightedBaseSaucePerUnitQty: firstWaste?.weightedBaseSaucePerUnitQty,
+      baseWasteQty: effectiveFirstWasteQty,
     },
-    baseUsage,
+    baseUsage: firstUsage ?? { resolved: false },
 
     warnings: allWarnings,
   };

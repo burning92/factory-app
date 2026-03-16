@@ -51,11 +51,19 @@ export type ExtraParbakeRowInput = {
   expiryDate: string;
 };
 
+/** 혼합 베이스 날: 파베이크 종류별 폐기량(개). 자동 분배하지 않고 사용자 입력만 사용 */
+export type ParbakeWasteByTypeInput = {
+  parbakeName: string;
+  wasteQty: number | "";
+};
+
 export type SecondClosureInput = {
   productOutputs: ProductOutputInput[];
   astronautParbakeQty: number | "";
   saleParbakeQty: number | "";
   extraParbakes: ExtraParbakeRowInput[];
+  /** 베이스 2종 이상인 날만 사용. 타입별 파베이크 폐기량(개) */
+  parbakeWasteByType?: ParbakeWasteByTypeInput[];
 };
 
 export type DateGroupInput = {
@@ -149,6 +157,15 @@ export type BaseWasteResult = {
   baseWasteQty?: number;
 };
 
+/** 총괄(P1) 베이스 폐기량 1행 = 베이스 종류 1개 */
+export type BaseWasteRow = {
+  resolved: boolean;
+  parbakeName?: string;
+  baseSauceMaterialName?: string;
+  weightedBaseSaucePerUnitQty?: number;
+  baseWasteQty?: number;
+};
+
 export type FifoLotRow = {
   lotRowId: string;
   expiryDate: string;
@@ -158,6 +175,16 @@ export type FifoLotRow = {
 };
 
 export type BaseUsageResult = {
+  resolved: boolean;
+  baseSauceMaterialName?: string;
+  totalBaseActualUsageBeforeWasteQty?: number;
+  totalBaseUsageAfterWasteQty?: number;
+  fifoLots?: FifoLotRow[];
+  displayLabel?: string;
+};
+
+/** 총괄(P1) 베이스 사용량 1행 = 베이스 종류 1개 */
+export type BaseUsageRow = {
   resolved: boolean;
   baseSauceMaterialName?: string;
   totalBaseActualUsageBeforeWasteQty?: number;
@@ -196,7 +223,14 @@ export type ComputedResult = {
   resolvedExtraParbakes: ResolvedExtraParbake[];
   unresolvedExtraParbakes: UnresolvedExtraParbake[];
 
+  /** 총괄(P1) 베이스 종류별 폐기량 행 목록. 단일 베이스면 1행, 혼합이면 타입별 1행 */
+  baseWasteRows: BaseWasteRow[];
+  /** 총괄(P1) 베이스 종류별 사용량 행 목록 */
+  baseUsageRows: BaseUsageRow[];
+
+  /** @deprecated 단일 베이스 호환용. baseWasteRows[0] / 비어있으면 첫 행 */
   baseWaste: BaseWasteResult;
+  /** @deprecated 단일 베이스 호환용. baseUsageRows[0] / 비어있으면 첫 행 */
   baseUsage: BaseUsageResult;
 
   warnings: string[];

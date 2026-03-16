@@ -226,13 +226,21 @@ function JournalPageContent() {
   const expiryDate = addDays(date, 364);
 
   const ponoApplicable = ponoBreadDerived?.applicable === true;
-  const baseWasteLotRows =
-    comp.baseUsage?.fifoLots?.filter((l) => l.fifoDeductedWasteQty > 0) ?? [];
-  const baseUsageLotRows =
-    comp.baseUsage?.fifoLots?.filter(
-      (l) => l.effectiveUsageAfterWasteQty > 0,
-    ) ?? [];
-  const baseSauceName = comp.baseUsage?.baseSauceMaterialName ?? "";
+  const baseWasteRows = comp.baseWasteRows?.length ? comp.baseWasteRows : (comp.baseWaste?.resolved && comp.baseWaste?.baseSauceMaterialName ? [{
+    resolved: true,
+    parbakeName: comp.baseWaste.parbakeName,
+    baseSauceMaterialName: comp.baseWaste.baseSauceMaterialName,
+    baseWasteQty: comp.baseWaste.baseWasteQty,
+    weightedBaseSaucePerUnitQty: comp.baseWaste.weightedBaseSaucePerUnitQty,
+  }] : []);
+  const baseUsageRows = comp.baseUsageRows?.length ? comp.baseUsageRows : (comp.baseUsage?.resolved && comp.baseUsage?.baseSauceMaterialName ? [{
+    resolved: true,
+    baseSauceMaterialName: comp.baseUsage.baseSauceMaterialName,
+    totalBaseActualUsageBeforeWasteQty: comp.baseUsage.totalBaseActualUsageBeforeWasteQty,
+    totalBaseUsageAfterWasteQty: comp.baseUsage.totalBaseUsageAfterWasteQty,
+    fifoLots: comp.baseUsage.fifoLots,
+    displayLabel: comp.baseUsage.displayLabel,
+  }] : []);
   const authorName =
     (stored.dateGroup as { authorName?: string }).authorName?.trim() || "—";
 
@@ -384,24 +392,51 @@ function JournalPageContent() {
                       )}
                     </ul>
                   </div>
-                ) : comp.baseWaste.resolved && baseSauceName && (
+                ) : baseWasteRows.some((r) => r.resolved && (r.baseWasteQty ?? 0) > 0) ? (
                   <div className="journal-section">
                     <p className="journal-section-title">베이스 폐기량</p>
                     <div className="journal-section-body journal-section-list">
-                      {baseWasteLotRows.length > 0 ? (
-                        <ul className="list-none pl-0 space-y-1">
-                          {baseWasteLotRows.map((lot) => (
-                            <li key={lot.lotRowId}>
-                              {baseSauceName} {lot.fifoDeductedWasteQty.toLocaleString()}g ({lot.expiryDate || "—"})
+                      <ul className="list-none pl-0 space-y-1">
+                        {baseWasteRows.map((wasteRow, i) => {
+                          if (!wasteRow.resolved || !wasteRow.baseSauceMaterialName) return null;
+                          const qty = wasteRow.baseWasteQty ?? 0;
+                          if (qty <= 0) return null;
+                          const usageRow = baseUsageRows[i];
+                          const wasteLotRows = usageRow?.fifoLots?.filter((l) => l.fifoDeductedWasteQty > 0) ?? [];
+                          if (wasteLotRows.length > 0) {
+                            return wasteLotRows.map((lot) => (
+                              <li key={`${wasteRow.baseSauceMaterialName}-${lot.lotRowId}`}>
+                                {wasteRow.baseSauceMaterialName} {lot.fifoDeductedWasteQty.toLocaleString()}g ({lot.expiryDate || "—"})
+                              </li>
+                            ));
+                          }
+                          return (
+                            <li key={wasteRow.baseSauceMaterialName ?? wasteRow.parbakeName ?? i}>
+                              {wasteRow.baseSauceMaterialName} {qty.toLocaleString()}g ({date})
                             </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p>{baseSauceName} {(comp.baseWaste.baseWasteQty ?? 0).toLocaleString()}g</p>
-                      )}
+                          );
+                        })}
+                      </ul>
                     </div>
                   </div>
-                )}
+                ) : (() => {
+                  const dateParbakeTypes = comp.productSummaries
+                    ? [...new Set(comp.productSummaries
+                        .filter((p) => p.participatesInParbakeTypeInference && p.inferredParbakeName)
+                        .map((p) => p.inferredParbakeName as string))]
+                    : [];
+                  if (dateParbakeTypes.length > 1) {
+                    return (
+                      <div className="journal-section">
+                        <p className="journal-section-title">베이스 폐기량</p>
+                        <p className="journal-section-body text-slate-500 print:text-gray-600">
+                          혼합 베이스 생산일입니다. 사용량 계산에서 파베이크 폐기량 상세(종류별)를 입력해 주세요.
+                        </p>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
 
                 {ponoApplicable &&
                 ponoBreadDerived?.ingredientUsageRows &&
@@ -418,21 +453,28 @@ function JournalPageContent() {
                       )}
                     </ul>
                   </div>
-                ) : comp.baseUsage.resolved && baseSauceName ? (
+                ) : baseUsageRows.some((r) => r.resolved) ? (
                   <div className="journal-section">
                     <p className="journal-section-title">베이스 사용량</p>
                     <div className="journal-section-body journal-section-list">
-                      {baseUsageLotRows.length > 0 ? (
-                        <ul className="list-none pl-0 space-y-1">
-                          {baseUsageLotRows.map((lot) => (
-                            <li key={lot.lotRowId}>
-                              {baseSauceName} {lot.effectiveUsageAfterWasteQty.toLocaleString()}g ({lot.expiryDate || "—"})
+                      <ul className="list-none pl-0 space-y-1">
+                        {baseUsageRows.map((usageRow, i) => {
+                          if (!usageRow.resolved || !usageRow.baseSauceMaterialName) return null;
+                          const lotRows = usageRow.fifoLots?.filter((l) => l.effectiveUsageAfterWasteQty > 0) ?? [];
+                          if (lotRows.length > 0) {
+                            return lotRows.map((lot) => (
+                              <li key={`${usageRow.baseSauceMaterialName}-${lot.lotRowId}`}>
+                                {usageRow.baseSauceMaterialName} {lot.effectiveUsageAfterWasteQty.toLocaleString()}g ({lot.expiryDate || "—"})
+                              </li>
+                            ));
+                          }
+                          return (
+                            <li key={usageRow.baseSauceMaterialName ?? i}>
+                              {usageRow.displayLabel ?? `${usageRow.baseSauceMaterialName} ${(usageRow.totalBaseUsageAfterWasteQty ?? 0).toLocaleString()}g`}
                             </li>
-                          ))}
-                        </ul>
-                      ) : comp.baseUsage.displayLabel ? (
-                        <p>{comp.baseUsage.displayLabel}</p>
-                      ) : null}
+                          );
+                        })}
+                      </ul>
                     </div>
                   </div>
                 ) : null}
@@ -449,31 +491,26 @@ function JournalPageContent() {
                   </ul>
                 </div>
 
-                {comp.resolvedExtraParbakes.filter((r) => r.qty > 0).length > 0 && (
+                {((comp.resolvedExtraParbakes?.length > 0 && comp.resolvedExtraParbakes.some((r) => r.qty > 0)) ||
+                  (comp.unresolvedExtraParbakes?.length > 0 && comp.unresolvedExtraParbakes.some((r) => r.qty > 0))) && (
                   <div className="journal-section">
-                    <p className="journal-section-title">보관용 파베이크 사용량</p>
+                    <p className="journal-section-title">추가 파베이크 사용량</p>
                     <ul className="journal-section-body journal-section-list list-none pl-0 space-y-1">
                       {comp.resolvedExtraParbakes
-                        .filter((r) => r.qty > 0)
+                        ?.filter((r) => r.qty > 0)
                         .map((r) => (
                           <li key={r.extraParbakeId}>
                             {r.parbakeName} {r.qty}개 ({r.expiryDate || "—"})
                           </li>
                         ))}
-                    </ul>
-                  </div>
-                )}
-
-                {operatorMessages.length > 0 && (
-                  <div className="mt-6 pt-4 border-t border-slate-200">
-                    <div className="journal-section">
-                      <p className="journal-section-title">계산 참고 / 입력 확인 사항</p>
-                      <ul className="journal-section-body journal-section-list list-disc list-inside space-y-1">
-                        {operatorMessages.map((msg, i) => (
-                          <li key={i}>{msg}</li>
+                      {comp.unresolvedExtraParbakes
+                        ?.filter((r) => r.qty > 0)
+                        .map((r) => (
+                          <li key={r.extraParbakeId}>
+                            추가 파베이크 {r.qty}개 ({r.expiryDate || "—"})
+                          </li>
                         ))}
-                      </ul>
-                    </div>
+                    </ul>
                   </div>
                 )}
               </section>
@@ -656,11 +693,6 @@ function JournalPageContent() {
                             {ponoBreadDerived.breadWasteQty?.toLocaleString() ??
                               "—"}
                             개
-                            {ponoBreadDerived.breadWasteNegative && (
-                              <span className="ml-2 text-amber-600 text-xs">
-                                (음수로 나와 0으로 표시됨. 입력 확인 필요)
-                              </span>
-                            )}
                           </dd>
                         </dl>
                         {ponoBreadDerived.reason && (

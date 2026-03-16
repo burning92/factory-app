@@ -3,7 +3,7 @@
 import { Suspense, useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMasterStore, type ProductionLog, type OutboundLine } from "@/store/useMasterStore";
-import { calculateUsageSummary, type ComputedResult } from "@/features/production/history/calculations";
+import { calculateUsageSummary, getDateParbakeTypes, type ComputedResult } from "@/features/production/history/calculations";
 import { parseProductLabel } from "@/features/production/history/productLabel";
 import { getJournalStorageKey } from "@/features/production/history/journalAllocation";
 import { getBomRowsForProductAndStandard } from "@/features/production/history/bomAdapter";
@@ -193,11 +193,19 @@ export type ExtraParbakeRow = {
   expiryDate: string;
 };
 
+/** 혼합 베이스 날: 파베이크 종류별 폐기량(개). 자동 분배 없이 사용자 입력만 사용 */
+export type ParbakeWasteByTypeRow = {
+  parbakeName: string;
+  wasteQty: number | "";
+};
+
 export type SecondClosure = {
   productOutputs: ProductOutput[];
   astronautParbakeQty: number | "";
   saleParbakeQty: number | "";
   extraParbakes: ExtraParbakeRow[];
+  /** 베이스 2종 이상인 날만 사용. 타입별 파베이크 폐기량(개) */
+  parbakeWasteByType?: ParbakeWasteByTypeRow[];
 };
 
 export type DateGroupState = {
@@ -415,6 +423,7 @@ function createInitialDateGroupState(
       { extraParbakeId: generateId(), qty: "", expiryDate: "" },
       { extraParbakeId: generateId(), qty: "", expiryDate: "" },
     ],
+    parbakeWasteByType: undefined,
   };
   return {
     id: date,
@@ -892,6 +901,21 @@ function UsageCalculationPageContent() {
     [getOrInitGroupState, setGroupState]
   );
 
+  const updateParbakeWasteByType = useCallback(
+    (date: string, parbakeName: string, wasteQty: number | "") => {
+      const s = getOrInitGroupState(date);
+      const prev = s.secondClosure.parbakeWasteByType ?? [];
+      const next = prev.some((t) => t.parbakeName === parbakeName)
+        ? prev.map((t) => (t.parbakeName === parbakeName ? { ...t, wasteQty } : t))
+        : [...prev, { parbakeName, wasteQty }];
+      setGroupState(date, {
+        ...s,
+        secondClosure: { ...s.secondClosure, parbakeWasteByType: next },
+      });
+    },
+    [getOrInitGroupState, setGroupState]
+  );
+
   const closeSecond = useCallback(
     async (date: string) => {
       const s = getOrInitGroupState(date);
@@ -1297,6 +1321,46 @@ function UsageCalculationPageContent() {
                               ))}
                             </ul>
                           </div>
+
+                          {/* 혼합 베이스 날: 파베이크 폐기량 타입별 입력 (자동 분배 없음) */}
+                          {(() => {
+                            const comp = computedByDate[date];
+                            const dateParbakeTypes = comp ? getDateParbakeTypes(comp.productSummaries) : [];
+                            if (dateParbakeTypes.length <= 1) return null;
+                            return (
+                              <div className="rounded-lg border border-amber-700/50 bg-amber-950/30 p-4 space-y-3">
+                                <h4 className="text-sm font-medium text-amber-200">파베이크 폐기량 상세 (혼합 베이스)</h4>
+                                <p className="text-xs text-slate-400">
+                                  당일 파베이크 종류가 2종 이상이므로, 종류별 폐기량을 입력해 주세요. 총합만으로는 자동 배분하지 않습니다.
+                                </p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  {dateParbakeTypes.map((parbakeName) => (
+                                    <label key={parbakeName} className="flex flex-col gap-1.5">
+                                      <span className="text-sm text-slate-400">{parbakeName} 폐기량 (개)</span>
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        inputMode="numeric"
+                                        className="w-full rounded-lg border border-slate-600 bg-space-900 px-3 py-2.5 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500/50"
+                                        placeholder="0"
+                                        value={
+                                          state.secondClosure.parbakeWasteByType?.find((t) => t.parbakeName === parbakeName)?.wasteQty ?? ""
+                                        }
+                                        onChange={(e) => {
+                                          const v = e.target.value;
+                                          updateParbakeWasteByType(
+                                            date,
+                                            parbakeName,
+                                            v === "" ? "" : Math.max(0, Number(v) || 0)
+                                          );
+                                        }}
+                                      />
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })()}
 
                           {/* 2차 마감 저장 */}
                           <div className="pt-2 space-y-1.5">
