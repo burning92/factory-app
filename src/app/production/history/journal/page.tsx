@@ -424,6 +424,7 @@ function JournalPageContent() {
                   const dateParbakeTypes = comp.productSummaries
                     ? getDateParbakeTypes(comp.productSummaries)
                     : [];
+
                   if (dateParbakeTypes.length > 1) {
                     return (
                       <div className="journal-section">
