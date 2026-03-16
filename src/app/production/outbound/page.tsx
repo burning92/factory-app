@@ -347,6 +347,7 @@ export default function OutboundPage() {
   const [selectedOption, setSelectedOption] = useState("");
   const [doughQty, setDoughQty] = useState("");
   const [finishedQty, setFinishedQty] = useState("");
+  const [finishedQtyTouched, setFinishedQtyTouched] = useState(false);
   /** 출고 입력 전용 최근 작성자명. 화면 진입 시 Supabase → localStorage 순으로 채움 */
   const [preparerName, setPreparerName] = useState("");
   const [rows, setRows] = useState<OutboundRow[] | null>(null);
@@ -433,7 +434,17 @@ export default function OutboundPage() {
     if (isParbakeUse && doughQty.trim() !== "") {
       setDoughQty("");
     }
-  }, [isParbakeUse]); // eslint-disable-line react-hooks/exhaustive-deps -- doughQty 초기화는 기준 변경 시에만
+  }, [isParbakeUse]); // eslint-disable-line react-hooks-exhaustive-deps -- doughQty 초기화는 기준 변경 시에만
+
+  // 기존 usage_calculations에 예상수량이 있으면, 수정 진입 시 finishedQty 입력칸에 복원
+  useEffect(() => {
+    if (!productName.trim() || finishedQtyTouched) return;
+    const existing = getUsageCalculation(productionDate, productName);
+    const expected = existing?.finished_qty_expected;
+    if (expected != null && Number.isFinite(expected)) {
+      setFinishedQty(String(expected));
+    }
+  }, [productionDate, productName, getUsageCalculation, finishedQtyTouched]);
 
   const handleCalculate = () => {
     const d = isParbakeUse ? 0 : (parseInt(doughQty, 10) || 0);
@@ -499,9 +510,25 @@ export default function OutboundPage() {
       return;
     }
     try {
+      // 기존 usage_calculations에 예상수량이 있으면, 입력이 비어 있을 때 그 값을 유지
+      const first = list[0];
+      let effectiveExpected: number | undefined;
+      if (first) {
+        const parsed = parseInt(finishedQty, 10);
+        const hasInput = finishedQty.trim() !== "" && Number.isFinite(parsed);
+        const existingCalc = getUsageCalculation(first.productionDate, first.productName);
+        const existingExpected = existingCalc?.finished_qty_expected;
+        if (hasInput) {
+          effectiveExpected = parsed;
+        } else if (existingExpected != null && Number.isFinite(existingExpected)) {
+          effectiveExpected = existingExpected;
+        } else {
+          effectiveExpected = undefined;
+        }
+      }
+
       for (const p of list) {
         const doughQtyNum = parseInt(doughQty, 10);
-        const expectedQty = parseInt(finishedQty, 10);
         const 출고_라인 = p.entries.map((e) => {
           const 박스 = ensureNumber(e.boxQty, 0);
           const 낱개 = ensureNumber(e.bagQty, 0);
@@ -530,15 +557,13 @@ export default function OutboundPage() {
           출고_g: 0,
           출고자: preparerName.trim() || undefined,
           반죽량: isParbakeUse ? undefined : (Number.isFinite(doughQtyNum) ? doughQtyNum : undefined),
-          완제품예상수량: Number.isFinite(expectedQty) ? expectedQty : undefined,
+          완제품예상수량: effectiveExpected != null && Number.isFinite(effectiveExpected) ? effectiveExpected : undefined,
         });
         if (p.entries[0]?.expiryDate) {
           await setLastUsedDate(p.materialName, p.entries[0].expiryDate);
         }
       }
-      const first = list[0];
       if (first) {
-        const expectedQty = parseInt(finishedQty, 10);
         const existing = getUsageCalculation(first.productionDate, first.productName);
         await saveUsageCalculation({
           production_date: first.productionDate,
@@ -546,7 +571,7 @@ export default function OutboundPage() {
           author_name: existing?.author_name,
           dough_usage_qty: existing?.dough_usage_qty,
           dough_waste_qty: existing?.dough_waste_qty,
-          finished_qty_expected: Number.isFinite(expectedQty) ? expectedQty : undefined,
+          finished_qty_expected: effectiveExpected,
           materials_data: existing?.materials_data ?? {},
         });
       }
@@ -650,7 +675,18 @@ export default function OutboundPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">완제품 예상수량</label>
-                <input type="number" min={0} inputMode="numeric" value={finishedQty} onChange={(e) => setFinishedQty(e.target.value)} placeholder="숫자 입력" className="w-full px-3 py-2 bg-space-900 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500/50" />
+                <input
+                  type="number"
+                  min={0}
+                  inputMode="numeric"
+                  value={finishedQty}
+                  onChange={(e) => {
+                    setFinishedQty(e.target.value);
+                    setFinishedQtyTouched(true);
+                  }}
+                  placeholder="숫자 입력"
+                  className="w-full px-3 py-2 bg-space-900 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500/50"
+                />
               </div>
             </div>
             <button type="button" onClick={handleCalculate} className="w-full py-3 rounded-xl bg-cyan-500 text-space-900 font-semibold shadow-glow hover:bg-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-2 focus:ring-offset-space-900 transition-colors">
