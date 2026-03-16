@@ -9,8 +9,6 @@ import { getJournalStorageKey } from "@/features/production/history/journalAlloc
 import type { DateGroupInput } from "@/features/production/history/types";
 import type { DateGroupState, ProductOutput } from "../page";
 
-const HISTORY_GROUP_STATE_KEY = "production-history:group-state";
-
 /** 제품 표시명: "-일반", "-파베이크사용", "-브레드" 제거 */
 function productDisplayName(label: string): string {
   const s = (label ?? "").trim();
@@ -29,27 +27,27 @@ type CompletedItem = {
 
 export default function CompletedListPage() {
   const router = useRouter();
-  const { bomList, materials, fetchBom } = useMasterStore();
-  const [groupStateByDate, setGroupStateByDate] = useState<Record<string, DateGroupState>>({});
+  const {
+    bomList,
+    materials,
+    productionLogs,
+    fetchBom,
+    fetchProductionLogs,
+    fetchProductionHistoryDateStates,
+    productionHistoryDateStates,
+    productionHistoryDateStatesLoading,
+    getProductionHistoryDateState,
+  } = useMasterStore();
   const [searchDate, setSearchDate] = useState("");
   const [searchAuthor, setSearchAuthor] = useState("");
   const [searchProduct, setSearchProduct] = useState("");
 
+  /** 서버 기준 통일: production_history_date_state + production_logs 둘 다 로드. 사용량 계산과 동일한 날짜 집합 사용. */
   useEffect(() => {
     fetchBom();
-  }, [fetchBom]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const raw = sessionStorage.getItem(HISTORY_GROUP_STATE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as Record<string, DateGroupState>;
-      setGroupStateByDate(parsed);
-    } catch {
-      // ignore
-    }
-  }, []);
+    fetchProductionLogs();
+    fetchProductionHistoryDateStates();
+  }, [fetchBom, fetchProductionLogs, fetchProductionHistoryDateStates]);
 
   const bomRefs = useMemo(
     () =>
@@ -72,16 +70,25 @@ export default function CompletedListPage() {
     [materials],
   );
 
+  /** 사용량 계산과 동일 기준: production_history_date_state.second_closed_at IS NOT NULL 인 날짜만,
+   * 且 해당 날짜에 production_logs 가 1건 이상 있는 경우만 표시. 테스트 후 로그만 삭제된 날짜는 제외. */
+  const datesWithLogs = useMemo(() => {
+    const set = new Set<string>();
+    for (const log of productionLogs) {
+      const d = (log.생산일자 ?? "").slice(0, 10);
+      if (d) set.add(d);
+    }
+    return set;
+  }, [productionLogs]);
+
   const completedList = useMemo((): CompletedItem[] => {
     const items: CompletedItem[] = [];
-    for (const [date, state] of Object.entries(groupStateByDate)) {
-      if (
-        state.isFirstClosed !== true ||
-        state.isSecondClosed !== true ||
-        state.status !== "2차마감완료"
-      ) {
-        continue;
-      }
+    for (const [date, row] of Object.entries(productionHistoryDateStates)) {
+      if (!row.second_closed_at) continue;
+      if (!datesWithLogs.has(date)) continue;
+      const snapshot = row.state_snapshot;
+      const state = snapshot && typeof snapshot === "object" ? (snapshot as DateGroupState) : null;
+      if (!state) continue;
       const outputs = state.secondClosure?.productOutputs ?? [];
       const productLines: { name: string; qty: number }[] = outputs
         .map((o: ProductOutput) => {
@@ -93,14 +100,14 @@ export default function CompletedListPage() {
         .sort((a, b) => b.qty - a.qty);
       items.push({
         date,
-        authorName: state.authorName ?? "",
+        authorName: (row.author_name ?? state.authorName ?? "").trim() || (state.authorName ?? ""),
         productLines,
         state,
       });
     }
     items.sort((a, b) => (b.date < a.date ? -1 : b.date > a.date ? 1 : 0));
     return items;
-  }, [groupStateByDate]);
+  }, [productionHistoryDateStates, datesWithLogs]);
 
   const filteredList = useMemo(() => {
     let list = completedList;
@@ -123,7 +130,10 @@ export default function CompletedListPage() {
 
   const openJournal = useCallback(
     (date: string, openPrint?: boolean) => {
-      const state = groupStateByDate[date];
+      const row = getProductionHistoryDateState(date);
+      const state = row?.state_snapshot && typeof row.state_snapshot === "object"
+        ? (row.state_snapshot as DateGroupState)
+        : null;
       if (!state) return;
       try {
         const computed = calculateUsageSummary(state as unknown as DateGroupInput, bomRefs, materialsMeta);
@@ -144,7 +154,7 @@ export default function CompletedListPage() {
         // ignore
       }
     },
-    [groupStateByDate, bomRefs, materialsMeta, router],
+    [getProductionHistoryDateState, bomRefs, materialsMeta, router],
   );
 
   return (
@@ -161,8 +171,12 @@ export default function CompletedListPage() {
         </div>
 
         <p className="text-slate-400 text-sm mb-6">
-          2차 마감까지 완료된 날짜만 표시됩니다. 목록 데이터는 이 기기·브라우저의 저장 상태를 사용합니다.
+          2차 마감까지 완료된 날짜만 표시됩니다. 목록은 서버에 저장된 마감 상태를 기준으로 불러옵니다.
         </p>
+
+        {productionHistoryDateStatesLoading && (
+          <p className="text-slate-500 text-sm mb-4">목록 불러오는 중…</p>
+        )}
 
         {/* 검색 */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
