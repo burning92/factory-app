@@ -57,6 +57,7 @@ import {
   getJournalStorageKey,
   buildPerProductUsage,
 } from "@/features/production/history/journalAllocation";
+import { getDateParbakeTypes } from "@/features/production/history/calculations";
 import { mapTechnicalWarningsToOperatorMessages } from "@/features/production/history/operatorWarnings";
 import { calculatePonoBreadDerived } from "@/features/production/history/ponoBreadDerived";
 import type {
@@ -421,9 +422,7 @@ function JournalPageContent() {
                   </div>
                 ) : (() => {
                   const dateParbakeTypes = comp.productSummaries
-                    ? [...new Set(comp.productSummaries
-                        .filter((p) => p.participatesInParbakeTypeInference && p.inferredParbakeName)
-                        .map((p) => p.inferredParbakeName as string))]
+                    ? getDateParbakeTypes(comp.productSummaries)
                     : [];
                   if (dateParbakeTypes.length > 1) {
                     return (
