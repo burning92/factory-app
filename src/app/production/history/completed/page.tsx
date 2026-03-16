@@ -144,7 +144,22 @@ export default function CompletedListPage() {
         };
         if (typeof window === "undefined") return;
         sessionStorage.setItem(getJournalStorageKey(), JSON.stringify(payload));
-        const url = `/production/history/journal?date=${date}${openPrint ? "&print=1" : ""}`;
+        const params = new URLSearchParams();
+        params.set("date", date);
+        params.set("from", "completed");
+        // 완료 목록 검색 조건을 그대로 보존할 수 있도록 returnTo에 인코딩
+        const returnToSearch = new URLSearchParams();
+        if (searchDate.trim()) returnToSearch.set("date", searchDate.trim());
+        if (searchAuthor.trim()) returnToSearch.set("author", searchAuthor.trim());
+        if (searchProduct.trim()) returnToSearch.set("product", searchProduct.trim());
+        const returnToBase = "/production/history/completed";
+        const returnTo =
+          returnToSearch.toString().length > 0
+            ? `${returnToBase}?${returnToSearch.toString()}`
+            : returnToBase;
+        params.set("returnTo", encodeURIComponent(returnTo));
+        if (openPrint) params.set("print", "1");
+        const url = `/production/history/journal?${params.toString()}`;
         if (openPrint) {
           window.open(url, "_blank", "noopener,noreferrer");
         } else {
@@ -154,7 +169,7 @@ export default function CompletedListPage() {
         // ignore
       }
     },
-    [getProductionHistoryDateState, bomRefs, materialsMeta, router],
+    [getProductionHistoryDateState, bomRefs, materialsMeta, router, searchDate, searchAuthor, searchProduct],
   );
 
   return (

@@ -649,12 +649,23 @@ function UsageCalculationPageContent() {
           computedResult: computed,
         };
         sessionStorage.setItem(getJournalStorageKey(), JSON.stringify(payload));
-        router.push(`/production/history/journal?date=${date}`);
+
+        const params = new URLSearchParams();
+        params.set("date", date);
+        params.set("from", "usage");
+        // 사용량 계산에서 들어온 경우 현재 URL의 검색 파라미터를 그대로 보존
+        const currentSearch = searchParams.toString();
+        const returnToBase = "/production/history";
+        const returnTo =
+          currentSearch.length > 0 ? `${returnToBase}?${currentSearch}` : returnToBase;
+        params.set("returnTo", encodeURIComponent(returnTo));
+
+        router.push(`/production/history/journal?${params.toString()}`);
       } catch {
         setToast({ message: "생산일지 데이터 저장에 실패했습니다." });
       }
     },
-    [getOrInitGroupState, computedByDate, router]
+    [getOrInitGroupState, computedByDate, router, searchParams]
   );
 
   const setGroupState = useCallback((date: string, state: DateGroupState) => {

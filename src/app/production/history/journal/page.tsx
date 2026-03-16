@@ -178,8 +178,26 @@ function JournalPageContent() {
   }, [stored, ponoBreadDerived?.applicable]);
 
   const backToHistory = useCallback(() => {
+    const returnTo = searchParams.get("returnTo");
+    if (returnTo) {
+      try {
+        const decoded = decodeURIComponent(returnTo);
+        router.push(decoded);
+        return;
+      } catch {
+        // decode 실패 시 아래 from 기준 fallback 사용
+      }
+    }
+
+    const from = searchParams.get("from");
+    if (from === "completed") {
+      router.push("/production/history/completed");
+      return;
+    }
+
+    // 기본: 사용량 계산으로
     router.push(`/production/history?date=${date}`);
-  }, [router, date]);
+  }, [router, date, searchParams]);
 
   /** URL에 ?print=1 이 있으면 데이터 로드 후 인쇄 대화상자 호출 (완료 목록 등에서 인쇄 버튼용) */
   useEffect(() => {
