@@ -9,10 +9,22 @@ const LOGIN_PATH = "/login";
 const CHANGE_PASSWORD_PATH = "/login/change-password";
 const LOGOUT_PATH = "/logout";
 
+/** 하랑(200)이 접근하면 안 되는 100용 업무 경로 (실제 app 라우트 기준) */
+function isHarangBlockedPath(pathname: string): boolean {
+  return (
+    pathname.startsWith("/production") ||
+    pathname === "/history" ||
+    pathname.startsWith("/history/") ||
+    pathname.startsWith("/inventory") ||
+    pathname.startsWith("/materials") ||
+    pathname.startsWith("/journal")
+  );
+}
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, profile, loading, uiSettings } = useAuth();
+  const { user, profile, loading, uiSettings, organization } = useAuth();
   const isLoginPage = pathname === LOGIN_PATH;
   const isChangePasswordPage = pathname === CHANGE_PASSWORD_PATH;
 
@@ -57,6 +69,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   if (isLoginPage || isChangePasswordPage) {
     return <>{children}</>;
+  }
+
+  if (organization?.organization_code === "200" && isHarangBlockedPath(pathname)) {
+    router.replace("/");
+    return null;
   }
 
   const isManagePage = pathname === "/manage";

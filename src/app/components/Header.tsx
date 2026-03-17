@@ -56,14 +56,14 @@ export default function Header() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const popoverRef = useRef<HTMLDivElement>(null);
-  const { profile, uiSettings } = useAuth();
+  const { profile, uiSettings, organization } = useAuth();
   const isAdmin = profile?.role === "admin";
 
   const logoUrl = uiSettings?.logo_url?.trim() || "/helmet-logo.png";
   const brandName = uiSettings?.brand_name?.trim() || "생산관리";
   const primaryColor = uiSettings?.primary_color?.trim() || "#06b6d4";
 
-  const menuItems =
+  const baseMenuItems =
     uiSettings?.menu_config && uiSettings.menu_config.length > 0
       ? uiSettings.menu_config
           .filter((m): m is MenuItemConfig => m.visible !== false && !!m.path)
@@ -74,6 +74,9 @@ export default function Header() {
             Icon: KEY_TO_ICON[m.key] ?? Package,
           }))
       : DEFAULT_MENUS;
+
+  /** 200(하랑)은 1차 분리: 업무 메뉴 영역 비움. 100(아머드프레시) 또는 분기 불가 시 기존 로직 유지 */
+  const menuItems = organization?.organization_code === "200" ? [] : baseMenuItems;
 
   /** admin일 때만 그리드 상단에 "관리" 노출 (모바일에서 스크롤 없이 보이도록). manager/worker에는 미포함 */
   const displayMenuItems = isAdmin
