@@ -52,7 +52,10 @@ export default function ManagePage() {
       setError(e.message);
       return;
     }
-    setOrgs((data as OrgRow[]) ?? []);
+    // 숫자 코드만 표시: 000, 100, 200 등 (문자열 코드 armored, master 제외)
+    const rows = (data as OrgRow[]) ?? [];
+    const numericOnly = rows.filter((o) => /^\d+$/.test(o.organization_code));
+    setOrgs(numericOnly);
   }, []);
 
   const loadProfiles = useCallback(async () => {
@@ -80,6 +83,7 @@ export default function ManagePage() {
   const [newUserRole, setNewUserRole] = useState<"worker" | "manager">("worker");
   const [submitting, setSubmitting] = useState(false);
   const [showInitialPassword, setShowInitialPassword] = useState(false);
+  const [savingRoleId, setSavingRoleId] = useState<string | null>(null);
 
   function handleGenerateTempPassword() {
     const pwd = generateTempPassword(12);
@@ -96,11 +100,11 @@ export default function ManagePage() {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
-    const code = newOrgCode.trim().toLowerCase();
+    const code = newOrgCode.trim();
     const name = newOrgName.trim() || code;
     const { data: inserted, error: e2 } = await supabase
       .from("organizations")
-      .insert({ organization_code: code, name })
+      .insert({ organization_code: code, name: name || code })
       .select("id")
       .single();
     if (e2) {
@@ -200,6 +204,19 @@ export default function ManagePage() {
     else loadProfiles();
   }
 
+  async function handleSaveRole(pro: ProfileRow, newRole: "worker" | "manager") {
+    if (pro.role === "admin") return;
+    setError(null);
+    setSavingRoleId(pro.id);
+    const { error: e } = await supabase
+      .from("profiles")
+      .update({ role: newRole })
+      .eq("id", pro.id);
+    setSavingRoleId(null);
+    if (e) setError(e.message);
+    else loadProfiles();
+  }
+
   const filteredProfiles = selectedOrgId
     ? profiles.filter((p) => p.organization_id === selectedOrgId)
     : profiles;
@@ -245,7 +262,7 @@ export default function ManagePage() {
               type="text"
               value={newOrgCode}
               onChange={(e) => setNewOrgCode(e.target.value)}
-              placeholder="예: harang"
+              placeholder="예: 300"
               className="w-32 px-3 py-2 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100"
               required
             />
@@ -256,7 +273,7 @@ export default function ManagePage() {
               type="text"
               value={newOrgName}
               onChange={(e) => setNewOrgName(e.target.value)}
-              placeholder="예: 하랑"
+              placeholder="예: 새 사업장명"
               className="w-32 px-3 py-2 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100"
             />
           </div>
@@ -293,6 +310,26 @@ export default function ManagePage() {
               <span className="text-slate-500">
                 {Array.isArray(p.organizations) ? p.organizations[0]?.organization_code : p.organizations?.organization_code ?? ""}
               </span>
+              {p.role === "admin" ? (
+                <span className="text-amber-400 text-xs font-medium">admin (변경 불가)</span>
+              ) : (
+                <>
+                  <select
+                    defaultValue={p.role}
+                    onChange={(e) => {
+                      const v = e.target.value as "worker" | "manager";
+                      handleSaveRole(p, v);
+                    }}
+                    disabled={savingRoleId === p.id}
+                    className="px-2 py-1 text-xs bg-space-900 border border-slate-600 rounded text-slate-100 disabled:opacity-50"
+                    aria-label={`${p.login_id} 권한 변경`}
+                  >
+                    <option value="worker">worker</option>
+                    <option value="manager">manager</option>
+                  </select>
+                  {savingRoleId === p.id && <span className="text-slate-500 text-xs">저장 중…</span>}
+                </>
+              )}
               {p.must_change_password && <span className="text-amber-400 text-xs">비밀번호 변경 필요</span>}
               {!p.is_active && <span className="text-red-400 text-xs">비활성</span>}
               <button
