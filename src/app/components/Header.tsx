@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { Package, Plus, List, Settings, ClipboardList, Calculator, FileText, Boxes } from "lucide-react";
+import { Package, Plus, List, Settings, ClipboardList, Calculator, FileText, Boxes, Users } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import type { MenuItemConfig } from "@/types/auth";
 
@@ -75,6 +75,11 @@ export default function Header() {
           }))
       : DEFAULT_MENUS;
 
+  /** admin일 때만 그리드 상단에 "관리" 노출 (모바일에서 스크롤 없이 보이도록). manager/worker에는 미포함 */
+  const displayMenuItems = isAdmin
+    ? [{ href: "/manage", label: "관리 (사업장/사용자)", key: "manage", Icon: Users }, ...menuItems]
+    : menuItems;
+
   useEffect(() => {
     const close = (e: MouseEvent) => {
       if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
@@ -125,7 +130,7 @@ export default function Header() {
           <div className="absolute right-0 top-full mt-1 w-[280px] rounded-xl border border-slate-600 bg-space-800 shadow-xl py-3 px-3">
             <p className="text-xs font-medium text-slate-500 px-3 mb-2">업무 메뉴</p>
             <div className="grid grid-cols-2 gap-1">
-              {menuItems.map(({ href, label, Icon }) => {
+              {displayMenuItems.map(({ href, label, Icon }) => {
                 const isActive = pathname === href || pathname.startsWith(href + "/");
                 return (
                   <Link
@@ -145,15 +150,6 @@ export default function Header() {
               })}
             </div>
             <div className="mt-2 pt-2 border-t border-slate-600 space-y-1">
-              {isAdmin && (
-                <Link
-                  href="/manage"
-                  onClick={() => setOpen(false)}
-                  className="block w-full py-2 text-center text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
-                >
-                  관리 (사업장/사용자)
-                </Link>
-              )}
               <button
                 type="button"
                 onClick={() => { setOpen(false); signOut(); }}
