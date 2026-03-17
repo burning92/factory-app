@@ -8,6 +8,8 @@ import { Package, Plus, List, Settings, ClipboardList, Calculator, FileText, Box
 import { useAuth } from "@/contexts/AuthContext";
 import type { MenuItemConfig } from "@/types/auth";
 
+const HARANG_PEOPLE_ICON_SRC = "/harang/people-icon.png";
+
 const DEFAULT_MENUS: { href: string; label: string; key: string; Icon: typeof Package }[] = [
   { href: "/production/outbound", label: "출고 입력", key: "outbound", Icon: Package },
   { href: "/production/outbound-history", label: "출고 현황", key: "outbound-history", Icon: ClipboardList },
@@ -58,8 +60,10 @@ export default function Header() {
   const popoverRef = useRef<HTMLDivElement>(null);
   const { profile, uiSettings, organization } = useAuth();
   const isAdmin = profile?.role === "admin";
+  const isHarang = organization?.organization_code === "200";
 
   const logoUrl = uiSettings?.logo_url?.trim() || "/helmet-logo.png";
+  const effectiveLogoUrl = isHarang ? HARANG_PEOPLE_ICON_SRC : logoUrl;
   const brandName = uiSettings?.brand_name?.trim() || "생산관리";
   const primaryColor = uiSettings?.primary_color?.trim() || "#06b6d4";
 
@@ -104,11 +108,11 @@ export default function Header() {
         href="/"
         className="flex items-center gap-2 text-slate-100 hover:text-white transition-colors"
       >
-        {logoUrl.startsWith("http") ? (
-          <img src={logoUrl} alt="로고" width={28} height={28} className="object-contain shrink-0 rounded" />
+        {effectiveLogoUrl.startsWith("http") ? (
+          <img src={effectiveLogoUrl} alt="로고" width={28} height={28} className="object-contain shrink-0 rounded" />
         ) : (
           <Image
-            src={logoUrl}
+            src={effectiveLogoUrl}
             alt="로고"
             width={28}
             height={28}
