@@ -33,7 +33,7 @@ interface AuthContextValue extends AuthState {
     password: string,
     rememberMe: boolean
   ) => Promise<{ error: string | null }>;
-  signOut: () => Promise<void>;
+  signOut: () => void;
   clearError: () => void;
   setMustChangePasswordDone: () => Promise<{ error: string | null }>;
 }
@@ -306,20 +306,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [loadProfileAndOrg]
   );
 
-  const signOut = useCallback(async () => {
-    try {
-      await supabase.auth.signOut();
-    } finally {
-      setState({
-        user: null,
-        profile: null,
-        organization: null,
-        uiSettings: null,
-        loading: false,
-        error: null,
-      });
-      router.replace("/login");
-    }
+  const signOut = useCallback(() => {
+    setState({
+      user: null,
+      profile: null,
+      organization: null,
+      uiSettings: null,
+      loading: false,
+      error: null,
+    });
+    router.replace("/login");
+    supabase.auth.signOut();
   }, [router]);
 
   const clearError = useCallback(() => {
