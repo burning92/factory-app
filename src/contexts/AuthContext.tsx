@@ -307,16 +307,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
-    setState({
-      user: null,
-      profile: null,
-      organization: null,
-      uiSettings: null,
-      loading: false,
-      error: null,
-    });
-    router.push("/login");
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      setState({
+        user: null,
+        profile: null,
+        organization: null,
+        uiSettings: null,
+        loading: false,
+        error: null,
+      });
+      router.replace("/login");
+    }
   }, [router]);
 
   const clearError = useCallback(() => {

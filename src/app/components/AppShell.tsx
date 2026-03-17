@@ -7,6 +7,7 @@ import Header from "./Header";
 
 const LOGIN_PATH = "/login";
 const CHANGE_PASSWORD_PATH = "/login/change-password";
+const LOGOUT_PATH = "/logout";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -44,6 +45,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <p className="text-slate-500 text-sm">로딩 중…</p>
       </div>
     );
+  }
+
+  if (pathname === LOGOUT_PATH) {
+    return <>{children}</>;
   }
 
   if (!user && !isLoginPage && !isChangePasswordPage) {

@@ -56,7 +56,7 @@ export default function Header() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const popoverRef = useRef<HTMLDivElement>(null);
-  const { profile, uiSettings, signOut } = useAuth();
+  const { profile, uiSettings } = useAuth();
   const isAdmin = profile?.role === "admin";
 
   const logoUrl = uiSettings?.logo_url?.trim() || "/helmet-logo.png";
@@ -158,13 +158,13 @@ export default function Header() {
               >
                 비밀번호 변경
               </Link>
-              <button
-                type="button"
-                onClick={() => { setOpen(false); signOut(); }}
+              <Link
+                href="/logout"
+                onClick={() => setOpen(false)}
                 className="flex items-center justify-center w-full min-h-[44px] py-2 text-center text-xs text-slate-500 hover:text-slate-300 transition-colors rounded cursor-pointer touch-manipulation"
               >
                 로그아웃
-              </button>
+              </Link>
             </div>
           </div>
         )}
