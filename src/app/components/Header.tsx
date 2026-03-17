@@ -150,6 +150,13 @@ export default function Header() {
               })}
             </div>
             <div className="mt-2 pt-2 border-t border-slate-600 space-y-1">
+              <Link
+                href="/account/change-password"
+                onClick={() => setOpen(false)}
+                className="block w-full py-2 text-center text-xs text-slate-500 hover:text-slate-300 transition-colors"
+              >
+                비밀번호 변경
+              </Link>
               <button
                 type="button"
                 onClick={() => { setOpen(false); signOut(); }}
