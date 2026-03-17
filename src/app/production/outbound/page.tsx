@@ -5,6 +5,7 @@ import { useMasterStore } from "@/store/useMasterStore";
 import DateWheelPicker from "@/components/DateWheelPicker";
 import { getAppRecentValue, setAppRecentValue } from "@/lib/appRecentValues";
 import { createSafeId } from "@/lib/createSafeId";
+import { useAuth } from "@/contexts/AuthContext";
 
 /** 출고 입력 전용 최근 작성자명 (1차 마감과 분리). Supabase 우선, localStorage는 보조 fallback */
 const OUTBOUND_LAST_AUTHOR_KEY = "outbound-last-author-name";
@@ -325,6 +326,10 @@ interface PendingOutbound {
 }
 
 export default function OutboundPage() {
+  const { profile } = useAuth();
+  const loginAuthor =
+    (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
+
   const {
     materials,
     bomList,
@@ -350,6 +355,7 @@ export default function OutboundPage() {
   const [finishedQtyTouched, setFinishedQtyTouched] = useState(false);
   /** 출고 입력 전용 최근 작성자명. 화면 진입 시 Supabase → localStorage 순으로 채움 */
   const [preparerName, setPreparerName] = useState("");
+  const preparerTouchedRef = useRef(false);
   const [rows, setRows] = useState<OutboundRow[] | null>(null);
   const [pendingOutbound, setPendingOutbound] = useState<Record<string, PendingOutbound>>({});
   const [modal, setModal] = useState<{ row: OutboundRow } | null>(null);
@@ -363,23 +369,30 @@ export default function OutboundPage() {
   /** 마운트 시 출고 입력용 최근 작성자명: Supabase(key=outbound-last-author-name) → localStorage → 빈값 */
   useEffect(() => {
     let cancelled = false;
+    if (loginAuthor && !preparerTouchedRef.current) {
+      setPreparerName((prev) => prev || loginAuthor);
+    }
     getAppRecentValue(OUTBOUND_LAST_AUTHOR_KEY)
       .then((v) => {
         if (cancelled) return;
         const fromSupabase = (v ?? "").trim();
-        if (fromSupabase) {
+        if (!preparerTouchedRef.current && fromSupabase) {
           setPreparerName(fromSupabase);
         } else {
-          setPreparerName((prev) => prev || getLastAuthorNameFromStorage());
+          if (!preparerTouchedRef.current) {
+            setPreparerName((prev) => prev || getLastAuthorNameFromStorage());
+          }
         }
       })
       .catch(() => {
-        if (!cancelled) setPreparerName((prev) => prev || getLastAuthorNameFromStorage());
+        if (!cancelled && !preparerTouchedRef.current) {
+          setPreparerName((prev) => prev || getLastAuthorNameFromStorage());
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loginAuthor]);
 
   const productOptions = useMemo(() => {
     const set = new Set(bomList.map((b) => b.productName));
@@ -613,7 +626,16 @@ export default function OutboundPage() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1">작성자</label>
-              <input type="text" value={preparerName} onChange={(e) => setPreparerName(e.target.value)} placeholder="이름" className="w-full px-3 py-2 bg-space-900 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500/50" />
+              <input
+                type="text"
+                value={preparerName}
+                onChange={(e) => {
+                  preparerTouchedRef.current = true;
+                  setPreparerName(e.target.value);
+                }}
+                placeholder="이름"
+                className="w-full px-3 py-2 bg-space-900 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500/50"
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1">생산일자</label>

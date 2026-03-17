@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback, Suspense } from "react";
+import { useState, useMemo, useEffect, useCallback, Suspense, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMasterStore, type DoughBom, type DoughLogRecord, type DoughProcessLine } from "@/store/useMasterStore";
 import DateWheelPicker from "@/components/DateWheelPicker";
@@ -203,6 +203,7 @@ function DoughUsageContent() {
     if (doughBoms.length > 0 && selectedDough === null) setSelectedDough(doughBoms[0]);
   }, [doughBoms, selectedDough, isEditMode]);
   const [authorName, setAuthorName] = useState("");
+  const authorTouchedRef = useRef(false);
   const [반죽원료, set반죽원료] = useState<Record<string, DoughLineInput[]>>(INITIAL_반죽원료);
   const [덧가루덧기름, set덧가루덧기름] = useState<Record<string, DoughLineInput[]>>(INITIAL_덧가루덧기름);
 
@@ -345,19 +346,19 @@ function DoughUsageContent() {
     if (isEditMode) return;
     let cancelled = false;
     getDefaultAuthorName(DOUGH_LAST_AUTHOR_KEY, DOUGH_AUTHOR_STORAGE_KEY, {
-      displayName: profile?.display_name ?? undefined,
+      displayName: profile?.display_name ?? profile?.login_id ?? undefined,
     })
       .then((name) => {
-        if (!cancelled) setAuthorName(name);
+        if (!cancelled && !authorTouchedRef.current) setAuthorName((prev) => prev || name);
       })
       .catch(() => {
-        if (!cancelled && typeof window !== "undefined")
-          setAuthorName(localStorage.getItem(DOUGH_AUTHOR_STORAGE_KEY) ?? "");
+        if (!cancelled && typeof window !== "undefined" && !authorTouchedRef.current)
+          setAuthorName((prev) => prev || (localStorage.getItem(DOUGH_AUTHOR_STORAGE_KEY) ?? ""));
       });
     return () => {
       cancelled = true;
     };
-  }, [isEditMode, profile?.display_name]);
+  }, [isEditMode, profile?.display_name, profile?.login_id]);
 
   const targetQtyNum = Math.max(0, parseInt(targetQty, 10) || 0);
   const totalTargetQty = targetQtyNum + FIXED_LOSS_QTY;
@@ -764,7 +765,10 @@ function DoughUsageContent() {
               <input
                 type="text"
                 value={authorName}
-                onChange={(e) => setAuthorName(e.target.value)}
+                onChange={(e) => {
+                  authorTouchedRef.current = true;
+                  setAuthorName(e.target.value);
+                }}
                 placeholder="이름"
                 className="w-full px-3 py-2 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100"
               />

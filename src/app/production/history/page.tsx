@@ -11,6 +11,7 @@ import type { BomRowRef } from "@/features/production/history/types";
 import DateWheelPicker from "@/components/DateWheelPicker";
 import { getAppRecentValue, setAppRecentValue } from "@/lib/appRecentValues";
 import { createSafeId } from "@/lib/createSafeId";
+import { useAuth } from "@/contexts/AuthContext";
 
 const HISTORY_GROUP_STATE_KEY = "production-history:group-state";
 /** 1차 마감 전용 최근 작성자명 (출고 입력과 분리). Supabase 우선, localStorage는 보조 fallback */
@@ -445,6 +446,10 @@ function createInitialDateGroupState(
 // ---------------------------------------------------------------------------
 
 function UsageCalculationPageContent() {
+  const { profile } = useAuth();
+  const loginAuthor =
+    (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
+
   const {
     productionLogs,
     materials,
@@ -498,6 +503,11 @@ function UsageCalculationPageContent() {
 
   /** 마운트 시 1차 마감 최근 작성자명: Supabase → localStorage. 조회 후 defaultAuthorReady로 복원 시점 제어 */
   useEffect(() => {
+    if (loginAuthor) {
+      setDefaultAuthor(loginAuthor);
+      setDefaultAuthorReady(true);
+      return;
+    }
     getAppRecentValue(FIRST_CLOSE_LAST_AUTHOR_KEY)
       .then((v) => {
         const fromSupabase = (v ?? "").trim();
@@ -505,7 +515,7 @@ function UsageCalculationPageContent() {
       })
       .catch(() => setDefaultAuthor(getLastAuthorNameFromStorage()))
       .finally(() => setDefaultAuthorReady(true));
-  }, []);
+  }, [loginAuthor]);
 
   /** Supabase 날짜별 마감 상태 기준으로 groupStateByDate 초기화 (1회). defaultAuthor 조회 후 복원하여 cross-device 작성자명 반영 */
   useEffect(() => {

@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useMasterStore } from "@/store/useMasterStore";
 import DateWheelPicker from "@/components/DateWheelPicker";
 import { createSafeId } from "@/lib/createSafeId";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface OutboundRow {
   materialName: string;
@@ -202,6 +203,10 @@ interface PendingOutbound {
 }
 
 export default function JournalPage() {
+  const { profile } = useAuth();
+  const loginAuthor =
+    (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
+
   const {
     materials,
     bomList,
@@ -222,6 +227,8 @@ export default function JournalPage() {
   const [finishedQty, setFinishedQty] = useState("");
   const [preparerName, setPreparerName] = useState("");
   const [preparerName2, setPreparerName2] = useState("");
+  const preparerTouchedRef = useRef(false);
+  const preparer2TouchedRef = useRef(false);
   const [doughQtyInput, setDoughQtyInput] = useState("");
   const [doughWasteQty, setDoughWasteQty] = useState("");
   const [rows, setRows] = useState<OutboundRow[] | null>(null);
@@ -233,6 +240,13 @@ export default function JournalPage() {
     fetchBom();
     fetchLastUsedDates();
   }, [fetchMaterials, fetchBom, fetchLastUsedDates]);
+
+  // 최초 표시값: 로그인 사용자명(1순위 display_name, 2순위 login_id). 사용자가 수정했다면 덮어쓰지 않음.
+  useEffect(() => {
+    if (!loginAuthor) return;
+    if (!preparerTouchedRef.current) setPreparerName((prev) => prev || loginAuthor);
+    if (!preparer2TouchedRef.current) setPreparerName2((prev) => prev || loginAuthor);
+  }, [loginAuthor]);
 
   const productOptions = useMemo(() => {
     const set = new Set(bomList.map((b) => b.productName));
@@ -348,11 +362,29 @@ export default function JournalPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">출고자 (작성자)</label>
-                <input type="text" value={preparerName} onChange={(e) => setPreparerName(e.target.value)} placeholder="이름" className="w-full px-3 py-2 bg-space-900 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500/50" />
+                <input
+                  type="text"
+                  value={preparerName}
+                  onChange={(e) => {
+                    preparerTouchedRef.current = true;
+                    setPreparerName(e.target.value);
+                  }}
+                  placeholder="이름"
+                  className="w-full px-3 py-2 bg-space-900 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500/50"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">작성자 2</label>
-                <input type="text" value={preparerName2} onChange={(e) => setPreparerName2(e.target.value)} placeholder="이름" className="w-full px-3 py-2 bg-space-900 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500/50" />
+                <input
+                  type="text"
+                  value={preparerName2}
+                  onChange={(e) => {
+                    preparer2TouchedRef.current = true;
+                    setPreparerName2(e.target.value);
+                  }}
+                  placeholder="이름"
+                  className="w-full px-3 py-2 bg-space-900 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500/50"
+                />
               </div>
             </div>
             <div>
