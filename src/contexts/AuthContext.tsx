@@ -52,10 +52,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const loadProfileAndOrg = useCallback(async (userId: string, retried = false) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const effectiveUserId = session?.user?.id ?? userId;
+    if (!session?.user) {
+      setState((prev) => ({ ...prev, loading: false, error: "세션이 없습니다." }));
+      return;
+    }
+
+    // 1단계: public.profiles에서 id = auth.uid() 인 본인 행만 조회 (join 없음)
     const { data: profileRow, error: profileError } = await supabase
       .from("profiles")
       .select("id, organization_id, login_id, display_name, role, is_active, must_change_password")
-      .eq("id", userId)
+      .eq("id", effectiveUserId)
       .single();
 
     if (process.env.NODE_ENV === "development") {
@@ -63,9 +71,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const profileId = profileRow?.id ?? "null";
       // eslint-disable-next-line no-console
       console.log("[AuthContext] loadProfileAndOrg", {
-        authUserId: userId,
+        authUserId: effectiveUserId,
         profilesRowId: profileId,
-        match: profileRow ? userId === profileRow.id : false,
+        match: profileRow ? effectiveUserId === profileRow.id : false,
         error: errMsg || (profileRow ? null : "no row"),
         retried,
       });
@@ -77,7 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (profileError || !profileRow) {
       if (!retried) {
-        await new Promise((r) => setTimeout(r, 200));
+        await new Promise((r) => setTimeout(r, 300));
         return loadProfileAndOrg(userId, true);
       }
       setState((prev) => ({
@@ -98,6 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       must_change_password: profileRow.must_change_password ?? true,
     };
 
+    // 2단계: profile.organization_id로 organizations 1건 조회 후, 필요 시 organization_ui_settings 조회 (join 없음)
     const { data: orgRow } = await supabase
       .from("organizations")
       .select("id, organization_code, name, is_active")
