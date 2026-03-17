@@ -181,31 +181,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    const { data: sub } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return;
       if (session?.user) {
-        setState((prev) => ({ ...prev, user: session.user, loading: true, error: null }));
-        try {
-          await Promise.race([
-            loadProfileAndOrg(session.user.id),
-            new Promise((_, reject) => setTimeout(() => reject(new Error("profile_load_timeout")), PROFILE_LOAD_MS)),
-          ]);
-        } catch {
-          if (mounted) {
-            await supabase.auth.signOut();
-            setState((prev) => ({
-              ...prev,
-              user: null,
-              profile: null,
-              organization: null,
-              uiSettings: null,
-              loading: false,
-              error: prev.error || "프로필 로드 시간 초과. 다시 로그인해 주세요.",
-            }));
-          }
-          return;
-        }
-        if (mounted) setState((prev) => ({ ...prev, loading: false }));
+        setState((prev) => ({ ...prev, user: session.user }));
       } else {
         setState({
           user: null,
