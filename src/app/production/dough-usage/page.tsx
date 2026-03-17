@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMasterStore, type DoughBom, type DoughLogRecord, type DoughProcessLine } from "@/store/useMasterStore";
 import DateWheelPicker from "@/components/DateWheelPicker";
+import { getDefaultAuthorName, persistAuthorName } from "@/lib/authorDefault";
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
@@ -93,6 +94,8 @@ function suggestBatchSplit(totalBags: number): number[] {
 const DOUGH_INGREDIENT_KEYS = ["밀가루", "올리브오일", "소금", "설탕", "이스트", "개량제"] as const;
 const DUST_OIL_KEYS = ["덧가루-밀가루", "덧가루-세몰리나", "덧기름-카놀라유"] as const;
 
+/** 반죽사용량 최근 작성자명: Supabase(cross-device) 1순위, localStorage 2순위 */
+const DOUGH_LAST_AUTHOR_KEY = "dough-last-author-name";
 const DOUGH_AUTHOR_STORAGE_KEY = "dough_process_author";
 
 /** 백 단위 절사 (일·십의 자리 버림). 밀가루 제외 부재료용 */
@@ -305,9 +308,7 @@ function DoughUsageContent() {
       set덧가루덧기름(next덧);
       setAutoLotNoticeDate(null);
     } else if (!isEditMode) {
-      // 신규 작성 시에만: 최근 덧가루·원료 LOT 자동 세팅 (수정 모드에서는 절대 실행 안 함)
-      const savedAuthor = typeof window !== "undefined" ? localStorage.getItem(DOUGH_AUTHOR_STORAGE_KEY) ?? "" : "";
-      setAuthorName(savedAuthor);
+      // 신규 작성 시에만: 최근 덧가루·원료 LOT 자동 세팅 (수정 모드에서는 절대 실행 안 함). 작성자명은 아래 useEffect에서 Supabase → localStorage 순으로 로드.
       const getLatestLot = (lines: DoughProcessLine[] | undefined): string => {
         const firstLot = (lines?.[0]?.lot ?? "").trim();
         if (!firstLot || firstLot === "—") return "";
@@ -336,6 +337,23 @@ function DoughUsageContent() {
       setAutoLotNoticeDate(hasAutoLot ? (latestDoughLog?.사용일자 ?? null) : null);
     }
   }, [isEditMode, editData, latestDoughLog, doughBoms]);
+
+  /** 신규 작성 모드: 작성자 기본값 주입 (Supabase → localStorage, 로그인 도입 시 getDefaultAuthorName에서 user 반영) */
+  useEffect(() => {
+    if (isEditMode) return;
+    let cancelled = false;
+    getDefaultAuthorName(DOUGH_LAST_AUTHOR_KEY, DOUGH_AUTHOR_STORAGE_KEY)
+      .then((name) => {
+        if (!cancelled) setAuthorName(name);
+      })
+      .catch(() => {
+        if (!cancelled && typeof window !== "undefined")
+          setAuthorName(localStorage.getItem(DOUGH_AUTHOR_STORAGE_KEY) ?? "");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isEditMode]);
 
   const targetQtyNum = Math.max(0, parseInt(targetQty, 10) || 0);
   const totalTargetQty = targetQtyNum + FIXED_LOSS_QTY;
@@ -464,8 +482,8 @@ function DoughUsageContent() {
       const lines = fromInputLines(덧가루덧기름[k] ?? []);
       if (lines.length) 덧가루덧기름Parsed[k] = lines;
     }
-    if (authorName.trim() && typeof window !== "undefined")
-      localStorage.setItem(DOUGH_AUTHOR_STORAGE_KEY, authorName.trim());
+    if (authorName.trim())
+      await persistAuthorName(DOUGH_LAST_AUTHOR_KEY, DOUGH_AUTHOR_STORAGE_KEY, authorName.trim());
     const targetQtyNum = targetQty.trim() ? Math.max(0, parseInt(targetQty, 10) || 0) : undefined;
     const data: DoughLogRecord = {
       사용일자: usageDate,
