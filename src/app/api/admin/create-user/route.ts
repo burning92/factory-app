@@ -19,13 +19,15 @@ export async function POST(request: Request) {
     login_id?: string;
     display_name?: string;
     password?: string;
+    role?: string;
   };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "잘못된 요청" }, { status: 400 });
   }
-  const { access_token, refresh_token, organization_code, login_id, display_name, password } = body;
+  const { access_token, refresh_token, organization_code, login_id, display_name, password, role } = body;
+  const profileRole = role === "manager" ? "manager" : "worker";
   if (!access_token || !refresh_token || !organization_code?.trim() || !login_id?.trim() || !password) {
     return NextResponse.json(
       { error: "access_token, refresh_token, organization_code, login_id, password 필요" },
@@ -80,7 +82,7 @@ export async function POST(request: Request) {
     organization_id: org.id,
     login_id: id,
     display_name: (display_name ?? "").trim() || null,
-    role: "worker",
+    role: profileRole,
     is_active: true,
     must_change_password: false,
   });

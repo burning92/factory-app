@@ -1,6 +1,16 @@
 # Admin 계정 최초 생성
 
-공개 회원가입이 없으므로, **첫 admin 계정**은 Supabase Dashboard와 SQL로 한 번만 생성합니다.
+공개 회원가입이 없으므로, **첫 admin 계정**은 아래 둘 중 하나로 한 번만 생성합니다.
+
+**방법 A: 스크립트 (권장)**  
+프로젝트 루트에서 `.env.local`에 `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`가 있는 상태로:
+```bash
+# PowerShell
+$env:INITIAL_ADMIN_PASSWORD = "원하는비밀번호"; node scripts/create-initial-admin.mjs
+```
+스크립트가 Auth 사용자(`YWRtaW4@000.local`) 생성 후 `profiles`에 `login_id=admin`, `role=admin` 행을 넣습니다. 이미 `role=admin`이 있으면 건너뜁니다.
+
+**방법 B: Dashboard + SQL**
 
 1. **Supabase Dashboard → Authentication → Users → Add user**
    - Email: `YWRtaW4@000.local` (login_id `admin`을 base64url한 local-part. 한글/특수문자 대응 체계와 동일)
