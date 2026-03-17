@@ -55,7 +55,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { session } } = await supabase.auth.getSession();
     const effectiveUserId = session?.user?.id ?? userId;
     if (!session?.user) {
-      setState((prev) => ({ ...prev, loading: false, error: "세션이 없습니다." }));
+      setState((prev) => ({
+        ...prev,
+        user: null,
+        profile: null,
+        organization: null,
+        uiSettings: null,
+        loading: false,
+        error: "세션이 없습니다.",
+      }));
       return;
     }
 
@@ -134,6 +142,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const SESSION_CHECK_MS = 6000;
+  const PROFILE_LOAD_MS = 12000;
+
   useEffect(() => {
     let mounted = true;
 
@@ -141,8 +152,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
       if (session?.user) {
         setState((prev) => ({ ...prev, user: session.user, loading: true, error: null }));
-        await loadProfileAndOrg(session.user.id);
-        setState((prev) => ({ ...prev, loading: false }));
+        try {
+          await Promise.race([
+            loadProfileAndOrg(session.user.id),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("profile_load_timeout")), PROFILE_LOAD_MS)),
+          ]);
+        } catch {
+          if (mounted) setState((prev) => ({ ...prev, error: prev.error || "프로필 로드 시간 초과.", loading: false }));
+        }
+        if (mounted) setState((prev) => ({ ...prev, loading: false }));
       } else {
         setState({
           user: null,
@@ -155,17 +173,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!mounted) return;
-      if (session?.user) {
-        setState((prev) => ({ ...prev, user: session.user, loading: true }));
-        loadProfileAndOrg(session.user.id).then(() => {
-          if (mounted) setState((prev) => ({ ...prev, loading: false }));
-        });
-      } else {
-        setState((prev) => ({ ...prev, loading: false }));
-      }
-    });
+    const timeoutPromise = new Promise<{ data: { session: null } }>((resolve) =>
+      setTimeout(() => resolve({ data: { session: null } }), SESSION_CHECK_MS)
+    );
+    Promise.race([supabase.auth.getSession(), timeoutPromise])
+      .then(({ data: { session } }) => {
+        if (!mounted) return;
+        if (session?.user) {
+          setState((prev) => ({ ...prev, user: session.user, loading: true }));
+          Promise.race([
+            loadProfileAndOrg(session.user.id),
+            new Promise<void>((_, reject) => setTimeout(() => reject(new Error("profile_load_timeout")), PROFILE_LOAD_MS)),
+          ])
+            .catch(() => {
+              if (mounted) setState((prev) => ({ ...prev, error: prev.error || "프로필 로드 시간 초과." }));
+            })
+            .finally(() => {
+              if (mounted) setState((prev) => ({ ...prev, loading: false }));
+            });
+        } else {
+          setState((prev) => ({ ...prev, loading: false }));
+        }
+      })
+      .catch(() => {
+        if (mounted) setState((prev) => ({ ...prev, loading: false }));
+      });
 
     return () => {
       mounted = false;
@@ -204,8 +236,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       if (data.user) {
         setState((prev) => ({ ...prev, user: data.user, loading: true, error: null }));
-        await loadProfileAndOrg(data.user.id);
-        setState((prev) => ({ ...prev, loading: false }));
+        try {
+          await Promise.race([
+            loadProfileAndOrg(data.user.id),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("profile_load_timeout")), 12000)),
+          ]);
+        } finally {
+          setState((prev) => ({ ...prev, loading: false }));
+        }
       }
       return { error: null };
     },
