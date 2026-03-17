@@ -51,14 +51,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     error: null,
   });
 
-  const loadProfileAndOrg = useCallback(async (userId: string) => {
+  const loadProfileAndOrg = useCallback(async (userId: string, retried = false) => {
     const { data: profileRow, error: profileError } = await supabase
       .from("profiles")
       .select("id, organization_id, login_id, display_name, role, is_active, must_change_password")
       .eq("id", userId)
       .single();
 
+    if (process.env.NODE_ENV === "development") {
+      const errMsg = profileError ? `${profileError.code ?? ""} ${profileError.message ?? ""}`.trim() : "";
+      const profileId = profileRow?.id ?? "null";
+      // eslint-disable-next-line no-console
+      console.log("[AuthContext] loadProfileAndOrg", {
+        authUserId: userId,
+        profilesRowId: profileId,
+        match: profileRow ? userId === profileRow.id : false,
+        error: errMsg || (profileRow ? null : "no row"),
+        retried,
+      });
+      if (profileError) {
+        // eslint-disable-next-line no-console
+        console.error("[AuthContext] profile fetch error", profileError.code, profileError.message, profileError);
+      }
+    }
+
     if (profileError || !profileRow) {
+      if (!retried) {
+        await new Promise((r) => setTimeout(r, 200));
+        return loadProfileAndOrg(userId, true);
+      }
+      setState((prev) => ({
+        ...prev,
+        loading: false,
+        error: profileError?.message ?? "프로필을 불러올 수 없습니다.",
+      }));
       return;
     }
 
