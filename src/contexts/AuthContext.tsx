@@ -66,23 +66,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .eq("id", effectiveUserId)
       .single();
 
-    if (process.env.NODE_ENV === "development") {
-      const errMsg = profileError ? `${profileError.code ?? ""} ${profileError.message ?? ""}`.trim() : "";
-      const profileId = profileRow?.id ?? "null";
-      // eslint-disable-next-line no-console
-      console.log("[AuthContext] loadProfileAndOrg", {
-        authUserId: effectiveUserId,
-        profilesRowId: profileId,
-        match: profileRow ? effectiveUserId === profileRow.id : false,
-        error: errMsg || (profileRow ? null : "no row"),
-        retried,
-      });
-      if (profileError) {
-        // eslint-disable-next-line no-console
-        console.error("[AuthContext] profile fetch error", profileError.code, profileError.message, profileError);
-      }
-    }
-
     if (profileError || !profileRow) {
       if (!retried) {
         await new Promise((r) => setTimeout(r, 300));
@@ -220,7 +203,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: error.message };
       }
       if (data.user) {
+        setState((prev) => ({ ...prev, user: data.user, loading: true, error: null }));
         await loadProfileAndOrg(data.user.id);
+        setState((prev) => ({ ...prev, loading: false }));
       }
       return { error: null };
     },

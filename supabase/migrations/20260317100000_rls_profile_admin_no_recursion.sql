@@ -15,6 +15,9 @@ $$;
 
 COMMENT ON FUNCTION public.get_my_profile_role() IS 'RLS 정책용: 현재 사용자 role 반환. SECURITY DEFINER로 profiles 재귀 조회 방지.';
 
+GRANT EXECUTE ON FUNCTION public.get_my_profile_role() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_my_profile_role() TO anon;
+
 -- profiles: 재귀 정책 제거 후 함수 사용
 DROP POLICY IF EXISTS "profiles_select_admin" ON public.profiles;
 DROP POLICY IF EXISTS "profiles_update_admin" ON public.profiles;
