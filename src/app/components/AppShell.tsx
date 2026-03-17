@@ -24,27 +24,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       return;
     }
     if (user && isLoginPage) {
-      if (profile?.must_change_password) {
-        router.replace(CHANGE_PASSWORD_PATH);
-      } else {
-        router.replace("/");
-      }
+      router.replace("/");
       return;
     }
-    if (user && profile && profile.must_change_password && !isChangePasswordPage) {
-      router.replace(CHANGE_PASSWORD_PATH);
-    }
-  }, [loading, user, profile?.must_change_password, isLoginPage, isChangePasswordPage, router]);
+  }, [loading, user, isLoginPage, isChangePasswordPage, router]);
 
-  // 기본 랜딩: 조직 설정에 default_landing_path가 있으면 '/' 대신 해당 경로로 (비밀번호 변경 필요 시 제외)
+  // 기본 랜딩: 조직 설정에 default_landing_path가 있으면 '/' 대신 해당 경로로
   useEffect(() => {
-    if (!user || !profile || profile.must_change_password || !uiSettings?.default_landing_path || pathname !== "/")
-      return;
+    if (!user || !profile || !uiSettings?.default_landing_path || pathname !== "/") return;
     const path = uiSettings.default_landing_path.trim();
     if (path && path !== "/") {
       router.replace(path);
     }
-  }, [user, profile?.must_change_password, uiSettings?.default_landing_path, pathname, router]);
+  }, [user, profile, uiSettings?.default_landing_path, pathname, router]);
 
   if (loading) {
     return (
@@ -63,7 +55,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   const isManagePage = pathname === "/manage";
-  if (isManagePage && profile?.role !== "master") {
+  if (isManagePage && profile?.role !== "admin") {
     router.replace("/");
     return null;
   }

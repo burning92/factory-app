@@ -165,7 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (typeof window !== "undefined") {
         localStorage.setItem("rememberMe", rememberMe ? "true" : "false");
       }
-      const code = organizationCode.trim().toLowerCase();
+      const code = organizationCode.trim();
       const id = loginId.trim();
       if (!code || !id) {
         const msg = "회사코드와 아이디를 입력하세요.";

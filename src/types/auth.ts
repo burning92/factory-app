@@ -7,7 +7,7 @@ export interface Profile {
   organization_id: string;
   login_id: string;
   display_name: string | null;
-  role: "worker" | "manager" | "admin" | "master";
+  role: "worker" | "manager" | "admin";
   is_active: boolean;
   must_change_password: boolean;
 }

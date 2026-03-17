@@ -42,12 +42,13 @@ export default function LoginPage() {
             <input
               id="organizationCode"
               type="text"
+              inputMode="numeric"
               autoComplete="organization-code"
               value={organizationCode}
               onChange={(e) => setOrganizationCode(e.target.value)}
               required
               className="w-full px-3 py-2 text-sm bg-space-800 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-              placeholder="예: armored"
+              placeholder="예: 100"
             />
           </div>
           <div>
@@ -62,7 +63,7 @@ export default function LoginPage() {
               onChange={(e) => setLoginId(e.target.value)}
               required
               className="w-full px-3 py-2 text-sm bg-space-800 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-              placeholder="예: 홍길동01"
+              placeholder="예: 홍길동01 또는 하랑01"
             />
           </div>
           <div>

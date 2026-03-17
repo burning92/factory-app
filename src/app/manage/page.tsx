@@ -55,7 +55,7 @@ export default function ManagePage() {
   }, []);
 
   useEffect(() => {
-    if (profile?.role !== "master") return;
+    if (profile?.role !== "admin") return;
     Promise.all([loadOrgs(), loadProfiles()]).finally(() => setLoading(false));
   }, [profile?.role, loadOrgs, loadProfiles]);
 
@@ -173,7 +173,7 @@ export default function ManagePage() {
     ? profiles.filter((p) => p.organization_id === selectedOrgId)
     : profiles;
 
-  if (profile?.role !== "master") {
+  if (profile?.role !== "admin") {
     return (
       <div className="p-6">
         <p className="text-slate-500">권한이 없습니다.</p>

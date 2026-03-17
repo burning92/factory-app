@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
   const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).single();
-  if (profile?.role !== "master") {
+  if (profile?.role !== "admin") {
     return NextResponse.json({ error: "권한 없음" }, { status: 403 });
   }
 
@@ -74,10 +74,10 @@ export async function POST(request: Request) {
     id: newUser.user.id,
     organization_id: org.id,
     login_id: id,
-    display_name: (display_name ?? "").trim() || id.replace(/\d+$/, ""),
+    display_name: (display_name ?? "").trim() || null,
     role: "worker",
     is_active: true,
-    must_change_password: true,
+    must_change_password: false,
   });
   if (insertError) {
     return NextResponse.json({ error: insertError.message }, { status: 400 });

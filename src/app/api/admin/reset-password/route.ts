@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
   const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).single();
-  if (profile?.role !== "master") {
+  if (profile?.role !== "admin") {
     return NextResponse.json({ error: "권한 없음" }, { status: 403 });
   }
 

@@ -57,7 +57,7 @@ export default function Header() {
   const pathname = usePathname();
   const popoverRef = useRef<HTMLDivElement>(null);
   const { profile, uiSettings, signOut } = useAuth();
-  const isMaster = profile?.role === "master";
+  const isAdmin = profile?.role === "admin";
 
   const logoUrl = uiSettings?.logo_url?.trim() || "/helmet-logo.png";
   const brandName = uiSettings?.brand_name?.trim() || "생산관리";
@@ -145,7 +145,7 @@ export default function Header() {
               })}
             </div>
             <div className="mt-2 pt-2 border-t border-slate-600 space-y-1">
-              {isMaster && (
+              {isAdmin && (
                 <Link
                   href="/manage"
                   onClick={() => setOpen(false)}

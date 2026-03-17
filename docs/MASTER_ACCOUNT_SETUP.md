@@ -1,9 +1,9 @@
-# 마스터 계정 최초 생성
+# Admin 계정 최초 생성
 
-공개 회원가입이 없으므로, **첫 마스터 계정**은 Supabase Dashboard와 SQL로 한 번만 생성합니다.
+공개 회원가입이 없으므로, **첫 admin 계정**은 Supabase Dashboard와 SQL로 한 번만 생성합니다.
 
 1. **Supabase Dashboard → Authentication → Users → Add user**
-   - Email: `admin@master.local` (또는 원하는 로그인 아이디에 맞춰 `로그인아이디@master.local`)
+   - Email: `admin@master.local` (시스템 관리용 조직 코드 `master` 사용)
    - Password: 강한 비밀번호 설정 (하드코딩 금지, 비밀번호 관리 도구로 보관)
    - 생성 후 해당 사용자의 **User UID** 복사
 
@@ -16,7 +16,7 @@ VALUES (
   (SELECT id FROM public.organizations WHERE organization_code = 'master' LIMIT 1),
   'admin',
   '관리자',
-  'master',
+  'admin',
   true,
   false
 )
@@ -28,4 +28,6 @@ ON CONFLICT (id) DO NOTHING;
    - 아이디: `admin`
    - 비밀번호: 1단계에서 설정한 비밀번호
 
-이후 사용자/사업장 추가는 앱의 **관리 (사업장/사용자)** 화면에서 마스터 계정으로 진행합니다.
+**사업장 로그인 코드:** 일반 사업장은 숫자 코드 사용 (예: 아머드프레시 100, 하랑 200). Admin만 회사코드 `master`로 로그인합니다.
+
+이후 사용자/사업장 추가는 앱의 **관리 (사업장/사용자)** 화면에서 admin 계정으로 진행합니다.
