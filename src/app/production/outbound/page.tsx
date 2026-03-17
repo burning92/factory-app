@@ -366,32 +366,31 @@ export default function OutboundPage() {
     fetchLastUsedDates();
   }, [fetchMaterials, fetchBom, fetchLastUsedDates]);
 
-  /** 마운트 시 출고 입력용 최근 작성자명: Supabase(key=outbound-last-author-name) → localStorage → 빈값 */
+  /** 마운트 시 작성자 최초값: 로그인 사용자명 1순위. 없을 때만 Supabase → localStorage fallback */
   useEffect(() => {
-    let cancelled = false;
     if (loginAuthor && !preparerTouchedRef.current) {
-      setPreparerName((prev) => prev || loginAuthor);
+      setPreparerName(loginAuthor);
+      return;
     }
-    getAppRecentValue(OUTBOUND_LAST_AUTHOR_KEY)
-      .then((v) => {
-        if (cancelled) return;
-        const fromSupabase = (v ?? "").trim();
-        if (!preparerTouchedRef.current && fromSupabase) {
-          setPreparerName(fromSupabase);
-        } else {
+    if (!loginAuthor) {
+      let cancelled = false;
+      getAppRecentValue(OUTBOUND_LAST_AUTHOR_KEY)
+        .then((v) => {
+          if (cancelled) return;
+          const fromSupabase = (v ?? "").trim();
           if (!preparerTouchedRef.current) {
-            setPreparerName((prev) => prev || getLastAuthorNameFromStorage());
+            setPreparerName(fromSupabase || getLastAuthorNameFromStorage());
           }
-        }
-      })
-      .catch(() => {
-        if (!cancelled && !preparerTouchedRef.current) {
-          setPreparerName((prev) => prev || getLastAuthorNameFromStorage());
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
+        })
+        .catch(() => {
+          if (!cancelled && !preparerTouchedRef.current) {
+            setPreparerName(getLastAuthorNameFromStorage());
+          }
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
   }, [loginAuthor]);
 
   const productOptions = useMemo(() => {
