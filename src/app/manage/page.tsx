@@ -1,8 +1,20 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { Eye, EyeOff, Copy, KeyRound } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
+
+function generateTempPassword(length = 12): string {
+  const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  const arr = new Uint8Array(length);
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+    crypto.getRandomValues(arr);
+  } else {
+    for (let i = 0; i < length; i++) arr[i] = Math.floor(Math.random() * 256);
+  }
+  return Array.from(arr, (b) => chars[b % chars.length]).join("");
+}
 
 interface OrgRow {
   id: string;
@@ -65,7 +77,20 @@ export default function ManagePage() {
   const [newDisplayName, setNewDisplayName] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newUserOrgCode, setNewUserOrgCode] = useState("");
+  const [newUserRole, setNewUserRole] = useState<"worker" | "manager">("worker");
   const [submitting, setSubmitting] = useState(false);
+  const [showInitialPassword, setShowInitialPassword] = useState(false);
+
+  function handleGenerateTempPassword() {
+    const pwd = generateTempPassword(12);
+    setNewPassword(pwd);
+    copyToClipboard(pwd);
+  }
+
+  function copyToClipboard(text: string) {
+    if (!text) return;
+    navigator.clipboard?.writeText(text).catch(() => {});
+  }
 
   async function handleAddOrg(e: React.FormEvent) {
     e.preventDefault();
@@ -120,6 +145,7 @@ export default function ManagePage() {
         login_id: newLoginId.trim(),
         display_name: newDisplayName.trim() || undefined,
         password: newPassword,
+        role: newUserRole,
       }),
     });
     const json = await res.json();
@@ -133,6 +159,11 @@ export default function ManagePage() {
     setNewPassword("");
     loadProfiles();
   }
+
+  const handleRoleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const v = e.target.value;
+    setNewUserRole(v === "manager" ? "manager" : "worker");
+  };
 
   async function handleResetPassword(userId: string) {
     const p = window.prompt("새 비밀번호 (6자 이상)");
@@ -290,10 +321,21 @@ export default function ManagePage() {
               type="text"
               value={newUserOrgCode}
               onChange={(e) => setNewUserOrgCode(e.target.value)}
-              placeholder="armored"
+              placeholder="100 또는 200"
               className="w-28 px-3 py-2 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100"
               required
             />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">권한</label>
+            <select
+              value={newUserRole}
+              onChange={handleRoleChange}
+              className="w-24 px-3 py-2 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100"
+            >
+              <option value="worker">worker</option>
+              <option value="manager">manager</option>
+            </select>
           </div>
           <div>
             <label className="block text-xs text-slate-400 mb-1">아이디</label>
@@ -318,15 +360,45 @@ export default function ManagePage() {
           </div>
           <div>
             <label className="block text-xs text-slate-400 mb-1">초기 비밀번호</label>
-            <input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="6자 이상"
-              minLength={6}
-              className="w-28 px-3 py-2 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100"
-              required
-            />
+            <div className="flex items-center gap-1">
+              <input
+                type={showInitialPassword ? "text" : "password"}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="6자 이상"
+                minLength={6}
+                className="w-28 px-3 py-2 text-sm bg-space-900 border border-slate-600 rounded-l-lg rounded-r-none text-slate-100"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowInitialPassword((v) => !v)}
+                className="p-2 border border-slate-600 border-l-0 bg-space-900 text-slate-400 hover:text-slate-200 rounded-r-lg"
+                title={showInitialPassword ? "숨기기" : "보기"}
+                aria-label={showInitialPassword ? "숨기기" : "보기"}
+              >
+                {showInitialPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => copyToClipboard(newPassword)}
+                disabled={!newPassword}
+                className="p-2 border border-slate-600 bg-space-900 text-slate-400 hover:text-slate-200 rounded-lg disabled:opacity-50"
+                title="복사"
+                aria-label="복사"
+              >
+                <Copy className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={handleGenerateTempPassword}
+                className="px-2 py-2 text-xs font-medium rounded-lg border border-slate-600 bg-space-800 text-slate-300 hover:bg-slate-700 hover:text-slate-100 whitespace-nowrap"
+                title="12자 임시 비밀번호 생성 후 복사"
+              >
+                <KeyRound className="w-4 h-4 inline mr-1 align-middle" />
+                임시 생성
+              </button>
+            </div>
           </div>
           <button
             type="submit"
@@ -337,7 +409,7 @@ export default function ManagePage() {
           </button>
         </form>
         <p className="mt-2 text-xs text-slate-500">
-          추가된 사용자는 첫 로그인 시 비밀번호 변경이 필요합니다.
+          추가된 사용자는 설정한 초기 비밀번호로 로그인합니다. 필요 시 비밀번호 재설정 버튼으로 변경하세요.
         </p>
       </section>
     </div>
