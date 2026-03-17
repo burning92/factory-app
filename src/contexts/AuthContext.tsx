@@ -14,6 +14,8 @@ import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import type { Organization, OrganizationUISettings, Profile } from "@/types/auth";
 
+const AUTH_EMAIL_SUFFIX = ".local";
+
 interface AuthState {
   user: User | null;
   profile: Profile | null;
@@ -24,10 +26,15 @@ interface AuthState {
 }
 
 interface AuthContextValue extends AuthState {
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signIn: (
+    organizationCode: string,
+    loginId: string,
+    password: string,
+    rememberMe: boolean
+  ) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
-  ensureProfile: (userId: string, email: string) => Promise<{ error: string | null }>;
   clearError: () => void;
+  setMustChangePasswordDone: () => Promise<{ error: string | null }>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -46,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loadProfileAndOrg = useCallback(async (userId: string) => {
     const { data: profileRow, error: profileError } = await supabase
       .from("profiles")
-      .select("id, organization_id, display_name, role, is_active")
+      .select("id, organization_id, login_id, display_name, role, is_active, must_change_password")
       .eq("id", userId)
       .single();
 
@@ -57,9 +64,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const profile: Profile = {
       id: profileRow.id,
       organization_id: profileRow.organization_id,
+      login_id: profileRow.login_id ?? "",
       display_name: profileRow.display_name ?? null,
       role: profileRow.role as Profile["role"],
       is_active: profileRow.is_active ?? true,
+      must_change_password: profileRow.must_change_password ?? true,
     };
 
     const { data: orgRow } = await supabase
@@ -106,41 +115,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
-  const ensureProfile = useCallback(
-    async (userId: string, email: string): Promise<{ error: string | null }> => {
-      const { data: existing } = await supabase.from("profiles").select("id").eq("id", userId).single();
-      if (existing) {
-        return { error: null };
-      }
-
-      const { data: defaultOrg } = await supabase
-        .from("organizations")
-        .select("id")
-        .eq("organization_code", "armored")
-        .limit(1)
-        .single();
-
-      if (!defaultOrg) {
-        return { error: "기본 조직이 없습니다." };
-      }
-
-      const { error } = await supabase.from("profiles").insert({
-        id: userId,
-        organization_id: defaultOrg.id,
-        display_name: email?.split("@")[0] ?? "user",
-        role: "worker",
-        is_active: true,
-      });
-
-      if (error) {
-        return { error: error.message };
-      }
-      await loadProfileAndOrg(userId);
-      return { error: null };
-    },
-    [loadProfileAndOrg]
-  );
-
   useEffect(() => {
     let mounted = true;
 
@@ -181,23 +155,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadProfileAndOrg]);
 
   const signIn = useCallback(
-    async (email: string, password: string): Promise<{ error: string | null }> => {
+    async (
+      organizationCode: string,
+      loginId: string,
+      password: string,
+      rememberMe: boolean
+    ): Promise<{ error: string | null }> => {
       setState((prev) => ({ ...prev, error: null }));
+      if (typeof window !== "undefined") {
+        localStorage.setItem("rememberMe", rememberMe ? "true" : "false");
+      }
+      const code = organizationCode.trim().toLowerCase();
+      const id = loginId.trim();
+      if (!code || !id) {
+        const msg = "회사코드와 아이디를 입력하세요.";
+        setState((prev) => ({ ...prev, error: msg }));
+        return { error: msg };
+      }
+      const email = `${id}@${code}${AUTH_EMAIL_SUFFIX}`;
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         setState((prev) => ({ ...prev, error: error.message }));
         return { error: error.message };
       }
       if (data.user) {
-        const { error: ensureErr } = await ensureProfile(data.user.id, data.user.email ?? "");
-        if (ensureErr) {
-          setState((prev) => ({ ...prev, error: ensureErr }));
-          return { error: ensureErr };
-        }
+        await loadProfileAndOrg(data.user.id);
       }
       return { error: null };
     },
-    [ensureProfile]
+    [loadProfileAndOrg]
   );
 
   const signOut = useCallback(async () => {
@@ -217,15 +203,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, error: null }));
   }, []);
 
+  const setMustChangePasswordDone = useCallback(async (): Promise<{ error: string | null }> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "로그인이 필요합니다." };
+    const { error } = await supabase
+      .from("profiles")
+      .update({ must_change_password: false })
+      .eq("id", user.id);
+    if (error) return { error: error.message };
+    setState((prev) =>
+      prev.profile ? { ...prev, profile: { ...prev.profile, must_change_password: false } } : prev
+    );
+    return { error: null };
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       ...state,
       signIn,
       signOut,
-      ensureProfile,
       clearError,
+      setMustChangePasswordDone,
     }),
-    [state, signIn, signOut, ensureProfile, clearError]
+    [state, signIn, signOut, clearError, setMustChangePasswordDone]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

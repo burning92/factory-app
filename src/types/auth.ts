@@ -1,10 +1,15 @@
+/** 로그인용 이메일 도메인 (실제 메일 아님) */
+export const AUTH_EMAIL_SUFFIX = ".local";
+
 /** profiles 테이블 행 (조회용) */
 export interface Profile {
   id: string;
   organization_id: string;
+  login_id: string;
   display_name: string | null;
-  role: "worker" | "manager" | "admin";
+  role: "worker" | "manager" | "admin" | "master";
   is_active: boolean;
+  must_change_password: boolean;
 }
 
 /** organizations 테이블 행 (조회용) */

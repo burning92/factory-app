@@ -56,7 +56,8 @@ export default function Header() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const popoverRef = useRef<HTMLDivElement>(null);
-  const { uiSettings, signOut } = useAuth();
+  const { profile, uiSettings, signOut } = useAuth();
+  const isMaster = profile?.role === "master";
 
   const logoUrl = uiSettings?.logo_url?.trim() || "/helmet-logo.png";
   const brandName = uiSettings?.brand_name?.trim() || "생산관리";
@@ -143,7 +144,16 @@ export default function Header() {
                 );
               })}
             </div>
-            <div className="mt-2 pt-2 border-t border-slate-600">
+            <div className="mt-2 pt-2 border-t border-slate-600 space-y-1">
+              {isMaster && (
+                <Link
+                  href="/manage"
+                  onClick={() => setOpen(false)}
+                  className="block w-full py-2 text-center text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
+                >
+                  관리 (사업장/사용자)
+                </Link>
+              )}
               <button
                 type="button"
                 onClick={() => { setOpen(false); signOut(); }}

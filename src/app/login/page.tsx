@@ -7,15 +7,22 @@ import { useAuth } from "@/contexts/AuthContext";
 export default function LoginPage() {
   const router = useRouter();
   const { signIn, error, clearError } = useAuth();
-  const [email, setEmail] = useState("");
+  const [organizationCode, setOrganizationCode] = useState("");
+  const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     clearError();
     setLoading(true);
-    const { error: err } = await signIn(email.trim(), password);
+    const { error: err } = await signIn(
+      organizationCode.trim(),
+      loginId.trim(),
+      password,
+      rememberMe
+    );
     setLoading(false);
     if (!err) {
       router.push("/");
@@ -29,18 +36,33 @@ export default function LoginPage() {
         <h1 className="text-xl font-semibold text-slate-100 text-center">로그인</h1>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="email" className="block text-xs text-slate-400 mb-1">
-              이메일
+            <label htmlFor="organizationCode" className="block text-xs text-slate-400 mb-1">
+              회사코드
             </label>
             <input
-              id="email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              id="organizationCode"
+              type="text"
+              autoComplete="organization-code"
+              value={organizationCode}
+              onChange={(e) => setOrganizationCode(e.target.value)}
               required
               className="w-full px-3 py-2 text-sm bg-space-800 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-              placeholder="you@example.com"
+              placeholder="예: armored"
+            />
+          </div>
+          <div>
+            <label htmlFor="loginId" className="block text-xs text-slate-400 mb-1">
+              아이디
+            </label>
+            <input
+              id="loginId"
+              type="text"
+              autoComplete="username"
+              value={loginId}
+              onChange={(e) => setLoginId(e.target.value)}
+              required
+              className="w-full px-3 py-2 text-sm bg-space-800 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              placeholder="예: 홍길동01"
             />
           </div>
           <div>
@@ -56,6 +78,18 @@ export default function LoginPage() {
               required
               className="w-full px-3 py-2 text-sm bg-space-800 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
             />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              id="rememberMe"
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="w-4 h-4 rounded border-slate-600 bg-space-800 text-cyan-500 focus:ring-cyan-500"
+            />
+            <label htmlFor="rememberMe" className="text-sm text-slate-400">
+              로그인 유지 (체크 해제 시 브라우저를 닫으면 로그아웃됩니다)
+            </label>
           </div>
           {error && (
             <p className="text-sm text-red-400" role="alert">
