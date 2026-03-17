@@ -55,6 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { session } } = await supabase.auth.getSession();
     const effectiveUserId = session?.user?.id ?? userId;
     if (!session?.user) {
+      await supabase.auth.signOut();
       setState((prev) => ({
         ...prev,
         user: null,
@@ -79,8 +80,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await new Promise((r) => setTimeout(r, 300));
         return loadProfileAndOrg(userId, true);
       }
+      await supabase.auth.signOut();
       setState((prev) => ({
         ...prev,
+        user: null,
+        profile: null,
+        organization: null,
+        uiSettings: null,
         loading: false,
         error: profileError?.message ?? "프로필을 불러올 수 없습니다.",
       }));
@@ -144,6 +150,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const SESSION_CHECK_MS = 6000;
   const PROFILE_LOAD_MS = 12000;
+  const LOADING_SAFETY_MS = 15000;
+
+  useEffect(() => {
+    let mounted = true;
+    const safety = setTimeout(() => {
+      if (!mounted) return;
+      setState((prev) => {
+        if (!prev.loading) return prev;
+        if (prev.user && !prev.profile) {
+          supabase.auth.signOut();
+          return {
+            user: null,
+            profile: null,
+            organization: null,
+            uiSettings: null,
+            loading: false,
+            error: prev.error || "로딩 시간 초과. 다시 로그인해 주세요.",
+          };
+        }
+        return { ...prev, loading: false };
+      });
+    }, LOADING_SAFETY_MS);
+    return () => {
+      mounted = false;
+      clearTimeout(safety);
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -158,7 +191,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             new Promise((_, reject) => setTimeout(() => reject(new Error("profile_load_timeout")), PROFILE_LOAD_MS)),
           ]);
         } catch {
-          if (mounted) setState((prev) => ({ ...prev, error: prev.error || "프로필 로드 시간 초과.", loading: false }));
+          if (mounted) {
+            await supabase.auth.signOut();
+            setState((prev) => ({
+              ...prev,
+              user: null,
+              profile: null,
+              organization: null,
+              uiSettings: null,
+              loading: false,
+              error: prev.error || "프로필 로드 시간 초과. 다시 로그인해 주세요.",
+            }));
+          }
+          return;
         }
         if (mounted) setState((prev) => ({ ...prev, loading: false }));
       } else {
@@ -185,11 +230,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             loadProfileAndOrg(session.user.id),
             new Promise<void>((_, reject) => setTimeout(() => reject(new Error("profile_load_timeout")), PROFILE_LOAD_MS)),
           ])
-            .catch(() => {
-              if (mounted) setState((prev) => ({ ...prev, error: prev.error || "프로필 로드 시간 초과." }));
-            })
-            .finally(() => {
+            .then(() => {
               if (mounted) setState((prev) => ({ ...prev, loading: false }));
+            })
+            .catch(async () => {
+              if (mounted) {
+                await supabase.auth.signOut();
+                setState((prev) => ({
+                  ...prev,
+                  user: null,
+                  profile: null,
+                  organization: null,
+                  uiSettings: null,
+                  loading: false,
+                  error: prev.error || "프로필 로드 시간 초과. 다시 로그인해 주세요.",
+                }));
+              }
             });
         } else {
           setState((prev) => ({ ...prev, loading: false }));

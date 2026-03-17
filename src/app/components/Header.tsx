@@ -127,9 +127,9 @@ export default function Header() {
         </button>
 
         {open && (
-          <div className="absolute right-0 top-full mt-1 w-[280px] rounded-xl border border-slate-600 bg-space-800 shadow-xl py-3 px-3">
-            <p className="text-xs font-medium text-slate-500 px-3 mb-2">업무 메뉴</p>
-            <div className="grid grid-cols-2 gap-1">
+          <div className="absolute right-0 top-full mt-1 w-[280px] max-h-[min(70vh,480px)] flex flex-col rounded-xl border border-slate-600 bg-space-800 shadow-xl overflow-hidden">
+            <p className="text-xs font-medium text-slate-500 px-3 py-2 shrink-0">업무 메뉴</p>
+            <div className="grid grid-cols-2 gap-1 px-3 pb-2 overflow-y-auto min-h-0 flex-1">
               {displayMenuItems.map(({ href, label, Icon }) => {
                 const isActive = pathname === href || pathname.startsWith(href + "/");
                 return (
@@ -149,18 +149,19 @@ export default function Header() {
                 );
               })}
             </div>
-            <div className="mt-2 pt-2 border-t border-slate-600 space-y-1">
+            <div className="shrink-0 mt-0 pt-2 pb-3 px-3 border-t border-slate-600 bg-space-800 space-y-0">
+              <p className="text-xs font-medium text-slate-500 px-0 mb-1">계정</p>
               <Link
                 href="/account/change-password"
                 onClick={() => setOpen(false)}
-                className="block w-full py-2 text-center text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                className="block w-full py-2 text-center text-xs text-slate-500 hover:text-slate-300 transition-colors rounded"
               >
                 비밀번호 변경
               </Link>
               <button
                 type="button"
                 onClick={() => { setOpen(false); signOut(); }}
-                className="w-full py-2 text-center text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                className="w-full py-2 text-center text-xs text-slate-500 hover:text-slate-300 transition-colors rounded"
               >
                 로그아웃
               </button>
