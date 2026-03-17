@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import Header from "./components/Header";
+import { AuthProvider } from "@/contexts/AuthContext";
+import AppShell from "./components/AppShell";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -15,12 +16,9 @@ export default function RootLayout({
   return (
     <html lang="ko" suppressHydrationWarning>
       <body className="min-h-screen bg-space-900 text-slate-100 antialiased">
-        <div className="min-h-screen flex flex-col">
-          <Header />
-          <main className="flex-1 w-full bg-space-900">
-            {children}
-          </main>
-        </div>
+        <AuthProvider>
+          <AppShell>{children}</AppShell>
+        </AuthProvider>
       </body>
     </html>
   );

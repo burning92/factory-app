@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMasterStore, type DoughBom, type DoughLogRecord, type DoughProcessLine } from "@/store/useMasterStore";
 import DateWheelPicker from "@/components/DateWheelPicker";
+import { useAuth } from "@/contexts/AuthContext";
 import { getDefaultAuthorName, persistAuthorName } from "@/lib/authorDefault";
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -142,6 +143,7 @@ function DoughUsageContent() {
   const editDate = searchParams.get("date");
   const isEditMode = !!editDate;
 
+  const { profile } = useAuth();
   const { getDoughLogByDate, saveDoughLog, saving, fetchDoughBoms, fetchDoughLogs, doughBoms, doughLogsMap } = useMasterStore();
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [autoLotNoticeDate, setAutoLotNoticeDate] = useState<string | null>(null);
@@ -338,11 +340,13 @@ function DoughUsageContent() {
     }
   }, [isEditMode, editData, latestDoughLog, doughBoms]);
 
-  /** 신규 작성 모드: 작성자 기본값 주입 (Supabase → localStorage, 로그인 도입 시 getDefaultAuthorName에서 user 반영) */
+  /** 신규 작성 모드: 작성자 기본값 주입 (로그인 사용자 이름 우선 → Supabase → localStorage) */
   useEffect(() => {
     if (isEditMode) return;
     let cancelled = false;
-    getDefaultAuthorName(DOUGH_LAST_AUTHOR_KEY, DOUGH_AUTHOR_STORAGE_KEY)
+    getDefaultAuthorName(DOUGH_LAST_AUTHOR_KEY, DOUGH_AUTHOR_STORAGE_KEY, {
+      displayName: profile?.display_name ?? undefined,
+    })
       .then((name) => {
         if (!cancelled) setAuthorName(name);
       })
@@ -353,7 +357,7 @@ function DoughUsageContent() {
     return () => {
       cancelled = true;
     };
-  }, [isEditMode]);
+  }, [isEditMode, profile?.display_name]);
 
   const targetQtyNum = Math.max(0, parseInt(targetQty, 10) || 0);
   const totalTargetQty = targetQtyNum + FIXED_LOSS_QTY;

@@ -2,14 +2,18 @@ import { getAppRecentValue, setAppRecentValue } from "@/lib/appRecentValues";
 
 /**
  * 화면별 작성자명 기본값 조회 (cross-device).
+ * 0순위: 로그인 사용자 displayName (인자로 전달 시)
  * 1순위: Supabase app_recent_values (동기화)
  * 2순위: localStorage
- * 로그인 도입 시: 0순위로 session user displayName 주입하도록 이 함수 시그니처만 확장하면 됨.
  */
 export async function getDefaultAuthorName(
   supabaseKey: string,
-  localStorageKey: string
+  localStorageKey: string,
+  options?: { displayName?: string | null }
 ): Promise<string> {
+  const fromUser = (options?.displayName ?? "").trim();
+  if (fromUser) return fromUser;
+
   const fromSupabase = await getAppRecentValue(supabaseKey);
   const v = (fromSupabase ?? "").trim();
   if (v) return v;

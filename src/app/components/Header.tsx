@@ -5,17 +5,30 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Package, Plus, List, Settings, ClipboardList, Calculator, FileText, Boxes } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import type { MenuItemConfig } from "@/types/auth";
 
-const MENUS = [
-  { href: "/production/outbound", label: "출고 입력", Icon: Package },
-  { href: "/production/outbound-history", label: "출고 현황", Icon: ClipboardList },
-  { href: "/production/history", label: "사용량 계산", Icon: Calculator },
-  { href: "/production/history/completed", label: "생산일지 목록", Icon: FileText },
-  { href: "/production/dough-usage", label: "반죽사용량 입력", Icon: Plus },
-  { href: "/production/dough-logs", label: "반죽 내역 관리", Icon: List },
-  { href: "/inventory/ecount", label: "재고 현황", Icon: Boxes },
-  { href: "/production/admin", label: "기준 정보 관리", Icon: Settings },
-] as const;
+const DEFAULT_MENUS: { href: string; label: string; key: string; Icon: typeof Package }[] = [
+  { href: "/production/outbound", label: "출고 입력", key: "outbound", Icon: Package },
+  { href: "/production/outbound-history", label: "출고 현황", key: "outbound-history", Icon: ClipboardList },
+  { href: "/production/history", label: "사용량 계산", key: "history", Icon: Calculator },
+  { href: "/production/history/completed", label: "생산일지 목록", key: "completed", Icon: FileText },
+  { href: "/production/dough-usage", label: "반죽사용량 입력", key: "dough-usage", Icon: Plus },
+  { href: "/production/dough-logs", label: "반죽 내역 관리", key: "dough-logs", Icon: List },
+  { href: "/inventory/ecount", label: "재고 현황", key: "ecount", Icon: Boxes },
+  { href: "/production/admin", label: "기준 정보 관리", key: "admin", Icon: Settings },
+];
+
+const KEY_TO_ICON: Record<string, typeof Package> = {
+  outbound: Package,
+  "outbound-history": ClipboardList,
+  history: Calculator,
+  completed: FileText,
+  "dough-usage": Plus,
+  "dough-logs": List,
+  ecount: Boxes,
+  admin: Settings,
+};
 
 /** 구글 스타일 점 9개(와플) 아이콘 */
 function WaffleIcon({ className }: { className?: string }) {
@@ -43,6 +56,23 @@ export default function Header() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const popoverRef = useRef<HTMLDivElement>(null);
+  const { uiSettings, signOut } = useAuth();
+
+  const logoUrl = uiSettings?.logo_url?.trim() || "/helmet-logo.png";
+  const brandName = uiSettings?.brand_name?.trim() || "생산관리";
+  const primaryColor = uiSettings?.primary_color?.trim() || "#06b6d4";
+
+  const menuItems =
+    uiSettings?.menu_config && uiSettings.menu_config.length > 0
+      ? uiSettings.menu_config
+          .filter((m): m is MenuItemConfig => m.visible !== false && !!m.path)
+          .map((m) => ({
+            href: m.path,
+            label: m.label || m.key,
+            key: m.key,
+            Icon: KEY_TO_ICON[m.key] ?? Package,
+          }))
+      : DEFAULT_MENUS;
 
   useEffect(() => {
     const close = (e: MouseEvent) => {
@@ -57,22 +87,29 @@ export default function Header() {
   }, [open]);
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-700/60 bg-space-900/95 backdrop-blur px-4 sm:px-6 print:hidden">
+    <header
+      className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-700/60 bg-space-900/95 backdrop-blur px-4 sm:px-6 print:hidden"
+      style={{ ["--header-primary" as string]: primaryColor }}
+    >
       <Link
         href="/"
         className="flex items-center gap-2 text-slate-100 hover:text-white transition-colors"
       >
-        <Image
-          src="/helmet-logo.png"
-          alt="로고"
-          width={28}
-          height={28}
-          className="object-contain shrink-0"
-        />
-        <span className="font-semibold text-sm hidden sm:inline">생산관리</span>
+        {logoUrl.startsWith("http") ? (
+          <img src={logoUrl} alt="로고" width={28} height={28} className="object-contain shrink-0 rounded" />
+        ) : (
+          <Image
+            src={logoUrl}
+            alt="로고"
+            width={28}
+            height={28}
+            className="object-contain shrink-0"
+          />
+        )}
+        <span className="font-semibold text-sm hidden sm:inline">{brandName}</span>
       </Link>
 
-      <div className="relative" ref={popoverRef}>
+      <div className="relative flex items-center gap-2" ref={popoverRef}>
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
@@ -87,7 +124,7 @@ export default function Header() {
           <div className="absolute right-0 top-full mt-1 w-[280px] rounded-xl border border-slate-600 bg-space-800 shadow-xl py-3 px-3">
             <p className="text-xs font-medium text-slate-500 px-3 mb-2">업무 메뉴</p>
             <div className="grid grid-cols-2 gap-1">
-              {MENUS.map(({ href, label, Icon }) => {
+              {menuItems.map(({ href, label, Icon }) => {
                 const isActive = pathname === href || pathname.startsWith(href + "/");
                 return (
                   <Link
@@ -105,6 +142,15 @@ export default function Header() {
                   </Link>
                 );
               })}
+            </div>
+            <div className="mt-2 pt-2 border-t border-slate-600">
+              <button
+                type="button"
+                onClick={() => { setOpen(false); signOut(); }}
+                className="w-full py-2 text-center text-xs text-slate-500 hover:text-slate-300 transition-colors"
+              >
+                로그아웃
+              </button>
             </div>
           </div>
         )}
