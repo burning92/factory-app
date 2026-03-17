@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { toAuthEmailLocal } from "@/lib/authEmail";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -51,7 +52,11 @@ export async function POST(request: Request) {
 
   const code = organization_code.trim().toLowerCase();
   const id = login_id.trim();
-  const email = `${id}@${code}${AUTH_EMAIL_SUFFIX}`;
+  const localPart = toAuthEmailLocal(id);
+  if (!localPart) {
+    return NextResponse.json({ error: "login_id가 비어 있습니다." }, { status: 400 });
+  }
+  const email = `${localPart}@${code}${AUTH_EMAIL_SUFFIX}`;
 
   const { data: org } = await admin.from("organizations").select("id").eq("organization_code", code).single();
   if (!org) {

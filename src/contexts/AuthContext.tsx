@@ -12,6 +12,7 @@ import {
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { toAuthEmailLocal } from "@/lib/authEmail";
 import type { Organization, OrganizationUISettings, Profile } from "@/types/auth";
 
 const AUTH_EMAIL_SUFFIX = ".local";
@@ -172,7 +173,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setState((prev) => ({ ...prev, error: msg }));
         return { error: msg };
       }
-      const email = `${id}@${code}${AUTH_EMAIL_SUFFIX}`;
+      const localPart = toAuthEmailLocal(id);
+      if (!localPart) {
+        setState((prev) => ({ ...prev, error: "아이디를 입력하세요." }));
+        return { error: "아이디를 입력하세요." };
+      }
+      const email = `${localPart}@${code}${AUTH_EMAIL_SUFFIX}`;
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         setState((prev) => ({ ...prev, error: error.message }));
