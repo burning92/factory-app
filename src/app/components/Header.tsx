@@ -131,6 +131,10 @@ export default function Header() {
         { href: "/account", label: "계정" },
       ];
 
+  /** 허브 페이지에서만 데스크탑 카테고리 메뉴 노출. 작업/입력 상세 페이지에서는 숨김 */
+  const desktopHubPaths = viewIsHarang ? ["/", "/account"] : ["/", "/production", "/materials", "/daily", "/account"];
+  const showDesktopCategoryMenu = desktopHubPaths.includes(pathname);
+
   /** admin일 때만 그리드 상단에 "관리" 노출 (모바일에서 스크롤 없이 보이도록). manager/worker에는 미포함 */
   const displayMenuItems = isAdmin
     ? [{ href: "/manage", label: "관리 (사업장/사용자)", key: "manage", Icon: Users }, ...menuItems]
@@ -196,7 +200,7 @@ export default function Header() {
       </Link>
 
       <nav className="hidden md:flex flex-1 justify-center items-center gap-6 min-w-0" aria-label="업무 카테고리">
-        {viewIsHarang ? (
+        {showDesktopCategoryMenu && (viewIsHarang ? (
           desktopNavItems.map(({ href, label }) => {
             const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
             return (
@@ -301,7 +305,7 @@ export default function Header() {
               계정
             </Link>
           </>
-        )}
+        ))}
       </nav>
 
       <div className="flex items-center gap-2 shrink-0">
