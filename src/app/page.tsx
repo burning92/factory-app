@@ -32,7 +32,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="relative min-h-[calc(100vh-3.5rem)] w-full overflow-hidden bg-black">
+    <div className="relative -mt-14 min-h-[100vh] w-full overflow-hidden bg-black">
       <video
         className="absolute inset-0 h-full w-full object-cover"
         poster="/brand/armoredfresh-home-poster.jpg"
@@ -46,6 +46,10 @@ export default function DashboardPage() {
         <source src="/brand/armoredfresh-home.mp4" type="video/mp4" />
       </video>
       <div className="absolute inset-0 bg-black/30" aria-hidden />
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/70 to-transparent"
+        aria-hidden
+      />
     </div>
   );
 }

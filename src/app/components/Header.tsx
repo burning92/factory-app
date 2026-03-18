@@ -107,9 +107,14 @@ export default function Header() {
     }
   }, [open]);
 
+  const headerClassName =
+    viewIsHarang
+      ? "sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-700/60 bg-space-900/95 backdrop-blur px-4 sm:px-6 print:hidden"
+      : "sticky top-0 z-40 flex h-14 items-center justify-between border-b border-white/10 bg-black/30 backdrop-blur-md px-4 sm:px-6 print:hidden";
+
   return (
     <header
-      className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-700/60 bg-space-900/95 backdrop-blur px-4 sm:px-6 print:hidden"
+      className={headerClassName}
       style={{ ["--header-primary" as string]: primaryColor }}
     >
       <Link
