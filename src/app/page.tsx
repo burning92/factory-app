@@ -6,9 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 const HARANG_PEOPLE_ICON_SRC = "/harang/people-icon.png";
 
 export default function DashboardPage() {
-  const { uiSettings, viewOrganizationCode } = useAuth();
-  const brandName = uiSettings?.brand_name?.trim() || "생산관리";
-  const logoUrl = uiSettings?.logo_url?.trim() || "/helmet-logo.png";
+  const { viewOrganizationCode } = useAuth();
   const isHarang = viewOrganizationCode === "200";
 
   if (isHarang) {
@@ -34,20 +32,20 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-3.5rem)] flex flex-col items-center justify-center px-4">
-      {logoUrl.startsWith("http") ? (
-        <img src={logoUrl} alt="로고" width={80} height={80} className="object-contain mb-6 opacity-95 rounded" />
-      ) : (
-        <Image
-          src={logoUrl}
-          alt="로고"
-          width={80}
-          height={80}
-          className="object-contain mb-6 opacity-95"
-        />
-      )}
-      <h1 className="text-xl sm:text-2xl font-medium text-slate-200 mb-2">{brandName}</h1>
-      <p className="text-slate-500 text-sm">우측 상단 메뉴에서 업무를 선택하세요.</p>
+    <div className="relative min-h-[calc(100vh-3.5rem)] w-full overflow-hidden bg-black">
+      <video
+        className="absolute inset-0 h-full w-full object-cover"
+        poster="/brand/armoredfresh-home-poster.jpg"
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="metadata"
+        aria-label="아머드프레시 홈 비주얼"
+      >
+        <source src="/brand/armoredfresh-home.mp4" type="video/mp4" />
+      </video>
+      <div className="absolute inset-0 bg-black/30" aria-hidden />
     </div>
   );
 }

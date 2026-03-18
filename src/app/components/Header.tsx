@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import type { MenuItemConfig } from "@/types/auth";
 
 const HARANG_PEOPLE_ICON_SRC = "/harang/people-icon.png";
+const ARMORED_LOGO_SRC = "/brand/helmet-furnace-mark.png";
 
 const DEFAULT_MENUS: { href: string; label: string; key: string; Icon: typeof Package }[] = [
   { href: "/production/outbound", label: "출고 입력", key: "outbound", Icon: Package },
@@ -70,8 +71,7 @@ export default function Header() {
   /** 헤더 메뉴/로고 분기는 보기용 조직 기준 */
   const viewIsHarang = viewOrganizationCode === "200";
 
-  const logoUrl = uiSettings?.logo_url?.trim() || "/helmet-logo.png";
-  const effectiveLogoUrl = viewIsHarang ? HARANG_PEOPLE_ICON_SRC : logoUrl;
+  const effectiveLogoUrl = viewIsHarang ? HARANG_PEOPLE_ICON_SRC : ARMORED_LOGO_SRC;
   const brandName = viewIsHarang ? "하랑" : (uiSettings?.brand_name?.trim() || "생산관리");
   const primaryColor = uiSettings?.primary_color?.trim() || "#06b6d4";
 
