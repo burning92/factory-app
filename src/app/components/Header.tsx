@@ -33,6 +33,31 @@ const KEY_TO_ICON: Record<string, typeof Package> = {
   admin: Settings,
 };
 
+type DropdownItem = { href: string; label: string } | { label: string; comingSoon: true };
+
+const DESKTOP_DROPDOWN_PRODUCTION: DropdownItem[] = [
+  { href: "/production/outbound", label: "출고 입력" },
+  { href: "/production/outbound-history", label: "출고 현황" },
+  { href: "/production/history", label: "사용량 계산" },
+  { href: "/production/history/completed", label: "생산일지 목록" },
+  { href: "/production/dough-usage", label: "반죽사용량 입력" },
+  { href: "/production/dough-logs", label: "반죽 내역 관리" },
+];
+
+const DESKTOP_DROPDOWN_MATERIALS: DropdownItem[] = [
+  { href: "/inventory/ecount", label: "재고 현황" },
+  { href: "/materials/journal", label: "원자재 일지" },
+  { label: "하랑 입고 관리", comingSoon: true },
+  { label: "하랑 현재고", comingSoon: true },
+  { label: "원부자재 필요량", comingSoon: true },
+];
+
+const DESKTOP_DROPDOWN_DAILY: DropdownItem[] = [
+  { label: "현장 위생 일지", comingSoon: true },
+  { label: "제조설비 일지", comingSoon: true },
+  { label: "기타 데일리 점검", comingSoon: true },
+];
+
 /** 구글 스타일 점 9개(와플) 아이콘 */
 function WaffleIcon({ className }: { className?: string }) {
   return (
@@ -55,8 +80,11 @@ function WaffleIcon({ className }: { className?: string }) {
   );
 }
 
+type DropdownKey = "production" | "materials" | "daily";
+
 export default function Header() {
   const [open, setOpen] = useState(false);
+  const [activeDropdown, setActiveDropdown] = useState<DropdownKey | null>(null);
   const pathname = usePathname();
   const popoverRef = useRef<HTMLDivElement>(null);
   const {
@@ -89,6 +117,19 @@ export default function Header() {
   /** 200(하랑) 보기일 때 업무 메뉴 영역 비움. viewOrganizationCode 기준 */
   const menuItems = viewIsHarang ? [] : baseMenuItems;
 
+  /** 데스크탑 상단 카테고리: 100 = 생산/원부자재/데일리/계정, 200 = 홈/계정만 */
+  const desktopNavItems = viewIsHarang
+    ? [
+        { href: "/", label: "홈" },
+        { href: "/account", label: "계정" },
+      ]
+    : [
+        { href: "/production", label: "생산" },
+        { href: "/materials", label: "원부자재" },
+        { href: "/daily", label: "데일리" },
+        { href: "/account", label: "계정" },
+      ];
+
   /** admin일 때만 그리드 상단에 "관리" 노출 (모바일에서 스크롤 없이 보이도록). manager/worker에는 미포함 */
   const displayMenuItems = isAdmin
     ? [{ href: "/manage", label: "관리 (사업장/사용자)", key: "manage", Icon: Users }, ...menuItems]
@@ -118,7 +159,7 @@ export default function Header() {
     >
       <Link
         href="/"
-        className="flex items-center gap-2 text-slate-100 hover:text-white transition-colors"
+        className="flex items-center gap-2 text-slate-100 hover:text-white transition-colors shrink-0"
       >
         {effectiveLogoUrl.startsWith("http") ? (
           <img src={effectiveLogoUrl} alt="로고" width={36} height={36} className="object-contain shrink-0 rounded" />
@@ -138,35 +179,129 @@ export default function Header() {
         )}
       </Link>
 
-      {canSwitchOrganization && (
-        <div className="flex items-center gap-1 shrink-0" role="group" aria-label="조직 보기 전환">
-          <button
-            type="button"
-            onClick={() => setViewOrganizationCodeSafe("100")}
-            className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
-              viewOrganizationCode === "100"
-                ? "bg-cyan-500/25 text-cyan-300 border border-cyan-500/50"
-                : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/80 border border-transparent"
-            }`}
-          >
-            <span className="sm:hidden">AFF</span>
-            <span className="hidden sm:inline">Armored Fresh Factory</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewOrganizationCodeSafe("200")}
-            className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              viewOrganizationCode === "200"
-                ? "bg-cyan-500/25 text-cyan-300 border border-cyan-500/50"
-                : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/80 border border-transparent"
-            }`}
-          >
-            Harang
-          </button>
-        </div>
-      )}
+      <nav className="hidden md:flex flex-1 justify-center items-center gap-6 min-w-0" aria-label="업무 카테고리">
+        {viewIsHarang ? (
+          desktopNavItems.map(({ href, label }) => {
+            const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={`text-sm font-medium whitespace-nowrap transition-colors ${
+                  isActive ? "text-cyan-300" : "text-slate-400 hover:text-slate-100"
+                }`}
+              >
+                {label}
+              </Link>
+            );
+          })
+        ) : (
+          <>
+            {(["production", "materials", "daily"] as const).map((key) => {
+              const href = key === "production" ? "/production" : key === "materials" ? "/materials" : "/daily";
+              const items =
+                key === "production"
+                  ? DESKTOP_DROPDOWN_PRODUCTION
+                  : key === "materials"
+                    ? DESKTOP_DROPDOWN_MATERIALS
+                    : DESKTOP_DROPDOWN_DAILY;
+              const isActive = pathname === href || pathname.startsWith(href + "/");
+              const isOpen = activeDropdown === key;
+              return (
+                <div
+                  key={key}
+                  className="relative"
+                  onMouseEnter={() => setActiveDropdown(key)}
+                  onMouseLeave={() => setActiveDropdown(null)}
+                >
+                  <Link
+                    href={href}
+                    className={`text-sm font-medium whitespace-nowrap transition-colors ${
+                      isActive ? "text-cyan-300" : "text-slate-400 hover:text-slate-100"
+                    }`}
+                  >
+                    {key === "production" ? "생산" : key === "materials" ? "원부자재" : "데일리"}
+                  </Link>
+                  {isOpen && (
+                    <div
+                      className="absolute left-1/2 -translate-x-1/2 top-full mt-1 min-w-[200px] rounded-lg border border-slate-600 bg-slate-800/95 shadow-xl py-2 z-50"
+                      role="menu"
+                    >
+                      {items.map((item, i) =>
+                        "comingSoon" in item && item.comingSoon ? (
+                          <div
+                            key={i}
+                            className="flex items-center justify-between gap-2 px-4 py-2 text-sm text-slate-500 cursor-not-allowed"
+                            role="menuitem"
+                            aria-disabled
+                          >
+                            <span>{item.label}</span>
+                            <span className="text-xs text-slate-500 bg-slate-700/80 px-1.5 py-0.5 rounded">준비중</span>
+                          </div>
+                        ) : "href" in item ? (
+                          <Link
+                            key={i}
+                            href={item.href}
+                            className={`block px-4 py-2 text-sm transition-colors ${
+                              pathname === item.href || pathname.startsWith(item.href + "/")
+                                ? "text-cyan-300 bg-cyan-500/10"
+                                : "text-slate-300 hover:bg-slate-700/80 hover:text-slate-100"
+                            }`}
+                            role="menuitem"
+                          >
+                            {item.label}
+                          </Link>
+                        ) : null
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            <Link
+              href="/account"
+              className={`text-sm font-medium whitespace-nowrap transition-colors ${
+                pathname === "/account" || pathname.startsWith("/account/")
+                  ? "text-cyan-300"
+                  : "text-slate-400 hover:text-slate-100"
+              }`}
+            >
+              계정
+            </Link>
+          </>
+        )}
+      </nav>
 
-      <div className="relative flex items-center gap-2" ref={popoverRef}>
+      <div className="flex items-center gap-2 shrink-0">
+        {canSwitchOrganization && (
+          <div className="flex items-center gap-1" role="group" aria-label="조직 보기 전환">
+            <button
+              type="button"
+              onClick={() => setViewOrganizationCodeSafe("100")}
+              className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
+                viewOrganizationCode === "100"
+                  ? "bg-cyan-500/25 text-cyan-300 border border-cyan-500/50"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/80 border border-transparent"
+              }`}
+            >
+              <span className="sm:hidden">AFF</span>
+              <span className="hidden sm:inline">Armored Fresh Factory</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewOrganizationCodeSafe("200")}
+              className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                viewOrganizationCode === "200"
+                  ? "bg-cyan-500/25 text-cyan-300 border border-cyan-500/50"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/80 border border-transparent"
+              }`}
+            >
+              Harang
+            </button>
+          </div>
+        )}
+
+        <div className="relative flex items-center gap-2" ref={popoverRef}>
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
@@ -219,6 +354,7 @@ export default function Header() {
             </div>
           </div>
         )}
+        </div>
       </div>
     </header>
   );
