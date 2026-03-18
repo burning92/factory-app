@@ -58,13 +58,21 @@ export default function Header() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const popoverRef = useRef<HTMLDivElement>(null);
-  const { profile, uiSettings, organization } = useAuth();
+  const {
+    profile,
+    uiSettings,
+    organization,
+    viewOrganizationCode,
+    canSwitchOrganization,
+    setViewOrganizationCodeSafe,
+  } = useAuth();
   const isAdmin = profile?.role === "admin";
-  const isHarang = organization?.organization_code === "200";
+  /** 헤더 메뉴/로고 분기는 보기용 조직 기준 */
+  const viewIsHarang = viewOrganizationCode === "200";
 
   const logoUrl = uiSettings?.logo_url?.trim() || "/helmet-logo.png";
-  const effectiveLogoUrl = isHarang ? HARANG_PEOPLE_ICON_SRC : logoUrl;
-  const brandName = uiSettings?.brand_name?.trim() || "생산관리";
+  const effectiveLogoUrl = viewIsHarang ? HARANG_PEOPLE_ICON_SRC : logoUrl;
+  const brandName = viewIsHarang ? "하랑" : (uiSettings?.brand_name?.trim() || "생산관리");
   const primaryColor = uiSettings?.primary_color?.trim() || "#06b6d4";
 
   const baseMenuItems =
@@ -79,8 +87,8 @@ export default function Header() {
           }))
       : DEFAULT_MENUS;
 
-  /** 200(하랑)은 1차 분리: 업무 메뉴 영역 비움. 100(아머드프레시) 또는 분기 불가 시 기존 로직 유지 */
-  const menuItems = organization?.organization_code === "200" ? [] : baseMenuItems;
+  /** 200(하랑) 보기일 때 업무 메뉴 영역 비움. viewOrganizationCode 기준 */
+  const menuItems = viewIsHarang ? [] : baseMenuItems;
 
   /** admin일 때만 그리드 상단에 "관리" 노출 (모바일에서 스크롤 없이 보이도록). manager/worker에는 미포함 */
   const displayMenuItems = isAdmin
@@ -121,6 +129,33 @@ export default function Header() {
         )}
         <span className="font-semibold text-sm hidden sm:inline">{brandName}</span>
       </Link>
+
+      {canSwitchOrganization && (
+        <div className="flex items-center gap-1 shrink-0" role="group" aria-label="조직 보기 전환">
+          <button
+            type="button"
+            onClick={() => setViewOrganizationCodeSafe("100")}
+            className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              viewOrganizationCode === "100"
+                ? "bg-cyan-500/25 text-cyan-300 border border-cyan-500/50"
+                : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/80 border border-transparent"
+            }`}
+          >
+            아머드프레시
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewOrganizationCodeSafe("200")}
+            className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              viewOrganizationCode === "200"
+                ? "bg-cyan-500/25 text-cyan-300 border border-cyan-500/50"
+                : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/80 border border-transparent"
+            }`}
+          >
+            하랑
+          </button>
+        </div>
+      )}
 
       <div className="relative flex items-center gap-2" ref={popoverRef}>
         <button

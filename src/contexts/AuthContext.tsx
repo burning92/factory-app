@@ -17,16 +17,25 @@ import type { Organization, OrganizationUISettings, Profile } from "@/types/auth
 
 const AUTH_EMAIL_SUFFIX = ".local";
 
+/** manager/admin만 전환 가능한 보기용 조직 코드 */
+const SWITCHABLE_ORG_CODES = ["100", "200"] as const;
+
 interface AuthState {
   user: User | null;
   profile: Profile | null;
   organization: Organization | null;
   uiSettings: OrganizationUISettings | null;
+  /** 보기용 조직 코드. worker는 로그인 조직으로 고정, manager/admin만 전환 가능 */
+  viewOrganizationCode: string | null;
   loading: boolean;
   error: string | null;
 }
 
 interface AuthContextValue extends AuthState {
+  /** manager/admin만 true. 조직 전환 버튼 노출 여부 등에 사용 */
+  canSwitchOrganization: boolean;
+  /** manager/admin만 유효. "100" 또는 "200"으로 보기용 조직 전환. 그 외 값은 무시 */
+  setViewOrganizationCodeSafe: (code: string) => void;
   signIn: (
     organizationCode: string,
     loginId: string,
@@ -47,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profile: null,
     organization: null,
     uiSettings: null,
+    viewOrganizationCode: null,
     loading: true,
     error: null,
   });
@@ -62,6 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile: null,
         organization: null,
         uiSettings: null,
+        viewOrganizationCode: null,
         loading: false,
         error: "세션이 없습니다.",
       }));
@@ -87,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile: null,
         organization: null,
         uiSettings: null,
+        viewOrganizationCode: null,
         loading: false,
         error: profileError?.message ?? "프로필을 불러올 수 없습니다.",
       }));
@@ -145,6 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile,
       organization,
       uiSettings,
+      viewOrganizationCode: organization?.organization_code ?? null,
     }));
   }, []);
 
@@ -165,6 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             profile: null,
             organization: null,
             uiSettings: null,
+            viewOrganizationCode: null,
             loading: false,
             error: prev.error || "로딩 시간 초과. 다시 로그인해 주세요.",
           };
@@ -191,6 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           profile: null,
           organization: null,
           uiSettings: null,
+          viewOrganizationCode: null,
           loading: false,
           error: null,
         });
@@ -221,6 +236,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   profile: null,
                   organization: null,
                   uiSettings: null,
+                  viewOrganizationCode: null,
                   loading: false,
                   error: prev.error || "프로필 로드 시간 초과. 다시 로그인해 주세요.",
                 }));
@@ -291,6 +307,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile: null,
       organization: null,
       uiSettings: null,
+      viewOrganizationCode: null,
       loading: false,
       error: null,
     });
@@ -316,15 +333,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: null };
   }, []);
 
+  const canSwitchOrganization =
+    state.profile?.role === "manager" || state.profile?.role === "admin";
+
+  const setViewOrganizationCodeSafe = useCallback((code: string) => {
+    if (!canSwitchOrganization) return;
+    const trimmed = (code ?? "").trim();
+    if (SWITCHABLE_ORG_CODES.includes(trimmed as (typeof SWITCHABLE_ORG_CODES)[number])) {
+      setState((prev) => ({ ...prev, viewOrganizationCode: trimmed }));
+    }
+  }, [canSwitchOrganization]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       ...state,
+      canSwitchOrganization,
+      setViewOrganizationCodeSafe,
       signIn,
       signOut,
       clearError,
       setMustChangePasswordDone,
     }),
-    [state, signIn, signOut, clearError, setMustChangePasswordDone]
+    [state, canSwitchOrganization, setViewOrganizationCodeSafe, signIn, signOut, clearError, setMustChangePasswordDone]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

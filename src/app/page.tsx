@@ -6,10 +6,10 @@ import { useAuth } from "@/contexts/AuthContext";
 const HARANG_PEOPLE_ICON_SRC = "/harang/people-icon.png";
 
 export default function DashboardPage() {
-  const { uiSettings, organization } = useAuth();
+  const { uiSettings, viewOrganizationCode } = useAuth();
   const brandName = uiSettings?.brand_name?.trim() || "생산관리";
   const logoUrl = uiSettings?.logo_url?.trim() || "/helmet-logo.png";
-  const isHarang = organization?.organization_code === "200";
+  const isHarang = viewOrganizationCode === "200";
 
   if (isHarang) {
     return (

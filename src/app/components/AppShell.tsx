@@ -24,7 +24,7 @@ function isHarangBlockedPath(pathname: string): boolean {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, profile, loading, uiSettings, organization } = useAuth();
+  const { user, profile, loading, uiSettings, viewOrganizationCode } = useAuth();
   const isLoginPage = pathname === LOGIN_PATH;
   const isChangePasswordPage = pathname === CHANGE_PASSWORD_PATH;
 
@@ -71,7 +71,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  if (organization?.organization_code === "200" && isHarangBlockedPath(pathname)) {
+  if (viewOrganizationCode === "200" && isHarangBlockedPath(pathname)) {
     router.replace("/");
     return null;
   }
