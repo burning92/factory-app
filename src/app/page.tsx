@@ -34,7 +34,7 @@ export default function DashboardPage() {
   return (
     <div className="relative -mt-14 min-h-[100vh] w-full overflow-hidden bg-black">
       <video
-        className="absolute inset-0 h-full w-full object-cover"
+        className="absolute inset-0 h-full w-full object-cover md:object-contain"
         poster="/brand/armoredfresh-home-poster.jpg"
         autoPlay
         muted
