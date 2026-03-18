@@ -87,6 +87,7 @@ export default function Header() {
   const [activeDropdown, setActiveDropdown] = useState<DropdownKey | null>(null);
   const pathname = usePathname();
   const popoverRef = useRef<HTMLDivElement>(null);
+  const desktopDropdownCloseTimeoutRef = useRef<number | null>(null);
   const {
     profile,
     uiSettings,
@@ -152,6 +153,21 @@ export default function Header() {
       ? "sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-700/60 bg-space-900/95 backdrop-blur px-4 sm:px-6 print:hidden"
       : "sticky top-0 z-40 flex h-14 items-center justify-between border-b border-white/10 bg-black/30 backdrop-blur-md px-4 sm:px-6 print:hidden";
 
+  const cancelDesktopDropdownClose = () => {
+    if (desktopDropdownCloseTimeoutRef.current != null) {
+      window.clearTimeout(desktopDropdownCloseTimeoutRef.current);
+      desktopDropdownCloseTimeoutRef.current = null;
+    }
+  };
+
+  const scheduleDesktopDropdownClose = () => {
+    cancelDesktopDropdownClose();
+    desktopDropdownCloseTimeoutRef.current = window.setTimeout(() => {
+      setActiveDropdown(null);
+      desktopDropdownCloseTimeoutRef.current = null;
+    }, 120);
+  };
+
   return (
     <header
       className={headerClassName}
@@ -211,22 +227,37 @@ export default function Header() {
                 <div
                   key={key}
                   className="relative"
-                  onMouseEnter={() => setActiveDropdown(key)}
-                  onMouseLeave={() => setActiveDropdown(null)}
+                  onMouseEnter={() => {
+                    cancelDesktopDropdownClose();
+                    setActiveDropdown(key);
+                  }}
+                  onMouseLeave={() => {
+                    scheduleDesktopDropdownClose();
+                  }}
                 >
-                  <Link
-                    href={href}
+                  <button
+                    type="button"
                     className={`text-sm font-medium whitespace-nowrap transition-colors ${
                       isActive ? "text-cyan-300" : "text-slate-400 hover:text-slate-100"
                     }`}
+                    aria-haspopup="menu"
+                    aria-expanded={isOpen}
+                    onFocus={() => {
+                      cancelDesktopDropdownClose();
+                      setActiveDropdown(key);
+                    }}
+                    onBlur={() => {
+                      scheduleDesktopDropdownClose();
+                    }}
                   >
                     {key === "production" ? "생산" : key === "materials" ? "원부자재" : "데일리"}
-                  </Link>
+                  </button>
                   {isOpen && (
                     <div
-                      className="absolute left-1/2 -translate-x-1/2 top-full mt-1 min-w-[200px] rounded-lg border border-slate-600 bg-slate-800/95 shadow-xl py-2 z-50"
+                      className="absolute left-1/2 -translate-x-1/2 top-full mt-0 pt-1 min-w-[200px] z-50"
                       role="menu"
                     >
+                      <div className="rounded-lg border border-slate-600 bg-slate-800/95 shadow-xl py-2">
                       {items.map((item, i) =>
                         "comingSoon" in item && item.comingSoon ? (
                           <div
@@ -253,6 +284,7 @@ export default function Header() {
                           </Link>
                         ) : null
                       )}
+                      </div>
                     </div>
                   )}
                 </div>
