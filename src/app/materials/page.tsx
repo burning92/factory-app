@@ -5,7 +5,6 @@ import { Boxes, FileText, Package, Layers, Calculator } from "lucide-react";
 
 const LINK_ITEMS = [
   { href: "/inventory/ecount", label: "재고 현황", Icon: Boxes },
-  { href: "/materials/journal", label: "원자재 일지", Icon: FileText },
 ] as const;
 
 const COMING_ITEMS = [
