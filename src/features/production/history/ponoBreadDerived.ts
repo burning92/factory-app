@@ -131,13 +131,13 @@ export function calculatePonoBreadDerived(
     };
   }
 
-  const breadDoughUsageQty = doughMixQty - doughWasteQty;
   const finishedQty = ponoBread.finishedQty ?? 0;
-  let breadWasteQty = breadDoughUsageQty - finishedQty;
-  const breadWasteNegative = breadWasteQty < 0;
-  if (breadWasteNegative) {
-    breadWasteQty = 0;
-  }
+  /** 브레드 폐기량 = 반죽 - 도우폐기 - 완제품 (포노브레드만 해당) */
+  const rawBreadWaste = doughMixQty - doughWasteQty - finishedQty;
+  const breadWasteQty = Math.max(0, rawBreadWaste);
+  const breadWasteNegative = rawBreadWaste < 0;
+  /** 도우 사용량 = 반죽량 - 도우 폐기량 - 브레드 폐기량 */
+  const breadDoughUsageQty = doughMixQty - doughWasteQty - breadWasteQty;
 
   const bomRows = getPonoBreadBomRows(bomList);
   if (bomRows.length === 0) {

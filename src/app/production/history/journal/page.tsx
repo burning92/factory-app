@@ -375,7 +375,12 @@ function JournalPageContent() {
                   </div>
                   <div>
                     <span className="text-slate-600 print:text-gray-700 font-medium block mb-0.5">파베이크 생산량(당일)</span>
-                    <p className="font-medium text-slate-900 print:text-black">{comp.sameDayParbakeProductionQty.toLocaleString()}개</p>
+                    <p className="font-medium text-slate-900 print:text-black">
+                      {ponoApplicable && ponoBreadDerived?.breadDoughUsageQty != null
+                        ? ponoBreadDerived.breadDoughUsageQty.toLocaleString()
+                        : comp.sameDayParbakeProductionQty.toLocaleString()}
+                      개
+                    </p>
                   </div>
                 </div>
 
