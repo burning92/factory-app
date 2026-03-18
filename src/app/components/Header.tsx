@@ -46,7 +46,6 @@ const DESKTOP_DROPDOWN_PRODUCTION: DropdownItem[] = [
 
 const DESKTOP_DROPDOWN_MATERIALS: DropdownItem[] = [
   { href: "/inventory/ecount", label: "재고 현황" },
-  { href: "/materials/journal", label: "원자재 일지" },
   { label: "하랑 입고 관리", comingSoon: true },
   { label: "하랑 현재고", comingSoon: true },
   { label: "원부자재 필요량", comingSoon: true },
@@ -131,9 +130,17 @@ export default function Header() {
         { href: "/account", label: "계정" },
       ];
 
-  /** 허브 페이지에서만 데스크탑 카테고리 메뉴 노출. 작업/입력 상세 페이지에서는 숨김 */
-  const desktopHubPaths = viewIsHarang ? ["/", "/account"] : ["/", "/production", "/materials", "/daily", "/account"];
-  const showDesktopCategoryMenu = desktopHubPaths.includes(pathname);
+  /**
+   * 데스크탑 상단 카테고리 메뉴 노출 범위
+   * - 100 보기: 허브 + 관련 작업 경로에서도 유지
+   * - 200 보기: 기존처럼 최소 메뉴(홈/계정)만 유지
+   */
+  const showDesktopCategoryMenu = viewIsHarang
+    ? pathname === "/" || pathname.startsWith("/account")
+    : pathname === "/" ||
+      ["/production", "/materials", "/daily", "/account", "/inventory"].some(
+        (prefix) => pathname === prefix || pathname.startsWith(prefix + "/")
+      );
 
   /** admin일 때만 그리드 상단에 "관리" 노출 (모바일에서 스크롤 없이 보이도록). manager/worker에는 미포함 */
   const displayMenuItems = isAdmin
