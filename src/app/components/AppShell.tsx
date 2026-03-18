@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import Header from "./Header";
+import MobileTabBar from "./MobileTabBar";
 
 const LOGIN_PATH = "/login";
 const CHANGE_PASSWORD_PATH = "/login/change-password";
@@ -82,10 +83,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return null;
   }
 
+  const showTabBar = pathname !== "/manage";
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      <main className="flex-1 w-full bg-space-900">{children}</main>
+      <main className="flex-1 w-full bg-space-900 pb-16 md:pb-0">{children}</main>
+      {showTabBar && <MobileTabBar />}
     </div>
   );
 }
