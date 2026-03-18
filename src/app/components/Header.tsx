@@ -72,7 +72,6 @@ export default function Header() {
   const viewIsHarang = viewOrganizationCode === "200";
 
   const effectiveLogoUrl = viewIsHarang ? HARANG_PEOPLE_ICON_SRC : ARMORED_LOGO_SRC;
-  const brandName = viewIsHarang ? "하랑" : (uiSettings?.brand_name?.trim() || "생산관리");
   const primaryColor = uiSettings?.primary_color?.trim() || "#06b6d4";
 
   const baseMenuItems =
@@ -122,17 +121,24 @@ export default function Header() {
         className="flex items-center gap-2 text-slate-100 hover:text-white transition-colors"
       >
         {effectiveLogoUrl.startsWith("http") ? (
-          <img src={effectiveLogoUrl} alt="로고" width={28} height={28} className="object-contain shrink-0 rounded" />
+          <img src={effectiveLogoUrl} alt="로고" width={36} height={36} className="object-contain shrink-0 rounded" />
         ) : (
           <Image
             src={effectiveLogoUrl}
             alt="로고"
-            width={28}
-            height={28}
+            width={36}
+            height={36}
             className="object-contain shrink-0"
           />
         )}
-        <span className="font-semibold text-sm hidden sm:inline">{brandName}</span>
+        {viewIsHarang ? (
+          <span className="font-semibold text-sm hidden sm:inline">하랑</span>
+        ) : (
+          <>
+            <span className="font-semibold text-sm sm:hidden">아머드프레시</span>
+            <span className="font-semibold text-sm hidden sm:inline">Armored Fresh Factory</span>
+          </>
+        )}
       </Link>
 
       {canSwitchOrganization && (
@@ -140,13 +146,14 @@ export default function Header() {
           <button
             type="button"
             onClick={() => setViewOrganizationCodeSafe("100")}
-            className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+            className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
               viewOrganizationCode === "100"
                 ? "bg-cyan-500/25 text-cyan-300 border border-cyan-500/50"
                 : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/80 border border-transparent"
             }`}
           >
-            아머드프레시
+            <span className="sm:hidden">AFF</span>
+            <span className="hidden sm:inline">Armored Fresh Factory</span>
           </button>
           <button
             type="button"
@@ -157,7 +164,7 @@ export default function Header() {
                 : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/80 border border-transparent"
             }`}
           >
-            하랑
+            Harang
           </button>
         </div>
       )}
