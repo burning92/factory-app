@@ -50,6 +50,9 @@ function resultLabel(result: string): string {
   return "—";
 }
 
+/** Supabase uuid 컬럼에 비문자열을 넣으면 DB에서 invalid uuid 오류가 난다. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export default function DailyWorkerHygieneViewPage() {
   const router = useRouter();
   const params = useParams();
@@ -71,6 +74,19 @@ export default function DailyWorkerHygieneViewPage() {
   const load = useCallback(async () => {
     if (!id) {
       setError("일지 ID가 없습니다.");
+      setLoading(false);
+      return;
+    }
+    const idLower = id.toLowerCase();
+    if (idLower === "new") {
+      router.replace("/daily/worker-hygiene/new");
+      setLoading(false);
+      return;
+    }
+    if (!UUID_RE.test(id)) {
+      setError("잘못된 일지 ID입니다.");
+      setHeader(null);
+      setItems([]);
       setLoading(false);
       return;
     }
@@ -108,7 +124,7 @@ export default function DailyWorkerHygieneViewPage() {
       setItems((itemsData ?? []) as LogItem[]);
     }
     setLoading(false);
-  }, [id]);
+  }, [id, router]);
 
   useEffect(() => {
     load();
