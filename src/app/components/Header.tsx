@@ -55,6 +55,7 @@ const DESKTOP_DROPDOWN_DAILY: DropdownItem[] = [
   { href: "/daily/hygiene", label: "영업장환경위생점검일지" },
   { href: "/daily/temperature-humidity", label: "영업장 온·습도점검일지" },
   { href: "/daily/sanitation-facility", label: "위생시설관리점검일지" },
+  { href: "/daily/worker-hygiene", label: "작업자 위생점검일지" },
   { label: "제조설비 일지", comingSoon: true },
   { label: "기타 데일리 점검", comingSoon: true },
 ];
