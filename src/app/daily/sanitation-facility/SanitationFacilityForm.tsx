@@ -5,50 +5,73 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
-import {
-  HYGIENE_CHECKLIST,
-  type HygieneFormResults,
-  type HygieneCorrectiveInput,
-  type HygieneItemResult,
-} from "@/features/daily/hygieneChecklist";
+import { SANITATION_FACILITY_CHECKLIST } from "@/features/daily/sanitationFacilityChecklist";
+import type { HygieneFormResults, HygieneItemResult } from "@/features/daily/hygieneChecklist";
 
-type HygieneLogStatus = "draft" | "submitted" | "approved" | "rejected";
+type LogStatus = "draft" | "submitted" | "approved" | "rejected";
 
-const initialCorrective: HygieneCorrectiveInput = {
-  content: "",
-  datetime: "",
-  deviation: "",
-  detail: "",
-  actor: "",
-  approver: "",
+type CorrectiveState = {
+  datetime: string;
+  deviation: string;
+  detail: string;
+  remarks: string;
+  actor: string;
 };
 
 function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-type Props = {
-  mode: "new" | "edit";
-  editLogId?: string;
-};
+function buildAutoDeviationText(results: HygieneFormResults): string {
+  const lines: string[] = [];
+  SANITATION_FACILITY_CHECKLIST.forEach((cat, ci) => {
+    cat.questions.forEach((q, qi) => {
+      const key = `${ci}-${qi}`;
+      if (results[key] === "X") lines.push(`${cat.title} - ${q} 부적합`);
+    });
+  });
+  return lines.join("\n");
+}
 
-export function HygieneForm({ mode, editLogId }: Props) {
+type Props = { mode: "new" | "edit"; editLogId?: string };
+
+export function SanitationFacilityForm({ mode, editLogId }: Props) {
   const router = useRouter();
   const { user, profile, viewOrganizationCode } = useAuth();
   const [inspectionDate, setInspectionDate] = useState(todayStr);
   const [results, setResults] = useState<HygieneFormResults>({});
-  const [corrective, setCorrective] = useState<HygieneCorrectiveInput>(initialCorrective);
+  const [corrective, setCorrective] = useState<CorrectiveState>({
+    datetime: "",
+    deviation: "",
+    detail: "",
+    remarks: "",
+    actor: "",
+  });
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; error?: boolean } | null>(null);
   const [currentLogId, setCurrentLogId] = useState<string | null>(null);
-  const [currentLogStatus, setCurrentLogStatus] = useState<HygieneLogStatus | null>(null);
+  const [currentLogStatus, setCurrentLogStatus] = useState<LogStatus | null>(null);
   const [loadDone, setLoadDone] = useState(mode === "new");
+  const [deviationManuallyEdited, setDeviationManuallyEdited] = useState(false);
 
   const orgCode = viewOrganizationCode ?? "100";
   const authorName = (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
   const role = profile?.role ?? "worker";
   const isManager = role === "manager" || role === "admin";
+
   const hasAnyX = useMemo(() => Object.values(results).some((v) => v === "X"), [results]);
+  const autoDeviationText = useMemo(() => buildAutoDeviationText(results), [results]);
+
+  useEffect(() => {
+    if (hasAnyX && !deviationManuallyEdited) {
+      setCorrective((c) => ({ ...c, deviation: autoDeviationText }));
+    }
+    if (!hasAnyX) {
+      setCorrective((c) => ({ ...c, deviation: "" }));
+      setDeviationManuallyEdited(false);
+    }
+  }, [hasAnyX, deviationManuallyEdited, autoDeviationText]);
+
   const isApproved = currentLogStatus === "approved";
   const isLockedForWorker = isApproved && !isManager;
   const canEdit = !isLockedForWorker && currentLogStatus !== "submitted";
@@ -61,6 +84,12 @@ export function HygieneForm({ mode, editLogId }: Props) {
   }, []);
 
   useEffect(() => {
+    if (mode === "new" && authorName) {
+      setCorrective((c) => ({ ...c, actor: c.actor || authorName }));
+    }
+  }, [mode, authorName]);
+
+  useEffect(() => {
     if (mode !== "edit" || !editLogId) {
       setLoadDone(true);
       return;
@@ -68,8 +97,10 @@ export function HygieneForm({ mode, editLogId }: Props) {
     let cancelled = false;
     (async () => {
       const { data: logData, error } = await supabase
-        .from("daily_hygiene_logs")
-        .select("id, inspection_date, status, corrective_content, corrective_datetime, corrective_deviation, corrective_detail, corrective_actor, corrective_approver")
+        .from("daily_sanitation_facility_logs")
+        .select(
+          "id, inspection_date, status, corrective_datetime, corrective_deviation, corrective_detail, corrective_remarks, corrective_actor"
+        )
         .eq("id", editLogId)
         .maybeSingle();
       if (cancelled || error) {
@@ -85,36 +116,27 @@ export function HygieneForm({ mode, editLogId }: Props) {
       const log = logData as {
         id: string;
         inspection_date: string;
-        status: HygieneLogStatus;
-        corrective_content: string | null;
+        status: LogStatus;
         corrective_datetime: string | null;
         corrective_deviation: string | null;
         corrective_detail: string | null;
+        corrective_remarks: string | null;
         corrective_actor: string | null;
-        corrective_approver: string | null;
       };
       if (log.status === "submitted" || (log.status === "approved" && !isManager)) {
-        router.replace(`/daily/hygiene/${editLogId}`);
+        router.replace(`/daily/sanitation-facility/${editLogId}`);
         return;
       }
       setCurrentLogId(log.id);
       setCurrentLogStatus(log.status);
       setInspectionDate(log.inspection_date ?? todayStr());
-      setCorrective({
-        content: log.corrective_content ?? "",
-        datetime: log.corrective_datetime ? String(log.corrective_datetime).slice(0, 16) : "",
-        deviation: log.corrective_deviation ?? "",
-        detail: log.corrective_detail ?? "",
-        actor: log.corrective_actor ?? "",
-        approver: log.corrective_approver ?? "",
-      });
       const { data: itemsData } = await supabase
-        .from("daily_hygiene_log_items")
+        .from("daily_sanitation_facility_log_items")
         .select("category, question_index, question_text, result")
         .eq("log_id", log.id);
       if (cancelled) return;
       const nextResults: HygieneFormResults = {};
-      HYGIENE_CHECKLIST.forEach((cat, ci) => {
+      SANITATION_FACILITY_CHECKLIST.forEach((cat, ci) => {
         cat.questions.forEach((_, qi) => {
           const item = (itemsData ?? []).find(
             (r: { category: string; question_index: number }) =>
@@ -123,11 +145,42 @@ export function HygieneForm({ mode, editLogId }: Props) {
           if (item) nextResults[`${ci}-${qi}`] = item.result as HygieneItemResult;
         });
       });
+      const autoFromLoaded = buildAutoDeviationText(nextResults);
+      const loadedDev = (log.corrective_deviation ?? "").trim();
+      setDeviationManuallyEdited(loadedDev !== "" && loadedDev !== autoFromLoaded.trim());
+      setCorrective({
+        datetime: log.corrective_datetime ? String(log.corrective_datetime).slice(0, 16) : "",
+        deviation: log.corrective_deviation ?? "",
+        detail: log.corrective_detail ?? "",
+        remarks: log.corrective_remarks ?? "",
+        actor: log.corrective_actor ?? authorName,
+      });
       setResults(nextResults);
       setLoadDone(true);
     })();
-    return () => { cancelled = true; };
-  }, [mode, editLogId, router, isManager]);
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, editLogId, router, isManager, authorName]);
+
+  const correctivePayload = useMemo(() => {
+    if (!hasAnyX) {
+      return {
+        corrective_datetime: null as string | null,
+        corrective_deviation: null as string | null,
+        corrective_detail: null as string | null,
+        corrective_remarks: null as string | null,
+        corrective_actor: null as string | null,
+      };
+    }
+    return {
+      corrective_datetime: corrective.datetime ? corrective.datetime : null,
+      corrective_deviation: corrective.deviation || null,
+      corrective_detail: corrective.detail || null,
+      corrective_remarks: corrective.remarks || null,
+      corrective_actor: corrective.actor || null,
+    };
+  }, [hasAnyX, corrective]);
 
   const handleSave = useCallback(async () => {
     const date = inspectionDate.trim();
@@ -142,31 +195,26 @@ export function HygieneForm({ mode, editLogId }: Props) {
         organization_code: orgCode,
         inspection_date: date,
         author_name: authorName || null,
-        corrective_content: hasAnyX ? (corrective.content || null) : null,
-        corrective_datetime: hasAnyX && corrective.datetime ? corrective.datetime : null,
-        corrective_deviation: hasAnyX ? (corrective.deviation || null) : null,
-        corrective_detail: hasAnyX ? (corrective.detail || null) : null,
-        corrective_actor: hasAnyX ? (corrective.actor || null) : null,
-        corrective_approver: hasAnyX ? (corrective.approver || null) : null,
+        ...correctivePayload,
         updated_at: new Date().toISOString(),
       };
 
       let logId: string;
       if (mode === "edit" && currentLogId) {
         const { error: updateErr } = await supabase
-          .from("daily_hygiene_logs")
+          .from("daily_sanitation_facility_logs")
           .update(payload)
           .eq("id", currentLogId);
         if (updateErr) throw updateErr;
         logId = currentLogId;
       } else {
         const { data: existing } = await supabase
-          .from("daily_hygiene_logs")
+          .from("daily_sanitation_facility_logs")
           .select("id, status")
           .eq("organization_code", orgCode)
           .eq("inspection_date", date)
           .maybeSingle();
-        const existingRow = existing as { id: string; status: HygieneLogStatus } | null;
+        const existingRow = existing as { id: string; status: LogStatus } | null;
         if (existingRow?.status === "approved" && !isManager) {
           setToast({ message: "승인 완료된 일지는 수정할 수 없습니다.", error: true });
           setSaving(false);
@@ -174,14 +222,14 @@ export function HygieneForm({ mode, editLogId }: Props) {
         }
         if (existingRow) {
           const { error: updateErr } = await supabase
-            .from("daily_hygiene_logs")
+            .from("daily_sanitation_facility_logs")
             .update(payload)
             .eq("id", existingRow.id);
           if (updateErr) throw updateErr;
           logId = existingRow.id;
         } else {
           const { data: inserted, error: insertErr } = await supabase
-            .from("daily_hygiene_logs")
+            .from("daily_sanitation_facility_logs")
             .insert({
               ...payload,
               status: "draft",
@@ -194,11 +242,11 @@ export function HygieneForm({ mode, editLogId }: Props) {
         }
       }
 
-      const { error: delErr } = await supabase.from("daily_hygiene_log_items").delete().eq("log_id", logId);
+      const { error: delErr } = await supabase.from("daily_sanitation_facility_log_items").delete().eq("log_id", logId);
       if (delErr) throw delErr;
 
       const items: { log_id: string; category: string; question_index: number; question_text: string; result: string }[] = [];
-      HYGIENE_CHECKLIST.forEach((cat, ci) => {
+      SANITATION_FACILITY_CHECKLIST.forEach((cat, ci) => {
         cat.questions.forEach((q, qi) => {
           const key = `${ci}-${qi}`;
           const r = results[key];
@@ -214,7 +262,7 @@ export function HygieneForm({ mode, editLogId }: Props) {
         });
       });
       if (items.length > 0) {
-        const { error: itemsErr } = await supabase.from("daily_hygiene_log_items").insert(items);
+        const { error: itemsErr } = await supabase.from("daily_sanitation_facility_log_items").insert(items);
         if (itemsErr) throw itemsErr;
       }
 
@@ -232,8 +280,7 @@ export function HygieneForm({ mode, editLogId }: Props) {
     inspectionDate,
     authorName,
     results,
-    corrective,
-    hasAnyX,
+    correctivePayload,
     user?.id,
     currentLogId,
     currentLogStatus,
@@ -252,12 +299,12 @@ export function HygieneForm({ mode, editLogId }: Props) {
       let logId = currentLogId;
       if (!logId) {
         const { data: existing } = await supabase
-          .from("daily_hygiene_logs")
+          .from("daily_sanitation_facility_logs")
           .select("id, status")
           .eq("organization_code", orgCode)
           .eq("inspection_date", date)
           .maybeSingle();
-        const existingRow = existing as { id: string; status: HygieneLogStatus } | null;
+        const existingRow = existing as { id: string; status: LogStatus } | null;
         if (existingRow?.status === "approved" && !isManager) {
           setToast({ message: "승인 완료된 일지는 수정할 수 없습니다.", error: true });
           setSaving(false);
@@ -267,49 +314,61 @@ export function HygieneForm({ mode, editLogId }: Props) {
           logId = existingRow.id;
         } else {
           const { data: inserted, error: insertErr } = await supabase
-            .from("daily_hygiene_logs")
+            .from("daily_sanitation_facility_logs")
             .insert({
               organization_code: orgCode,
               inspection_date: date,
               author_name: authorName || null,
               author_user_id: user?.id ?? null,
               status: "draft",
-              corrective_content: hasAnyX ? (corrective.content || null) : null,
-              corrective_datetime: hasAnyX && corrective.datetime ? corrective.datetime : null,
-              corrective_deviation: hasAnyX ? (corrective.deviation || null) : null,
-              corrective_detail: hasAnyX ? (corrective.detail || null) : null,
-              corrective_actor: hasAnyX ? (corrective.actor || null) : null,
-              corrective_approver: hasAnyX ? (corrective.approver || null) : null,
+              ...correctivePayload,
               updated_at: new Date().toISOString(),
             })
             .select("id")
             .single();
           if (insertErr) throw insertErr;
           logId = (inserted as { id: string }).id;
-          const items: { log_id: string; category: string; question_index: number; question_text: string; result: string }[] = [];
-          HYGIENE_CHECKLIST.forEach((cat, ci) => {
-            cat.questions.forEach((q, qi) => {
-              const key = `${ci}-${qi}`;
-              const r = results[key];
-              if (r === "O" || r === "X") {
-                items.push({
-                  log_id: logId!,
-                  category: cat.title,
-                  question_index: qi + 1,
-                  question_text: q,
-                  result: r,
-                });
-              }
-            });
-          });
-          if (items.length > 0) {
-            const { error: itemsErr } = await supabase.from("daily_hygiene_log_items").insert(items);
-            if (itemsErr) throw itemsErr;
-          }
         }
       }
+
+      const headerPatch = {
+        organization_code: orgCode,
+        inspection_date: date,
+        author_name: authorName || null,
+        ...correctivePayload,
+        updated_at: new Date().toISOString(),
+      };
+      const { error: patchErr } = await supabase
+        .from("daily_sanitation_facility_logs")
+        .update(headerPatch)
+        .eq("id", logId);
+      if (patchErr) throw patchErr;
+
+      const { error: delErr } = await supabase.from("daily_sanitation_facility_log_items").delete().eq("log_id", logId);
+      if (delErr) throw delErr;
+      const rows: { log_id: string; category: string; question_index: number; question_text: string; result: string }[] = [];
+      SANITATION_FACILITY_CHECKLIST.forEach((cat, ci) => {
+        cat.questions.forEach((q, qi) => {
+          const key = `${ci}-${qi}`;
+          const r = results[key];
+          if (r === "O" || r === "X") {
+            rows.push({
+              log_id: logId!,
+              category: cat.title,
+              question_index: qi + 1,
+              question_text: q,
+              result: r,
+            });
+          }
+        });
+      });
+      if (rows.length > 0) {
+        const { error: insErr } = await supabase.from("daily_sanitation_facility_log_items").insert(rows);
+        if (insErr) throw insErr;
+      }
+
       const { error: submitErr } = await supabase
-        .from("daily_hygiene_logs")
+        .from("daily_sanitation_facility_logs")
         .update({
           status: "submitted",
           submitted_at: new Date().toISOString(),
@@ -326,17 +385,7 @@ export function HygieneForm({ mode, editLogId }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [
-    inspectionDate,
-    orgCode,
-    currentLogId,
-    user?.id,
-    authorName,
-    results,
-    corrective,
-    hasAnyX,
-    isManager,
-  ]);
+  }, [inspectionDate, orgCode, currentLogId, user?.id, authorName, results, correctivePayload, isManager]);
 
   if (!loadDone) {
     return (
@@ -349,19 +398,27 @@ export function HygieneForm({ mode, editLogId }: Props) {
   return (
     <div className="min-h-[calc(100vh-3.5rem)] md:min-h-0 p-4 md:p-6 max-w-2xl mx-auto pb-20 md:pb-6">
       <div className="flex items-center gap-2 mb-4">
-        <Link href="/daily" className="text-slate-400 hover:text-slate-200 text-sm">데일리</Link>
+        <Link href="/daily" className="text-slate-400 hover:text-slate-200 text-sm">
+          데일리
+        </Link>
         <span className="text-slate-600">/</span>
-        <Link href="/daily/hygiene" className="text-slate-400 hover:text-slate-200 text-sm">영업장환경위생점검일지</Link>
+        <Link href="/daily/sanitation-facility" className="text-slate-400 hover:text-slate-200 text-sm">
+          위생시설관리점검일지
+        </Link>
         <span className="text-slate-600">/</span>
         <span className="text-slate-200 font-medium">{mode === "new" ? "새 작성" : "수정"}</span>
       </div>
       <h1 className="text-lg font-semibold text-slate-100 mb-1">
         {mode === "new" ? "새 점검일지 작성" : "점검일지 수정"}
       </h1>
-      <p className="text-slate-500 text-sm mb-4">점검일자 선택 후 O/X 입력, 부적합 시 조치 내용을 입력한 뒤 저장하세요.</p>
+      <p className="text-slate-500 text-sm mb-4">항목별 적합/부적합을 선택하세요. 부적합이 있으면 개선조치를 입력합니다.</p>
 
       {toast && (
-        <div className={`mb-4 px-4 py-2 rounded-lg text-sm ${toast.error ? "bg-red-900/30 text-red-200" : "bg-cyan-900/30 text-cyan-200"}`}>
+        <div
+          className={`mb-4 px-4 py-2 rounded-lg text-sm ${
+            toast.error ? "bg-red-900/30 text-red-200" : "bg-cyan-900/30 text-cyan-200"
+          }`}
+        >
           {toast.message}
         </div>
       )}
@@ -369,11 +426,17 @@ export function HygieneForm({ mode, editLogId }: Props) {
       {currentLogStatus != null && (
         <div className="mb-4 px-4 py-2 rounded-lg text-sm bg-slate-800/80 border border-slate-600">
           <span className="text-slate-400">상태: </span>
-          <span className={
-            currentLogStatus === "approved" ? "text-emerald-400 font-medium" :
-            currentLogStatus === "submitted" ? "text-cyan-400" :
-            currentLogStatus === "rejected" ? "text-amber-400" : "text-slate-300"
-          }>
+          <span
+            className={
+              currentLogStatus === "approved"
+                ? "text-emerald-400 font-medium"
+                : currentLogStatus === "submitted"
+                  ? "text-cyan-400"
+                  : currentLogStatus === "rejected"
+                    ? "text-amber-400"
+                    : "text-slate-300"
+            }
+          >
             {currentLogStatus === "draft" && "작성중"}
             {currentLogStatus === "submitted" && "제출됨"}
             {currentLogStatus === "approved" && "승인 완료"}
@@ -408,15 +471,17 @@ export function HygieneForm({ mode, editLogId }: Props) {
       </div>
 
       <div className="space-y-6 mb-8">
-        {HYGIENE_CHECKLIST.map((category, catIndex) => (
+        {SANITATION_FACILITY_CHECKLIST.map((category, catIndex) => (
           <section key={category.title} className="rounded-xl border border-slate-700/60 bg-slate-800/50 overflow-hidden">
-            <h2 className="px-4 py-3 text-sm font-semibold text-cyan-300 bg-slate-800/80 border-b border-slate-700/60">{category.title}</h2>
+            <h2 className="px-4 py-3 text-sm font-semibold text-cyan-300 bg-slate-800/80 border-b border-slate-700/60">
+              {category.title}
+            </h2>
             <ul className="divide-y divide-slate-700/50">
               {category.questions.map((question, qIndex) => {
                 const key = `${catIndex}-${qIndex}`;
                 const value = results[key] ?? "";
                 return (
-                  <li key={key} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                  <li key={key} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                     <p className="flex-1 text-sm text-slate-300 min-w-0">{question}</p>
                     <div className="flex gap-2 shrink-0">
                       <button
@@ -453,34 +518,68 @@ export function HygieneForm({ mode, editLogId }: Props) {
       </div>
 
       {hasAnyX && (
-        <section className={`rounded-xl border border-amber-700/50 bg-slate-800/50 p-4 mb-8 ${!canEdit ? "opacity-80 pointer-events-none" : ""}`}>
-          <h2 className="text-sm font-semibold text-amber-300 mb-4">부적합 조치</h2>
-          <div className="grid gap-4 sm:grid-cols-1">
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">내용</label>
-              <input type="text" value={corrective.content} onChange={(e) => setCorrective((c) => ({ ...c, content: e.target.value }))} disabled={!canEdit} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm disabled:opacity-70" placeholder="내용" />
-            </div>
+        <section
+          className={`rounded-xl border border-amber-700/50 bg-slate-800/50 p-4 mb-8 ${
+            !canEdit ? "opacity-80 pointer-events-none" : ""
+          }`}
+        >
+          <h2 className="text-sm font-semibold text-amber-300 mb-1">개선조치</h2>
+          <p className="text-xs text-slate-500 mb-4">
+            승인자는 일지 승인 시 자동으로 기록됩니다.
+          </p>
+          <div className="grid gap-4">
             <div>
               <label className="block text-xs text-slate-500 mb-1">일시</label>
-              <input type="datetime-local" value={corrective.datetime} onChange={(e) => setCorrective((c) => ({ ...c, datetime: e.target.value }))} disabled={!canEdit} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm" />
+              <input
+                type="datetime-local"
+                value={corrective.datetime}
+                onChange={(e) => setCorrective((c) => ({ ...c, datetime: e.target.value }))}
+                disabled={!canEdit}
+                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
+              />
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1">이탈내용</label>
-              <textarea value={corrective.deviation} onChange={(e) => setCorrective((c) => ({ ...c, deviation: e.target.value }))} rows={2} disabled={!canEdit} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm resize-none disabled:opacity-70" placeholder="이탈내용" />
+              <label className="block text-xs text-slate-500 mb-1">이탈내용 (자동 생성, 필요 시 수정)</label>
+              <textarea
+                value={corrective.deviation}
+                onChange={(e) => {
+                  setDeviationManuallyEdited(true);
+                  setCorrective((c) => ({ ...c, deviation: e.target.value }));
+                }}
+                rows={4}
+                disabled={!canEdit}
+                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm resize-none disabled:opacity-70"
+              />
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1">세부 개선 조치 내역</label>
-              <textarea value={corrective.detail} onChange={(e) => setCorrective((c) => ({ ...c, detail: e.target.value }))} rows={2} disabled={!canEdit} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm resize-none disabled:opacity-70" placeholder="세부 개선 조치 내역" />
+              <label className="block text-xs text-slate-500 mb-1">개선조치내용</label>
+              <textarea
+                value={corrective.detail}
+                onChange={(e) => setCorrective((c) => ({ ...c, detail: e.target.value }))}
+                rows={2}
+                disabled={!canEdit}
+                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm resize-none disabled:opacity-70"
+              />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">개선조치자</label>
-                <input type="text" value={corrective.actor} onChange={(e) => setCorrective((c) => ({ ...c, actor: e.target.value }))} disabled={!canEdit} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm disabled:opacity-70" />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">승인자</label>
-                <input type="text" value={corrective.approver} onChange={(e) => setCorrective((c) => ({ ...c, approver: e.target.value }))} disabled={!canEdit} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm disabled:opacity-70" />
-              </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">비고</label>
+              <textarea
+                value={corrective.remarks}
+                onChange={(e) => setCorrective((c) => ({ ...c, remarks: e.target.value }))}
+                rows={2}
+                disabled={!canEdit}
+                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm resize-none disabled:opacity-70"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">개선조치자</label>
+              <input
+                type="text"
+                value={corrective.actor}
+                onChange={(e) => setCorrective((c) => ({ ...c, actor: e.target.value }))}
+                disabled={!canEdit}
+                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm disabled:opacity-70"
+              />
             </div>
           </div>
         </section>
@@ -488,19 +587,32 @@ export function HygieneForm({ mode, editLogId }: Props) {
 
       <div className="flex flex-wrap justify-end gap-2 mb-10">
         {!isLockedForWorker && (
-          <button type="button" onClick={handleSave} disabled={saving} className="px-6 py-2.5 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-white font-medium text-sm">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="px-6 py-2.5 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-white font-medium text-sm"
+          >
             {saving ? "저장 중…" : "저장"}
           </button>
         )}
         {canSubmit && (
-          <button type="button" onClick={handleSubmit} disabled={saving} className="px-6 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-medium text-sm">
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={saving}
+            className="px-6 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-medium text-sm"
+          >
             {saving ? "처리 중…" : "제출"}
           </button>
         )}
       </div>
 
       <div className="flex justify-end">
-        <Link href="/daily/hygiene" className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700/50 text-sm">
+        <Link
+          href="/daily/sanitation-facility"
+          className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700/50 text-sm"
+        >
           목록으로
         </Link>
       </div>

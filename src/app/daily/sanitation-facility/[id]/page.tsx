@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
-import { HYGIENE_CHECKLIST } from "@/features/daily/hygieneChecklist";
+import { SANITATION_FACILITY_CHECKLIST } from "@/features/daily/sanitationFacilityChecklist";
 
 type LogHeader = {
   id: string;
@@ -15,14 +15,12 @@ type LogHeader = {
   approved_at: string | null;
   approved_by_name: string | null;
   rejected_at: string | null;
-  rejected_by: string | null;
   reject_reason: string | null;
-  corrective_content: string | null;
   corrective_datetime: string | null;
   corrective_deviation: string | null;
   corrective_detail: string | null;
+  corrective_remarks: string | null;
   corrective_actor: string | null;
-  corrective_approver: string | null;
   created_at: string;
 };
 
@@ -49,7 +47,7 @@ function resultLabel(result: string): string {
   return "—";
 }
 
-export default function DailyHygieneViewPage() {
+export default function DailySanitationFacilityViewPage() {
   const router = useRouter();
   const params = useParams();
   const id = typeof params?.id === "string" ? params.id : "";
@@ -76,7 +74,7 @@ export default function DailyHygieneViewPage() {
     setLoading(true);
     setError(null);
     const { data: logData, error: logErr } = await supabase
-      .from("daily_hygiene_logs")
+      .from("daily_sanitation_facility_logs")
       .select("*")
       .eq("id", id)
       .maybeSingle();
@@ -96,7 +94,7 @@ export default function DailyHygieneViewPage() {
     }
     setHeader(logData as LogHeader);
     const { data: itemsData, error: itemsErr } = await supabase
-      .from("daily_hygiene_log_items")
+      .from("daily_sanitation_facility_log_items")
       .select("category, question_index, question_text, result")
       .eq("log_id", id)
       .order("category")
@@ -125,7 +123,7 @@ export default function DailyHygieneViewPage() {
     return (
       <div className="min-h-[calc(100vh-3.5rem)] p-4 md:p-6 max-w-2xl mx-auto">
         <p className="text-red-400 text-sm mb-4">{error ?? "데이터 없음"}</p>
-        <Link href="/daily/hygiene" className="text-cyan-400 hover:text-cyan-300 text-sm">
+        <Link href="/daily/sanitation-facility" className="text-cyan-400 hover:text-cyan-300 text-sm">
           목록으로
         </Link>
       </div>
@@ -139,12 +137,11 @@ export default function DailyHygieneViewPage() {
   });
 
   const hasCorrective =
-    header.corrective_content ||
     header.corrective_datetime ||
     header.corrective_deviation ||
     header.corrective_detail ||
-    header.corrective_actor ||
-    header.corrective_approver;
+    header.corrective_remarks ||
+    header.corrective_actor;
 
   return (
     <div className="min-h-[calc(100vh-3.5rem)] p-4 md:p-6 max-w-2xl mx-auto pb-20 md:pb-6">
@@ -153,13 +150,13 @@ export default function DailyHygieneViewPage() {
           데일리
         </Link>
         <span className="text-slate-600">/</span>
-        <Link href="/daily/hygiene" className="text-slate-400 hover:text-slate-200 text-sm">
-          영업장환경위생점검일지
+        <Link href="/daily/sanitation-facility" className="text-slate-400 hover:text-slate-200 text-sm">
+          위생시설관리점검일지
         </Link>
         <span className="text-slate-600">/</span>
         <span className="text-slate-200 font-medium">{header.inspection_date}</span>
       </div>
-      <h1 className="text-lg font-semibold text-slate-100 mb-1">영업장환경위생점검일지</h1>
+      <h1 className="text-lg font-semibold text-slate-100 mb-1">위생시설관리점검일지</h1>
       {header.status === "approved" && (
         <div className="mb-4 px-4 py-3 rounded-lg bg-emerald-900/20 border border-emerald-700/50 text-emerald-200 text-sm font-medium">
           승인 완료
@@ -192,7 +189,7 @@ export default function DailyHygieneViewPage() {
       </p>
 
       <div className="space-y-6 mb-8">
-        {HYGIENE_CHECKLIST.map((category) => (
+        {SANITATION_FACILITY_CHECKLIST.map((category) => (
           <section
             key={category.title}
             className="rounded-xl border border-slate-700/60 bg-slate-800/50 overflow-hidden"
@@ -229,14 +226,8 @@ export default function DailyHygieneViewPage() {
 
       {hasCorrective && (
         <section className="rounded-xl border border-amber-700/50 bg-slate-800/50 p-4 mb-8">
-          <h2 className="text-sm font-semibold text-amber-300 mb-4">부적합 조치</h2>
+          <h2 className="text-sm font-semibold text-amber-300 mb-4">개선조치</h2>
           <dl className="grid gap-3 text-sm">
-            {header.corrective_content && (
-              <>
-                <dt className="text-slate-500">내용</dt>
-                <dd className="text-slate-200">{header.corrective_content}</dd>
-              </>
-            )}
             {header.corrective_datetime && (
               <>
                 <dt className="text-slate-500">일시</dt>
@@ -251,25 +242,27 @@ export default function DailyHygieneViewPage() {
             )}
             {header.corrective_detail && (
               <>
-                <dt className="text-slate-500">세부 개선 조치 내역</dt>
+                <dt className="text-slate-500">개선조치내용</dt>
                 <dd className="text-slate-200 whitespace-pre-wrap">{header.corrective_detail}</dd>
               </>
             )}
-            {(header.corrective_actor || header.corrective_approver) && (
-              <div className="flex gap-6">
-                {header.corrective_actor && (
-                  <>
-                    <dt className="text-slate-500">개선조치자</dt>
-                    <dd className="text-slate-200">{header.corrective_actor}</dd>
-                  </>
-                )}
-                {header.corrective_approver && (
-                  <>
-                    <dt className="text-slate-500">승인자</dt>
-                    <dd className="text-slate-200">{header.corrective_approver}</dd>
-                  </>
-                )}
-              </div>
+            {header.corrective_remarks && (
+              <>
+                <dt className="text-slate-500">비고</dt>
+                <dd className="text-slate-200 whitespace-pre-wrap">{header.corrective_remarks}</dd>
+              </>
+            )}
+            {header.corrective_actor && (
+              <>
+                <dt className="text-slate-500">개선조치자</dt>
+                <dd className="text-slate-200">{header.corrective_actor}</dd>
+              </>
+            )}
+            {header.status === "approved" && header.approved_by_name && (
+              <>
+                <dt className="text-slate-500">승인자</dt>
+                <dd className="text-slate-200">{header.approved_by_name}</dd>
+              </>
             )}
           </dl>
         </section>
@@ -282,7 +275,7 @@ export default function DailyHygieneViewPage() {
             onClick={async () => {
               setActionLoading(true);
               const { error: err } = await supabase
-                .from("daily_hygiene_logs")
+                .from("daily_sanitation_facility_logs")
                 .update({
                   status: "approved",
                   approved_at: new Date().toISOString(),
@@ -317,7 +310,7 @@ export default function DailyHygieneViewPage() {
       {isManager && (
         <div className="flex flex-wrap justify-end gap-2 mb-6">
           <Link
-            href={`/daily/hygiene/${id}/edit`}
+            href={`/daily/sanitation-facility/${id}/edit`}
             className="px-4 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium"
           >
             수정
@@ -327,10 +320,10 @@ export default function DailyHygieneViewPage() {
             onClick={async () => {
               if (!window.confirm("이 점검일지를 삭제할까요?")) return;
               setActionLoading(true);
-              const { error: err } = await supabase.from("daily_hygiene_logs").delete().eq("id", id);
+              const { error: err } = await supabase.from("daily_sanitation_facility_logs").delete().eq("id", id);
               setActionLoading(false);
               if (err) setError(err.message);
-              else router.push("/daily/hygiene");
+              else router.push("/daily/sanitation-facility");
             }}
             disabled={actionLoading}
             className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-medium"
@@ -364,7 +357,7 @@ export default function DailyHygieneViewPage() {
                 onClick={async () => {
                   setActionLoading(true);
                   const { error: err } = await supabase
-                    .from("daily_hygiene_logs")
+                    .from("daily_sanitation_facility_logs")
                     .update({
                       status: "rejected",
                       rejected_at: new Date().toISOString(),
@@ -390,7 +383,7 @@ export default function DailyHygieneViewPage() {
 
       <div className="flex justify-end">
         <Link
-          href="/daily/hygiene"
+          href="/daily/sanitation-facility"
           className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700/50 text-sm"
         >
           목록으로
