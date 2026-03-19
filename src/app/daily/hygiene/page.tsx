@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { Pencil, Trash2 } from "lucide-react";
 
 type HygieneLogStatus = "draft" | "submitted" | "approved" | "rejected";
 
@@ -56,6 +57,7 @@ export default function DailyHygieneListPage() {
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; error?: boolean } | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const orgCode = viewOrganizationCode ?? "100";
   const role = profile?.role ?? "worker";
@@ -86,6 +88,27 @@ export default function DailyHygieneListPage() {
     if (log.status === "draft" || log.status === "rejected") return `/daily/hygiene/${log.id}/edit`;
     if (log.status === "approved" && isManager) return `/daily/hygiene/${log.id}/edit`;
     return `/daily/hygiene/${log.id}`;
+  };
+
+  const getEditHref = (log: LogRow) => {
+    // 정책: submitted는 수정 불가(상세로). 그 외(draft/rejected/approved)는 manager/admin 수정 가능.
+    if (log.status === "submitted") return `/daily/hygiene/${log.id}`;
+    return `/daily/hygiene/${log.id}/edit`;
+  };
+
+  const handleDelete = async (logId: string) => {
+    if (!isManager) return;
+    const ok = window.confirm("이 점검일지를 삭제할까요? (항목도 함께 삭제됩니다)");
+    if (!ok) return;
+    setDeletingId(logId);
+    setToast(null);
+    const { error } = await supabase.from("daily_hygiene_logs").delete().eq("id", logId);
+    setDeletingId(null);
+    if (error) {
+      setToast({ message: error.message, error: true });
+      return;
+    }
+    await fetchLogs();
   };
 
   return (
@@ -142,16 +165,52 @@ export default function DailyHygieneListPage() {
                     : "border-slate-700/60 bg-slate-800/50 hover:bg-slate-700/50"
                 }`}
               >
-                <div className="flex flex-wrap items-center gap-2 gap-y-1">
-                  <span className="font-medium text-slate-200">{log.inspection_date}</span>
-                  {log.author_name && (
-                    <span className="text-slate-500 text-sm">작성: {log.author_name}</span>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 gap-y-1">
+                      <span className="font-medium text-slate-200">{log.inspection_date}</span>
+                      {log.author_name && (
+                        <span className="text-slate-500 text-sm">작성: {log.author_name}</span>
+                      )}
+                      <span
+                        className={`text-xs font-medium px-2 py-0.5 rounded ${statusBadgeClass(log.status)}`}
+                      >
+                        {statusLabel(log.status)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {isManager && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          window.location.href = getEditHref(log);
+                        }}
+                        className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-700/60 bg-slate-900/30 hover:bg-slate-700/40 text-slate-200"
+                        title="수정"
+                        aria-label="수정"
+                      >
+                        <Pencil className="w-4 h-4" strokeWidth={2} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          void handleDelete(log.id);
+                        }}
+                        disabled={deletingId === log.id}
+                        className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-red-700/40 bg-red-900/10 hover:bg-red-900/25 text-red-200 disabled:opacity-50"
+                        title="삭제"
+                        aria-label="삭제"
+                      >
+                        <Trash2 className="w-4 h-4" strokeWidth={2} />
+                      </button>
+                    </div>
                   )}
-                  <span
-                    className={`text-xs font-medium px-2 py-0.5 rounded ${statusBadgeClass(log.status)}`}
-                  >
-                    {statusLabel(log.status)}
-                  </span>
                 </div>
                 {log.status === "approved" && (log.approved_at || log.approved_by_name) && (
                   <p className="mt-1 text-xs text-slate-500">
