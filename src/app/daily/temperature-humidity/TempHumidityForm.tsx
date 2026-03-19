@@ -39,6 +39,22 @@ function zoneDeviation(z: TempHumidityZone, r: ZoneReading): boolean {
   return (t != null && t > z.maxTempC) || (h != null && h > z.maxHumidityPct);
 }
 
+/** 기준 이탈 구역별로 "구역명 온도/습도 초과" 문구를 줄바꿈으로 이어 붙임 */
+function buildAutoDeviationText(
+  zones: TempHumidityZone[],
+  readings: Record<string, ZoneReading>
+): string {
+  const lines: string[] = [];
+  zones.forEach((z) => {
+    const r = readings[z.id] ?? { temp: "", humidity: "" };
+    const t = parseOptionalNum(r.temp);
+    const h = parseOptionalNum(r.humidity);
+    if (t != null && t > z.maxTempC) lines.push(`${z.name} 온도 초과`);
+    if (h != null && h > z.maxHumidityPct) lines.push(`${z.name} 습도 초과`);
+  });
+  return lines.join("\n");
+}
+
 type Props = { mode: "new" | "edit"; editLogId?: string };
 
 export function TempHumidityForm({ mode, editLogId }: Props) {
@@ -58,6 +74,7 @@ export function TempHumidityForm({ mode, editLogId }: Props) {
   const [currentLogId, setCurrentLogId] = useState<string | null>(null);
   const [currentLogStatus, setCurrentLogStatus] = useState<LogStatus | null>(null);
   const [loadDone, setLoadDone] = useState(mode === "new");
+  const [deviationManuallyEdited, setDeviationManuallyEdited] = useState(false);
 
   const orgCode = viewOrganizationCode ?? "100";
   const authorName = (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
@@ -68,6 +85,21 @@ export function TempHumidityForm({ mode, editLogId }: Props) {
     () => TEMP_HUMIDITY_ZONES.some((z) => zoneDeviation(z, readings[z.id] ?? { temp: "", humidity: "" })),
     [readings]
   );
+
+  const autoDeviationText = useMemo(
+    () => buildAutoDeviationText(TEMP_HUMIDITY_ZONES, readings),
+    [readings]
+  );
+
+  useEffect(() => {
+    if (hasDeviation && !deviationManuallyEdited) {
+      setCorrective((c) => ({ ...c, deviation: autoDeviationText }));
+    }
+    if (!hasDeviation) {
+      setCorrective((c) => ({ ...c, deviation: "" }));
+      setDeviationManuallyEdited(false);
+    }
+  }, [hasDeviation, deviationManuallyEdited, autoDeviationText]);
 
   const isApproved = currentLogStatus === "approved";
   const isLockedForWorker = isApproved && !isManager;
@@ -481,7 +513,9 @@ export function TempHumidityForm({ mode, editLogId }: Props) {
                   <input
                     type="number"
                     inputMode="decimal"
-                    step="any"
+                    step="0.1"
+                    min={-50}
+                    max={100}
                     value={r.temp}
                     onChange={(e) => setReading(z.id, "temp", e.target.value)}
                     disabled={!canEdit}
@@ -494,7 +528,9 @@ export function TempHumidityForm({ mode, editLogId }: Props) {
                   <input
                     type="number"
                     inputMode="decimal"
-                    step="any"
+                    step="0.1"
+                    min={0}
+                    max={100}
                     value={r.humidity}
                     onChange={(e) => setReading(z.id, "humidity", e.target.value)}
                     disabled={!canEdit}
@@ -530,11 +566,14 @@ export function TempHumidityForm({ mode, editLogId }: Props) {
               />
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1">이탈내용</label>
+              <label className="block text-xs text-slate-500 mb-1">이탈내용 (자동 생성, 필요 시 수정)</label>
               <textarea
                 value={corrective.deviation}
-                onChange={(e) => setCorrective((c) => ({ ...c, deviation: e.target.value }))}
-                rows={2}
+                onChange={(e) => {
+                  setDeviationManuallyEdited(true);
+                  setCorrective((c) => ({ ...c, deviation: e.target.value }));
+                }}
+                rows={3}
                 disabled={!canEdit}
                 className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm resize-none disabled:opacity-70"
               />
