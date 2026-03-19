@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { HYGIENE_CHECKLIST } from "@/features/daily/hygieneChecklist";
 
@@ -10,6 +11,12 @@ type LogHeader = {
   id: string;
   inspection_date: string;
   author_name: string | null;
+  status: string;
+  approved_at: string | null;
+  approved_by_name: string | null;
+  rejected_at: string | null;
+  rejected_by: string | null;
+  reject_reason: string | null;
   corrective_content: string | null;
   corrective_datetime: string | null;
   corrective_deviation: string | null;
@@ -39,10 +46,18 @@ function formatDt(iso: string | null): string {
 export default function DailyHygieneViewPage() {
   const params = useParams();
   const id = typeof params?.id === "string" ? params.id : "";
+  const { user, profile } = useAuth();
   const [header, setHeader] = useState<LogHeader | null>(null);
   const [items, setItems] = useState<LogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [rejectReasonInput, setRejectReasonInput] = useState("");
+
+  const canApproveReject =
+    (profile?.role === "manager" || profile?.role === "admin") && header?.status === "submitted";
+  const approverName = (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
 
   const load = useCallback(async () => {
     if (!id) {
@@ -137,6 +152,32 @@ export default function DailyHygieneViewPage() {
         <span className="text-slate-200 font-medium">{header.inspection_date}</span>
       </div>
       <h1 className="text-lg font-semibold text-slate-100 mb-1">영업장환경위생점검일지</h1>
+      {header.status === "approved" && (
+        <div className="mb-4 px-4 py-3 rounded-lg bg-emerald-900/20 border border-emerald-700/50 text-emerald-200 text-sm font-medium">
+          승인 완료
+          {header.approved_at && (
+            <span className="ml-2 font-normal text-slate-400">
+              {formatDt(header.approved_at)}
+              {header.approved_by_name ? ` · ${header.approved_by_name}` : ""}
+            </span>
+          )}
+        </div>
+      )}
+      {header.status === "rejected" && (
+        <div className="mb-4 px-4 py-3 rounded-lg bg-amber-900/20 border border-amber-700/50 text-amber-200 text-sm">
+          <span className="font-medium">반려됨</span>
+          {header.reject_reason && (
+            <p className="mt-1 text-slate-300 whitespace-pre-wrap">{header.reject_reason}</p>
+          )}
+          <p className="mt-1 text-slate-500 text-xs">수정 후 다시 제출할 수 있습니다.</p>
+        </div>
+      )}
+      {header.status === "submitted" && (
+        <div className="mb-4 px-4 py-2 rounded-lg bg-slate-800/80 border border-slate-600 text-slate-400 text-sm">
+          제출됨 · 승인 대기 중
+        </div>
+      )}
+
       <p className="text-slate-500 text-sm mb-4">
         점검일자: {header.inspection_date}
         {header.author_name && ` · 작성: ${header.author_name}`}
@@ -223,6 +264,93 @@ export default function DailyHygieneViewPage() {
             )}
           </dl>
         </section>
+      )}
+
+      {canApproveReject && (
+        <div className="flex flex-wrap gap-2 mb-6">
+          <button
+            type="button"
+            onClick={async () => {
+              setActionLoading(true);
+              const { error: err } = await supabase
+                .from("daily_hygiene_logs")
+                .update({
+                  status: "approved",
+                  approved_at: new Date().toISOString(),
+                  approved_by: user?.id ?? null,
+                  approved_by_name: approverName || null,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq("id", id);
+              setActionLoading(false);
+              if (err) setError(err.message);
+              else load();
+            }}
+            disabled={actionLoading}
+            className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-medium"
+          >
+            {actionLoading ? "처리 중…" : "승인"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setRejectReasonInput("");
+              setRejectModalOpen(true);
+            }}
+            disabled={actionLoading}
+            className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-sm font-medium"
+          >
+            반려
+          </button>
+        </div>
+      )}
+
+      {rejectModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
+          <div className="bg-slate-800 rounded-xl border border-slate-600 shadow-xl max-w-md w-full p-4">
+            <h3 className="text-sm font-semibold text-slate-200 mb-2">반려 사유 (선택)</h3>
+            <textarea
+              value={rejectReasonInput}
+              onChange={(e) => setRejectReasonInput(e.target.value)}
+              rows={3}
+              placeholder="반려 사유를 입력하세요."
+              className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 text-slate-100 text-sm resize-none mb-4"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setRejectModalOpen(false)}
+                className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700/50 text-sm"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setActionLoading(true);
+                  const { error: err } = await supabase
+                    .from("daily_hygiene_logs")
+                    .update({
+                      status: "rejected",
+                      rejected_at: new Date().toISOString(),
+                      rejected_by: user?.id ?? null,
+                      reject_reason: rejectReasonInput.trim() || null,
+                      updated_at: new Date().toISOString(),
+                    })
+                    .eq("id", id);
+                  setActionLoading(false);
+                  setRejectModalOpen(false);
+                  if (err) setError(err.message);
+                  else load();
+                }}
+                disabled={actionLoading}
+                className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-sm font-medium"
+              >
+                반려하기
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="flex justify-end">

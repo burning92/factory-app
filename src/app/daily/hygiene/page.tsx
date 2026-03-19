@@ -11,10 +11,13 @@ import {
   type HygieneItemResult,
 } from "@/features/daily/hygieneChecklist";
 
+export type HygieneLogStatus = "draft" | "submitted" | "approved" | "rejected";
+
 type LogRow = {
   id: string;
   inspection_date: string;
   author_name: string | null;
+  status: HygieneLogStatus;
   created_at: string;
 };
 
@@ -32,7 +35,7 @@ const initialCorrective: HygieneCorrectiveInput = {
 };
 
 export default function DailyHygienePage() {
-  const { profile, viewOrganizationCode } = useAuth();
+  const { user, profile, viewOrganizationCode } = useAuth();
   const [inspectionDate, setInspectionDate] = useState(todayStr);
   const [results, setResults] = useState<HygieneFormResults>({});
   const [corrective, setCorrective] = useState<HygieneCorrectiveInput>(initialCorrective);
@@ -40,8 +43,13 @@ export default function DailyHygienePage() {
   const [toast, setToast] = useState<{ message: string; error?: boolean } | null>(null);
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [loadingList, setLoadingList] = useState(true);
+  const [currentLogId, setCurrentLogId] = useState<string | null>(null);
+  const [currentLogStatus, setCurrentLogStatus] = useState<HygieneLogStatus | null>(null);
 
   const orgCode = viewOrganizationCode ?? "100";
+  const isLocked = currentLogStatus === "approved";
+  const canEdit = !isLocked && currentLogStatus !== "submitted";
+  const canSubmit = !isLocked && (currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus === null);
 
   const authorName = (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
 
@@ -57,7 +65,7 @@ export default function DailyHygienePage() {
     setLoadingList(true);
     const { data, error } = await supabase
       .from("daily_hygiene_logs")
-      .select("id, inspection_date, author_name, created_at")
+      .select("id, inspection_date, author_name, status, created_at")
       .eq("organization_code", orgCode)
       .order("inspection_date", { ascending: false })
       .limit(50);
@@ -80,16 +88,20 @@ export default function DailyHygienePage() {
     (async () => {
       const { data: logData } = await supabase
         .from("daily_hygiene_logs")
-        .select("id, corrective_content, corrective_datetime, corrective_deviation, corrective_detail, corrective_actor, corrective_approver")
+        .select("id, status, corrective_content, corrective_datetime, corrective_deviation, corrective_detail, corrective_actor, corrective_approver")
         .eq("organization_code", orgCode)
         .eq("inspection_date", inspectionDate)
         .maybeSingle();
-      if (cancelled || !logData) {
-        if (!logData && !cancelled) setCorrective(initialCorrective);
+      if (cancelled) return;
+      if (!logData) {
+        setCorrective(initialCorrective);
+        setCurrentLogId(null);
+        setCurrentLogStatus(null);
         return;
       }
       const log = logData as {
         id: string;
+        status: HygieneLogStatus;
         corrective_content: string | null;
         corrective_datetime: string | null;
         corrective_deviation: string | null;
@@ -105,6 +117,8 @@ export default function DailyHygienePage() {
         actor: log.corrective_actor ?? "",
         approver: log.corrective_approver ?? "",
       });
+      setCurrentLogId(log.id);
+      setCurrentLogStatus(log.status);
       const { data: itemsData } = await supabase
         .from("daily_hygiene_log_items")
         .select("category, question_index, question_text, result")
@@ -134,27 +148,54 @@ export default function DailyHygienePage() {
     setSaving(true);
     setToast(null);
     try {
-      const { data: logRow, error: logErr } = await supabase
+      const { data: existing } = await supabase
         .from("daily_hygiene_logs")
-        .upsert(
-          {
-            organization_code: orgCode,
-            inspection_date: date,
-            author_name: authorName || null,
-            corrective_content: hasAnyX ? (corrective.content || null) : null,
-            corrective_datetime: hasAnyX && corrective.datetime ? corrective.datetime : null,
-            corrective_deviation: hasAnyX ? (corrective.deviation || null) : null,
-            corrective_detail: hasAnyX ? (corrective.detail || null) : null,
-            corrective_actor: hasAnyX ? (corrective.actor || null) : null,
-            corrective_approver: hasAnyX ? (corrective.approver || null) : null,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "organization_code,inspection_date" }
-        )
-        .select("id")
-        .single();
-      if (logErr) throw logErr;
-      const logId = (logRow as { id: string }).id;
+        .select("id, status")
+        .eq("organization_code", orgCode)
+        .eq("inspection_date", date)
+        .maybeSingle();
+
+      const existingRow = existing as { id: string; status: HygieneLogStatus } | null;
+      if (existingRow?.status === "approved") {
+        setToast({ message: "승인 완료된 일지는 수정할 수 없습니다.", error: true });
+        setSaving(false);
+        return;
+      }
+
+      const payload = {
+        organization_code: orgCode,
+        inspection_date: date,
+        author_name: authorName || null,
+        corrective_content: hasAnyX ? (corrective.content || null) : null,
+        corrective_datetime: hasAnyX && corrective.datetime ? corrective.datetime : null,
+        corrective_deviation: hasAnyX ? (corrective.deviation || null) : null,
+        corrective_detail: hasAnyX ? (corrective.detail || null) : null,
+        corrective_actor: hasAnyX ? (corrective.actor || null) : null,
+        corrective_approver: hasAnyX ? (corrective.approver || null) : null,
+        updated_at: new Date().toISOString(),
+      };
+
+      let logId: string;
+      if (existingRow) {
+        const { error: updateErr } = await supabase
+          .from("daily_hygiene_logs")
+          .update(payload)
+          .eq("id", existingRow.id);
+        if (updateErr) throw updateErr;
+        logId = existingRow.id;
+      } else {
+        const { data: inserted, error: insertErr } = await supabase
+          .from("daily_hygiene_logs")
+          .insert({
+            ...payload,
+            status: "draft",
+            author_user_id: user?.id ?? null,
+          })
+          .select("id")
+          .single();
+        if (insertErr) throw insertErr;
+        logId = (inserted as { id: string }).id;
+      }
 
       const toDelete = await supabase.from("daily_hygiene_log_items").delete().eq("log_id", logId);
       if (toDelete.error) throw toDelete.error;
@@ -181,6 +222,8 @@ export default function DailyHygienePage() {
       }
 
       setToast({ message: "저장되었습니다." });
+      setCurrentLogId(logId);
+      setCurrentLogStatus(existingRow?.status ?? "draft");
       fetchLogs();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -191,6 +234,107 @@ export default function DailyHygienePage() {
   }, [
     orgCode,
     inspectionDate,
+    authorName,
+    results,
+    corrective,
+    hasAnyX,
+    user?.id,
+    fetchLogs,
+  ]);
+
+  const handleSubmit = useCallback(async () => {
+    const date = inspectionDate.trim();
+    if (!date) {
+      setToast({ message: "점검일자를 선택해 주세요.", error: true });
+      return;
+    }
+    setSaving(true);
+    setToast(null);
+    try {
+      let logId = currentLogId;
+      if (!logId) {
+        const { data: existing } = await supabase
+          .from("daily_hygiene_logs")
+          .select("id, status")
+          .eq("organization_code", orgCode)
+          .eq("inspection_date", date)
+          .maybeSingle();
+        const existingRow = existing as { id: string; status: HygieneLogStatus } | null;
+        if (existingRow?.status === "approved") {
+          setToast({ message: "승인 완료된 일지는 수정할 수 없습니다.", error: true });
+          setSaving(false);
+          return;
+        }
+        if (existingRow) {
+          logId = existingRow.id;
+        } else {
+          const { data: inserted, error: insertErr } = await supabase
+            .from("daily_hygiene_logs")
+            .insert({
+              organization_code: orgCode,
+              inspection_date: date,
+              author_name: authorName || null,
+              author_user_id: user?.id ?? null,
+              status: "draft",
+              corrective_content: hasAnyX ? (corrective.content || null) : null,
+              corrective_datetime: hasAnyX && corrective.datetime ? corrective.datetime : null,
+              corrective_deviation: hasAnyX ? (corrective.deviation || null) : null,
+              corrective_detail: hasAnyX ? (corrective.detail || null) : null,
+              corrective_actor: hasAnyX ? (corrective.actor || null) : null,
+              corrective_approver: hasAnyX ? (corrective.approver || null) : null,
+              updated_at: new Date().toISOString(),
+            })
+            .select("id")
+            .single();
+          if (insertErr) throw insertErr;
+          logId = (inserted as { id: string }).id;
+          const items: { log_id: string; category: string; question_index: number; question_text: string; result: string }[] = [];
+          HYGIENE_CHECKLIST.forEach((cat, ci) => {
+            cat.questions.forEach((q, qi) => {
+              const key = `${ci}-${qi}`;
+              const r = results[key];
+              if (r === "O" || r === "X") {
+                items.push({
+                  log_id: logId!,
+                  category: cat.title,
+                  question_index: qi + 1,
+                  question_text: q,
+                  result: r,
+                });
+              }
+            });
+          });
+          if (items.length > 0) {
+            const { error: itemsErr } = await supabase.from("daily_hygiene_log_items").insert(items);
+            if (itemsErr) throw itemsErr;
+          }
+        }
+      }
+      const { error: submitErr } = await supabase
+        .from("daily_hygiene_logs")
+        .update({
+          status: "submitted",
+          submitted_at: new Date().toISOString(),
+          submitted_by: user?.id ?? null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", logId);
+      if (submitErr) throw submitErr;
+      setToast({ message: "제출되었습니다." });
+      setCurrentLogId(logId);
+      setCurrentLogStatus("submitted");
+      fetchLogs();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setToast({ message: msg, error: true });
+    } finally {
+      setSaving(false);
+    }
+  }, [
+    inspectionDate,
+    orgCode,
+    currentLogId,
+    user?.id,
     authorName,
     results,
     corrective,
@@ -223,13 +367,37 @@ export default function DailyHygienePage() {
         </div>
       )}
 
+      {currentLogStatus != null && (
+        <div className="mb-4 px-4 py-2 rounded-lg text-sm bg-slate-800/80 border border-slate-600">
+          <span className="text-slate-400">상태: </span>
+          <span className={
+            currentLogStatus === "approved" ? "text-emerald-400 font-medium" :
+            currentLogStatus === "submitted" ? "text-cyan-400" :
+            currentLogStatus === "rejected" ? "text-amber-400" :
+            "text-slate-300"
+          }>
+            {currentLogStatus === "draft" && "작성중"}
+            {currentLogStatus === "submitted" && "제출됨"}
+            {currentLogStatus === "approved" && "승인 완료"}
+            {currentLogStatus === "rejected" && "반려"}
+          </span>
+        </div>
+      )}
+
+      {isLocked && (
+        <div className="mb-4 px-4 py-3 rounded-lg bg-amber-900/20 border border-amber-700/50 text-amber-200 text-sm">
+          승인 완료된 일지입니다. 수정할 수 없습니다.
+        </div>
+      )}
+
       <div className="mb-6">
         <label className="block text-sm font-medium text-slate-400 mb-1">점검일자</label>
         <input
           type="date"
           value={inspectionDate}
           onChange={(e) => setInspectionDate(e.target.value)}
-          className="w-full max-w-[200px] px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+          disabled={!canEdit}
+          className="w-full max-w-[200px] px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 disabled:opacity-60 disabled:cursor-not-allowed"
         />
       </div>
 
@@ -250,23 +418,25 @@ export default function DailyHygienePage() {
                   <li key={key} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
                     <p className="flex-1 text-sm text-slate-300 min-w-0">{question}</p>
                     <div className="flex gap-3 shrink-0">
-                      <label className="flex items-center gap-1.5 cursor-pointer">
+                      <label className={`flex items-center gap-1.5 ${!canEdit ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}>
                         <input
                           type="radio"
                           name={key}
                           checked={value === "O"}
                           onChange={() => setItemResult(key, "O")}
-                          className="rounded border-slate-500 text-cyan-500 focus:ring-cyan-500/50"
+                          disabled={!canEdit}
+                          className="rounded border-slate-500 text-cyan-500 focus:ring-cyan-500/50 disabled:cursor-not-allowed"
                         />
                         <span className="text-sm text-slate-300">O</span>
                       </label>
-                      <label className="flex items-center gap-1.5 cursor-pointer">
+                      <label className={`flex items-center gap-1.5 ${!canEdit ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}>
                         <input
                           type="radio"
                           name={key}
                           checked={value === "X"}
                           onChange={() => setItemResult(key, "X")}
-                          className="rounded border-slate-500 text-cyan-500 focus:ring-cyan-500/50"
+                          disabled={!canEdit}
+                          className="rounded border-slate-500 text-cyan-500 focus:ring-cyan-500/50 disabled:cursor-not-allowed"
                         />
                         <span className="text-sm text-slate-300">X</span>
                       </label>
@@ -280,7 +450,7 @@ export default function DailyHygienePage() {
       </div>
 
       {hasAnyX && (
-        <section className="rounded-xl border border-amber-700/50 bg-slate-800/50 p-4 mb-8">
+        <section className={`rounded-xl border border-amber-700/50 bg-slate-800/50 p-4 mb-8 ${!canEdit ? "opacity-80 pointer-events-none" : ""}`}>
           <h2 className="text-sm font-semibold text-amber-300 mb-4">부적합 조치</h2>
           <div className="grid gap-4 sm:grid-cols-1">
             <div>
@@ -289,7 +459,8 @@ export default function DailyHygienePage() {
                 type="text"
                 value={corrective.content}
                 onChange={(e) => setCorrective((c) => ({ ...c, content: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
+                disabled={!canEdit}
+                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm disabled:opacity-70"
                 placeholder="내용"
               />
             </div>
@@ -346,15 +517,27 @@ export default function DailyHygienePage() {
         </section>
       )}
 
-      <div className="flex justify-end mb-10">
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={saving}
-          className="px-6 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-medium text-sm"
-        >
-          {saving ? "저장 중…" : "저장"}
-        </button>
+      <div className="flex flex-wrap justify-end gap-2 mb-10">
+        {canEdit && (
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="px-6 py-2.5 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-white font-medium text-sm"
+          >
+            {saving ? "저장 중…" : "저장"}
+          </button>
+        )}
+        {canSubmit && (
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={saving}
+            className="px-6 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-medium text-sm"
+          >
+            {saving ? "처리 중…" : "제출"}
+          </button>
+        )}
       </div>
 
       <section className="border-t border-slate-700/60 pt-6">
@@ -375,6 +558,22 @@ export default function DailyHygienePage() {
                   {log.author_name && (
                     <span className="text-slate-500 ml-2">작성: {log.author_name}</span>
                   )}
+                  <span
+                    className={`ml-2 text-xs font-medium px-2 py-0.5 rounded ${
+                      log.status === "approved"
+                        ? "bg-emerald-900/50 text-emerald-300"
+                        : log.status === "submitted"
+                          ? "bg-cyan-900/50 text-cyan-300"
+                          : log.status === "rejected"
+                            ? "bg-amber-900/50 text-amber-300"
+                            : "bg-slate-700/80 text-slate-400"
+                    }`}
+                  >
+                    {log.status === "draft" && "작성중"}
+                    {log.status === "submitted" && "제출됨"}
+                    {log.status === "approved" && "승인완료"}
+                    {log.status === "rejected" && "반려"}
+                  </span>
                 </Link>
               </li>
             ))}
