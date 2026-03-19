@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { HYGIENE_CHECKLIST } from "@/features/daily/hygieneChecklist";
@@ -44,6 +44,7 @@ function formatDt(iso: string | null): string {
 }
 
 export default function DailyHygieneViewPage() {
+  const router = useRouter();
   const params = useParams();
   const id = typeof params?.id === "string" ? params.id : "";
   const { user, profile } = useAuth();
@@ -57,6 +58,7 @@ export default function DailyHygieneViewPage() {
 
   const canApproveReject =
     (profile?.role === "manager" || profile?.role === "admin") && header?.status === "submitted";
+  const isManager = profile?.role === "manager" || profile?.role === "admin";
   const approverName = (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
 
   const load = useCallback(async () => {
@@ -301,6 +303,32 @@ export default function DailyHygieneViewPage() {
             className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-sm font-medium"
           >
             반려
+          </button>
+        </div>
+      )}
+
+      {isManager && (
+        <div className="flex flex-wrap justify-end gap-2 mb-6">
+          <Link
+            href={`/daily/hygiene/${id}/edit`}
+            className="px-4 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium"
+          >
+            수정
+          </Link>
+          <button
+            type="button"
+            onClick={async () => {
+              if (!window.confirm("이 점검일지를 삭제할까요?")) return;
+              setActionLoading(true);
+              const { error: err } = await supabase.from("daily_hygiene_logs").delete().eq("id", id);
+              setActionLoading(false);
+              if (err) setError(err.message);
+              else router.push("/daily/hygiene");
+            }}
+            disabled={actionLoading}
+            className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-medium"
+          >
+            {actionLoading ? "처리 중…" : "삭제"}
           </button>
         </div>
       )}

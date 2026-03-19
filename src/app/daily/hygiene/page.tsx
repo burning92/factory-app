@@ -52,12 +52,14 @@ function statusBadgeClass(s: HygieneLogStatus): string {
 }
 
 export default function DailyHygieneListPage() {
-  const { viewOrganizationCode } = useAuth();
+  const { viewOrganizationCode, profile } = useAuth();
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; error?: boolean } | null>(null);
 
   const orgCode = viewOrganizationCode ?? "100";
+  const role = profile?.role ?? "worker";
+  const isManager = role === "manager" || role === "admin";
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
@@ -82,6 +84,7 @@ export default function DailyHygieneListPage() {
 
   const getRowHref = (log: LogRow) => {
     if (log.status === "draft" || log.status === "rejected") return `/daily/hygiene/${log.id}/edit`;
+    if (log.status === "approved" && isManager) return `/daily/hygiene/${log.id}/edit`;
     return `/daily/hygiene/${log.id}`;
   };
 
