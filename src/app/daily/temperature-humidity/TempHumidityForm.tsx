@@ -190,7 +190,10 @@ export function TempHumidityForm({ mode, editLogId }: Props) {
         if (!z) return;
         next[z.id] = {
           temp: row.actual_temp_c != null ? String(row.actual_temp_c) : "",
-          humidity: row.actual_humidity_pct != null ? String(row.actual_humidity_pct) : "",
+          humidity:
+            row.actual_humidity_pct != null
+              ? String(Math.round(Number(row.actual_humidity_pct)))
+              : "",
         };
       });
       setReadings(next);
@@ -405,6 +408,16 @@ export function TempHumidityForm({ mode, editLogId }: Props) {
     }));
   };
 
+  /** 습도: 정수만 (소수점·비숫자 제거) */
+  const setHumidityInteger = (zoneId: string, raw: string) => {
+    if (raw === "") {
+      setReading(zoneId, "humidity", "");
+      return;
+    }
+    const intPart = raw.split(".")[0].replace(/\D/g, "");
+    setReading(zoneId, "humidity", intPart);
+  };
+
   if (!loadDone) {
     return (
       <div className="min-h-[calc(100vh-3.5rem)] p-4 md:p-6 max-w-2xl mx-auto">
@@ -527,12 +540,12 @@ export function TempHumidityForm({ mode, editLogId }: Props) {
                   <label className="block text-xs text-slate-500 mb-1">실제 습도 (%)</label>
                   <input
                     type="number"
-                    inputMode="decimal"
-                    step="0.1"
+                    inputMode="numeric"
+                    step={1}
                     min={0}
                     max={100}
                     value={r.humidity}
-                    onChange={(e) => setReading(z.id, "humidity", e.target.value)}
+                    onChange={(e) => setHumidityInteger(z.id, e.target.value)}
                     disabled={!canEdit}
                     placeholder={`≤ ${z.maxHumidityPct}`}
                     className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm disabled:opacity-70"
