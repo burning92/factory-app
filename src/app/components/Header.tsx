@@ -52,7 +52,7 @@ const DESKTOP_DROPDOWN_MATERIALS: DropdownItem[] = [
 ];
 
 const DESKTOP_DROPDOWN_DAILY: DropdownItem[] = [
-  { label: "현장 위생 일지", comingSoon: true },
+  { href: "/daily/hygiene", label: "영업장환경위생점검일지" },
   { label: "제조설비 일지", comingSoon: true },
   { label: "기타 데일리 점검", comingSoon: true },
 ];
