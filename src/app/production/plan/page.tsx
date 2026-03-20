@@ -33,6 +33,27 @@ function getCategoryClass(category: string | null): string {
   }
 }
 
+function getProductionClassByName(productName: string): string {
+  if (productName.includes("포노브레드")) {
+    return "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40";
+  }
+  if (productName.includes("파베이크")) {
+    return "bg-sky-500/20 text-sky-300 border border-sky-500/40";
+  }
+  return "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40";
+}
+
+function getRowClass(category: string | null, productName: string): string {
+  if (category === "생산") return getProductionClassByName(productName);
+  return getCategoryClass(category);
+}
+
+function getDisplayName(category: string | null, productName: string): string {
+  if (category === "연차") return `휴 : ${productName}`;
+  if (category === "반차") return `반 : ${productName}`;
+  return productName;
+}
+
 export default async function ProductionPlanPage() {
   let data;
   try {
@@ -142,8 +163,8 @@ export default async function ProductionPlanPage() {
                           <p className="text-sm font-semibold text-slate-200 mb-2">{dayNum}</p>
                           <div className="space-y-1.5">
                             {dayRows.map((row) => (
-                              <div key={row.id} className={`rounded-md px-2 py-1 text-[11px] ${getCategoryClass(row.category)}`}>
-                                <p className="leading-snug">{row.product_name}</p>
+                              <div key={row.id} className={`rounded-md px-2 py-1 text-[11px] ${getRowClass(row.category, row.product_name)}`}>
+                                <p className="leading-snug">{getDisplayName(row.category, row.product_name)}</p>
                                 {row.qty != null && Number.isFinite(row.qty) ? (
                                   <p className="text-[10px] mt-0.5 tabular-nums">수량 {formatQty(row.qty)}</p>
                                 ) : null}
@@ -173,8 +194,8 @@ export default async function ProductionPlanPage() {
                     ) : (
                       <div className="space-y-1.5">
                         {dayRows.map((row) => (
-                          <div key={row.id} className={`rounded-md px-2 py-1 text-xs ${getCategoryClass(row.category)}`}>
-                            <p>{row.product_name}</p>
+                          <div key={row.id} className={`rounded-md px-2 py-1 text-xs ${getRowClass(row.category, row.product_name)}`}>
+                            <p>{getDisplayName(row.category, row.product_name)}</p>
                             {row.qty != null && Number.isFinite(row.qty) ? (
                               <p className="text-[11px] mt-0.5 tabular-nums">수량 {formatQty(row.qty)}</p>
                             ) : null}
