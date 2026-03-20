@@ -78,7 +78,7 @@ export default function Header() {
   const showDesktopCategoryMenu = viewIsHarang
     ? pathname === "/" || pathname.startsWith("/account")
     : pathname === "/" ||
-      ["/production", "/materials", "/daily", "/account", "/inventory"].some(
+      ["/production", "/materials", "/daily", "/account", "/inventory", "/manage"].some(
         (prefix) => pathname === prefix || pathname.startsWith(prefix + "/")
       );
 

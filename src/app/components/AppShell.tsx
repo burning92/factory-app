@@ -83,7 +83,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return null;
   }
 
-  const showTabBar = pathname !== "/manage";
+  const showTabBar = true;
 
   return (
     <div className="min-h-screen flex flex-col">
