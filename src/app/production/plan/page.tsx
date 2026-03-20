@@ -9,6 +9,30 @@ function formatQty(n: number | null): string {
   return n.toLocaleString("ko-KR");
 }
 
+const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"] as const;
+
+function formatMonthTitle(ym: string): string {
+  const [y, m] = ym.split("-");
+  return `${y}년 ${Number(m)}월`;
+}
+
+function getCategoryClass(category: string | null): string {
+  switch (category) {
+    case "생산":
+      return "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40";
+    case "공휴일":
+      return "bg-rose-500/20 text-rose-300 border border-rose-500/40";
+    case "연차":
+      return "bg-amber-500/20 text-amber-300 border border-amber-500/40";
+    case "반차":
+      return "bg-violet-500/20 text-violet-300 border border-violet-500/40";
+    case "기타":
+      return "bg-slate-500/20 text-slate-300 border border-slate-500/40";
+    default:
+      return "bg-slate-700/60 text-slate-300 border border-slate-600/60";
+  }
+}
+
 export default async function ProductionPlanPage() {
   let data;
   try {
@@ -29,13 +53,36 @@ export default async function ProductionPlanPage() {
     );
   }
 
-  const byDate = new Map<string, typeof data.rows>();
-  for (const r of data.rows) {
+  const rows = data.rows;
+  const byDate = new Map<string, typeof rows>();
+  for (const r of rows) {
     const list = byDate.get(r.plan_date) ?? [];
     list.push(r);
     byDate.set(r.plan_date, list);
   }
-  const dates = Array.from(byDate.keys()).sort((a, b) => b.localeCompare(a));
+  const sortedDates = Array.from(byDate.keys()).sort((a, b) => a.localeCompare(b));
+  const targetDate = sortedDates[0] ?? null;
+  const monthKey = targetDate ? targetDate.slice(0, 7) : null;
+
+  let daysInMonth = 0;
+  let firstWeekday = 0;
+  if (monthKey) {
+    const [yearStr, monthStr] = monthKey.split("-");
+    const year = Number(yearStr);
+    const month = Number(monthStr);
+    const firstDate = new Date(year, month - 1, 1);
+    daysInMonth = new Date(year, month, 0).getDate();
+    firstWeekday = firstDate.getDay();
+  }
+
+  const dayCells = [];
+  if (monthKey) {
+    for (let i = 0; i < firstWeekday; i += 1) dayCells.push(null);
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      dayCells.push(`${monthKey}-${String(day).padStart(2, "0")}`);
+    }
+    while (dayCells.length % 7 !== 0) dayCells.push(null);
+  }
 
   return (
     <div className="min-h-[calc(100vh-3.5rem)] md:min-h-0 p-4 md:p-6 max-w-3xl mx-auto">
@@ -63,36 +110,85 @@ export default async function ProductionPlanPage() {
         </div>
       )}
 
-      {data.rows.length === 0 ? (
+      {rows.length === 0 ? (
         <div className="rounded-xl border border-slate-700 bg-space-800/80 p-8 text-center text-slate-500">
           등록된 생산계획이 없습니다. 시트 → 동기화 후 여기에 표시됩니다.
         </div>
       ) : (
-        <div className="space-y-6">
-          {dates.map((d) => (
-            <section key={d} className="rounded-xl border border-slate-700 bg-space-800/50 overflow-hidden">
-              <h2 className="text-sm font-medium text-cyan-300/90 px-4 py-2 border-b border-slate-700/80 bg-space-900/40">
-                {d}
-              </h2>
-              <ul className="divide-y divide-slate-700/60">
-                {(byDate.get(d) ?? []).map((row) => (
-                  <li key={row.id} className="px-4 py-3 text-sm text-slate-200">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <span className="font-medium text-slate-100">{row.product_name}</span>
-                      <span className="text-slate-400 tabular-nums">수량 {formatQty(row.qty)}</span>
+        <>
+          {monthKey && (
+            <section className="hidden md:block rounded-xl border border-slate-700 bg-space-800/50 overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-700/80 bg-space-900/40">
+                <h2 className="text-base font-semibold text-cyan-300/90">{formatMonthTitle(monthKey)}</h2>
+              </div>
+              <div className="grid grid-cols-7 border-b border-slate-700/80 bg-space-900/30">
+                {WEEKDAY_LABELS.map((w) => (
+                  <div key={w} className="px-3 py-2 text-xs font-medium text-slate-400 border-r border-slate-700/60 last:border-r-0">
+                    {w}
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7">
+                {dayCells.map((dateKey, idx) => {
+                  const dayRows = dateKey ? (byDate.get(dateKey) ?? []) : [];
+                  const dayNum = dateKey ? Number(dateKey.slice(8, 10)) : null;
+                  return (
+                    <div
+                      key={`${dateKey ?? "empty"}-${idx}`}
+                      className="min-h-[140px] border-r border-b border-slate-700/60 last:border-r-0 p-2"
+                    >
+                      {dateKey ? (
+                        <>
+                          <p className="text-sm font-semibold text-slate-200 mb-2">{dayNum}</p>
+                          <div className="space-y-1.5">
+                            {dayRows.map((row) => (
+                              <div key={row.id} className={`rounded-md px-2 py-1 text-[11px] ${getCategoryClass(row.category)}`}>
+                                <p className="leading-snug">{row.product_name}</p>
+                                {row.qty != null && Number.isFinite(row.qty) ? (
+                                  <p className="text-[10px] mt-0.5 tabular-nums">수량 {formatQty(row.qty)}</p>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      ) : null}
                     </div>
-                    {(row.category || row.note) && (
-                      <div className="mt-1 text-xs text-slate-500 space-x-2">
-                        {row.category ? <span>구분: {row.category}</span> : null}
-                        {row.note ? <span>비고: {row.note}</span> : null}
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {monthKey && (
+            <section className="md:hidden space-y-3">
+              <h2 className="text-base font-semibold text-cyan-300/90">{formatMonthTitle(monthKey)}</h2>
+              {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
+                const dateKey = `${monthKey}-${String(day).padStart(2, "0")}`;
+                const dayRows = byDate.get(dateKey) ?? [];
+                return (
+                  <article key={dateKey} className="rounded-xl border border-slate-700 bg-space-800/60 p-3">
+                    <p className="text-sm font-semibold text-slate-100 mb-2">{day}일</p>
+                    {dayRows.length === 0 ? (
+                      <p className="text-xs text-slate-500">계획 없음</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {dayRows.map((row) => (
+                          <div key={row.id} className={`rounded-md px-2 py-1 text-xs ${getCategoryClass(row.category)}`}>
+                            <p>{row.product_name}</p>
+                            {row.qty != null && Number.isFinite(row.qty) ? (
+                              <p className="text-[11px] mt-0.5 tabular-nums">수량 {formatQty(row.qty)}</p>
+                            ) : null}
+                            {row.note ? <p className="text-[11px] mt-0.5 opacity-90">비고: {row.note}</p> : null}
+                          </div>
+                        ))}
                       </div>
                     )}
-                  </li>
-                ))}
-              </ul>
+                  </article>
+                );
+              })}
             </section>
-          ))}
-        </div>
+          )}
+        </>
       )}
     </div>
   );
