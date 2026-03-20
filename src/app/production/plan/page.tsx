@@ -2,6 +2,8 @@ import Link from "next/link";
 import { getProductionPlanPageData } from "@/features/production/plan/getProductionPlanPageData";
 import { formatDateTimeKorea } from "@/lib/formatDateTimeKorea";
 
+export const dynamic = "force-dynamic";
+
 function formatQty(n: number | null): string {
   if (n == null || !Number.isFinite(n)) return "—";
   return n.toLocaleString("ko-KR");
