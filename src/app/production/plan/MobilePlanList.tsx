@@ -52,7 +52,7 @@ export default function MobilePlanList({ monthTitle, entries }: Props) {
     if (!targetDate) return;
     const el = refs.current[targetDate];
     if (!el) return;
-    el.scrollIntoView({ block: "start", behavior: "smooth" });
+    el.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
   }, [sortedDates]);
 
   if (entries.length === 0) {
