@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getProductionPlanPageData } from "@/features/production/plan/getProductionPlanPageData";
 import { formatDateTimeKorea } from "@/lib/formatDateTimeKorea";
+import MobilePlanList from "./MobilePlanList";
 
 export const dynamic = "force-dynamic";
 
@@ -181,33 +182,22 @@ export default async function ProductionPlanPage() {
           )}
 
           {monthKey && (
-            <section className="md:hidden space-y-3">
-              <h2 className="text-base font-semibold text-cyan-300/90">{formatMonthTitle(monthKey)}</h2>
-              {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
-                const dateKey = `${monthKey}-${String(day).padStart(2, "0")}`;
-                const dayRows = byDate.get(dateKey) ?? [];
-                return (
-                  <article key={dateKey} className="rounded-xl border border-slate-700 bg-space-800/60 p-3">
-                    <p className="text-sm font-semibold text-slate-100 mb-2">{day}일</p>
-                    {dayRows.length === 0 ? (
-                      <p className="text-xs text-slate-500">계획 없음</p>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {dayRows.map((row) => (
-                          <div key={row.id} className={`rounded-md px-2 py-1 text-xs ${getRowClass(row.category, row.product_name)}`}>
-                            <p>{getDisplayName(row.category, row.product_name)}</p>
-                            {row.qty != null && Number.isFinite(row.qty) ? (
-                              <p className="text-[11px] mt-0.5 tabular-nums">수량 {formatQty(row.qty)}</p>
-                            ) : null}
-                            {row.note ? <p className="text-[11px] mt-0.5 opacity-90">비고: {row.note}</p> : null}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </article>
-                );
-              })}
-            </section>
+            <MobilePlanList
+              monthTitle={formatMonthTitle(monthKey)}
+              entries={Array.from(byDate.entries())
+                .filter(([date, dayRows]) => date.startsWith(monthKey) && dayRows.length > 0)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([date, dayRows]) => ({
+                  date,
+                  rows: dayRows.map((row) => ({
+                    id: row.id,
+                    label: getDisplayName(row.category, row.product_name),
+                    qty: row.qty,
+                    note: row.note,
+                    className: getRowClass(row.category, row.product_name),
+                  })),
+                }))}
+            />
           )}
         </>
       )}
