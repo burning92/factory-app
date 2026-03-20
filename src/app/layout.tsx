@@ -4,7 +4,7 @@ import AppShell from "./components/AppShell";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "생산관리 시스템",
+  title: "AF Factory Hub",
   description: "출고 입력, 사용량 계산, 반죽사용량, 기준 정보, 관리일지",
   icons: { icon: "/icon.png", apple: "/icon.png" },
 };

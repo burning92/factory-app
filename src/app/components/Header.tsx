@@ -125,7 +125,10 @@ export default function Header() {
         {viewIsHarang ? (
           <span className="font-semibold text-sm hidden sm:inline">하랑</span>
         ) : (
-          <span className="font-semibold text-sm hidden sm:inline">Armored Fresh Factory</span>
+          <>
+            <span className="font-semibold text-sm hidden sm:inline">AF Factory Hub</span>
+            <span className="font-semibold text-sm sm:hidden">AF Hub</span>
+          </>
         )}
       </Link>
 

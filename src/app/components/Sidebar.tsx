@@ -23,12 +23,12 @@ export default function Sidebar() {
         >
           <Image
             src="/helmet-logo.png"
-            alt="Armored Fresh Factory"
+            alt="AF Factory Hub"
             width={32}
             height={32}
             className="object-contain shrink-0"
           />
-          <span className="font-bold text-sm leading-tight">Armored Fresh Factory</span>
+          <span className="font-bold text-sm leading-tight">AF Factory Hub</span>
         </Link>
         <Link
           href="/"

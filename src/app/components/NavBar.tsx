@@ -19,12 +19,12 @@ export default function NavBar() {
           >
             <Image
               src="/helmet-logo.png"
-              alt="Armored Fresh Factory"
+              alt="AF Factory Hub"
               width={36}
               height={36}
               className="object-contain shrink-0"
             />
-            <span className="leading-none">Armored Fresh Factory</span>
+            <span className="leading-none">AF Factory Hub</span>
           </Link>
           <nav className="flex items-center gap-1">
             {MENU.map(({ href, label }) => {
