@@ -107,7 +107,7 @@ export default async function ProductionPlanPage() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-3.5rem)] md:min-h-0 p-4 md:p-6 max-w-3xl mx-auto">
+    <div className="min-h-[calc(100vh-3.5rem)] md:min-h-0 p-4 md:px-8 md:py-6 xl:px-10 max-w-[1280px] mx-auto">
       <div className="mb-4">
         <Link href="/production" className="text-sm text-cyan-400 hover:underline">
           ← 생산 허브
@@ -157,12 +157,12 @@ export default async function ProductionPlanPage() {
                   return (
                     <div
                       key={`${dateKey ?? "empty"}-${idx}`}
-                      className="min-h-[140px] border-r border-b border-slate-700/60 last:border-r-0 p-2"
+                      className="min-h-[160px] border-r border-b border-slate-700/60 last:border-r-0 p-3"
                     >
                       {dateKey ? (
                         <>
                           <p className="text-sm font-semibold text-slate-200 mb-2">{dayNum}</p>
-                          <div className="space-y-1.5">
+                          <div className="space-y-2">
                             {dayRows.map((row) => (
                               <div key={row.id} className={`rounded-md px-2 py-1 text-[11px] ${getRowClass(row.category, row.product_name)}`}>
                                 <p className="leading-snug">{getDisplayName(row.category, row.product_name)}</p>
