@@ -35,6 +35,7 @@ const DESKTOP_DROPDOWN_DAILY: DropdownItem[] = [
   { href: "/daily/sanitation-facility", label: "위생시설관리점검일지" },
   { href: "/daily/worker-hygiene", label: "작업자 위생점검일지" },
   { href: "/daily/cold-storage-hygiene", label: "냉장 · 냉동온도 및 위생 점검일지" },
+  { href: "/daily/process-control-bread", label: "공정관리 점검일지(빵류)" },
   { label: "제조설비 일지", comingSoon: true },
   { label: "기타 데일리 점검", comingSoon: true },
 ];
