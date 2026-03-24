@@ -267,12 +267,19 @@ interface MasterState {
   deleteProductionLog: (logId: string) => Promise<void>;
 }
 
-function mapMaterialFromDb(row: { id: string; material_name: string; box_weight_g: number; unit_weight_g: number }): Material {
+function mapMaterialFromDb(row: {
+  id: string;
+  material_name: string;
+  box_weight_g: number;
+  unit_weight_g: number;
+  inventory_item_code?: string | null;
+}): Material {
   return {
     id: row.id,
     materialName: row.material_name,
     boxWeightG: row.box_weight_g ?? 0,
     unitWeightG: row.unit_weight_g ?? 0,
+    inventoryItemCode: row.inventory_item_code?.trim() || undefined,
   };
 }
 
@@ -458,7 +465,10 @@ export const useMasterStore = create<MasterState>((set, get) => ({
   fetchMaterials: async () => {
     set({ materialsLoading: true, error: null });
     try {
-      const { data, error: e } = await supabase.from("materials").select("id, material_name, box_weight_g, unit_weight_g").order("material_name");
+      const { data, error: e } = await supabase
+        .from("materials")
+        .select("id, material_name, box_weight_g, unit_weight_g, inventory_item_code")
+        .order("material_name");
       if (e) throw e;
       set({ materials: (data ?? []).map(mapMaterialFromDb), materialsLoading: false });
     } catch (err) {
@@ -1002,8 +1012,13 @@ export const useMasterStore = create<MasterState>((set, get) => ({
     try {
       const { data, error: e } = await supabase
         .from("materials")
-        .insert({ material_name: m.materialName, box_weight_g: m.boxWeightG, unit_weight_g: m.unitWeightG })
-        .select("id, material_name, box_weight_g, unit_weight_g")
+        .insert({
+          material_name: m.materialName,
+          box_weight_g: m.boxWeightG,
+          unit_weight_g: m.unitWeightG,
+          inventory_item_code: m.inventoryItemCode?.trim() || null,
+        })
+        .select("id, material_name, box_weight_g, unit_weight_g, inventory_item_code")
         .single();
       if (e) throw e;
       set((state) => ({
@@ -1026,6 +1041,7 @@ export const useMasterStore = create<MasterState>((set, get) => ({
       if (patch.materialName != null) payload.material_name = patch.materialName;
       if (patch.boxWeightG != null) payload.box_weight_g = patch.boxWeightG;
       if (patch.unitWeightG != null) payload.unit_weight_g = patch.unitWeightG;
+      if (patch.inventoryItemCode != null) payload.inventory_item_code = patch.inventoryItemCode.trim() || null;
       const { error: e } = await supabase.from("materials").update(payload).eq("id", id);
       if (e) throw e;
       set((state) => ({

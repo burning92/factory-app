@@ -216,10 +216,16 @@ function resolveOutboundExpiry(input: {
   return f || todayStr();
 }
 
-type EcountLotRow = { lot_no: string; qty: number | null; display_item_name: string | null };
+type EcountLotRow = {
+  item_code: string | null;
+  lot_no: string;
+  qty: number | null;
+  display_item_name: string | null;
+};
 
 function OutboundModal({
   materialName,
+  inventoryItemCode,
   requiredText,
   defaultExpiryDate,
   initialEntries,
@@ -228,6 +234,7 @@ function OutboundModal({
   onSave,
 }: {
   materialName: string;
+  inventoryItemCode?: string;
   requiredText: string;
   defaultExpiryDate: string;
   initialEntries?: { expiryDate: string; boxQty: number; bagQty: number; remainderG: number }[];
@@ -276,7 +283,8 @@ function OutboundModal({
   useEffect(() => {
     let cancelled = false;
     const name = String(materialName ?? "").trim();
-    if (!name) {
+    const mappedCode = String(inventoryItemCode ?? "").trim();
+    if (!name && !mappedCode) {
       setInventoryRows([]);
       setInventoryHint(null);
       return;
@@ -286,7 +294,7 @@ function OutboundModal({
       setInventoryHint(null);
       const { data, error } = await supabase
         .from("ecount_inventory_current")
-        .select("display_item_name, lot_no, qty")
+        .select("item_code, display_item_name, lot_no, qty")
         .eq("inventory_type", "원재료")
         .order("lot_no", { ascending: true });
       if (cancelled) return;
@@ -295,16 +303,24 @@ function OutboundModal({
         setInventoryHint("재고 LOT 목록을 불러오지 못했습니다.");
       } else {
         const raw = (data ?? []) as EcountLotRow[];
-        const filtered = raw.filter((r) => (r.display_item_name ?? "").trim() === name);
+        const filtered = mappedCode
+          ? raw.filter((r) => String(r.item_code ?? "").trim() === mappedCode)
+          : raw.filter((r) => (r.display_item_name ?? "").trim() === name);
         setInventoryRows(filtered);
-        if (filtered.length === 0) setInventoryHint("이 원료명과 일치하는 재고 LOT가 없습니다. 직접입력을 사용하세요.");
+        if (filtered.length === 0) {
+          setInventoryHint(
+            mappedCode
+              ? "재고연동 코드와 일치하는 재고 LOT가 없습니다. 직접입력을 사용하세요."
+              : "이 원료명과 일치하는 재고 LOT가 없습니다. 직접입력을 사용하세요."
+          );
+        }
       }
       setInventoryLoading(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, [materialName]);
+  }, [materialName, inventoryItemCode]);
 
   const lotOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -1020,6 +1036,7 @@ export default function OutboundPage() {
         {modal?.row && (
           <OutboundModal
             materialName={String(modal.row.materialName ?? "")}
+            inventoryItemCode={materials.find((m) => m.materialName === String(modal.row.materialName ?? ""))?.inventoryItemCode}
             requiredText={formatRequiredQty(modal.row)}
             defaultExpiryDate={getDefaultExpiry(modal.row.materialName)}
             initialEntries={Array.isArray(pendingOutbound[modal.row.materialName]?.entries) ? pendingOutbound[modal.row.materialName].entries : undefined}

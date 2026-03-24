@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useMasterStore, type DoughBom } from "@/store/useMasterStore";
 import type { Material, BomRow } from "@/lib/mockData";
+import { supabase } from "@/lib/supabase";
 
 function PencilIcon({ className }: { className?: string }) {
   return (
@@ -323,8 +324,39 @@ export default function AdminPage() {
     fetchDoughBoms();
   }, [fetchMaterials, fetchBom, fetchDoughBoms]);
 
-  const [materialForm, setMaterialForm] = useState({ materialName: "", boxWeightG: "", unitWeightG: "" });
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("ecount_item_master")
+        .select("item_code, item_name")
+        .eq("inventory_type", "원재료")
+        .eq("is_active", true)
+        .order("item_code", { ascending: true });
+      if (cancelled || error) return;
+      const rows = (data ?? []) as { item_code: string | null; item_name: string | null }[];
+      setEcountItemCodeOptions(
+        rows
+          .map((r) => ({
+            itemCode: String(r.item_code ?? "").trim(),
+            itemName: String(r.item_name ?? "").trim(),
+          }))
+          .filter((r) => r.itemCode !== "")
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const [materialForm, setMaterialForm] = useState({
+    materialName: "",
+    boxWeightG: "",
+    unitWeightG: "",
+    inventoryItemCode: "",
+  });
   const [editingMaterialId, setEditingMaterialId] = useState<string | null>(null);
+  const [ecountItemCodeOptions, setEcountItemCodeOptions] = useState<{ itemCode: string; itemName: string }[]>([]);
 
   const [bomBaseName, setBomBaseName] = useState("");
   const [bomVariant, setBomVariant] = useState("");
@@ -395,7 +427,7 @@ export default function AdminPage() {
   };
 
   const clearMaterialForm = () => {
-    setMaterialForm({ materialName: "", boxWeightG: "", unitWeightG: "" });
+    setMaterialForm({ materialName: "", boxWeightG: "", unitWeightG: "", inventoryItemCode: "" });
     setEditingMaterialId(null);
   };
 
@@ -410,11 +442,21 @@ export default function AdminPage() {
     }
     try {
       if (editingMaterialId) {
-        await updateMaterial(editingMaterialId, { materialName: name, boxWeightG: box, unitWeightG: unit });
+        await updateMaterial(editingMaterialId, {
+          materialName: name,
+          boxWeightG: box,
+          unitWeightG: unit,
+          inventoryItemCode: materialForm.inventoryItemCode.trim() || undefined,
+        });
         clearMaterialForm();
       } else {
-        await addMaterial({ materialName: name, boxWeightG: box, unitWeightG: unit });
-        setMaterialForm({ materialName: "", boxWeightG: "", unitWeightG: "" });
+        await addMaterial({
+          materialName: name,
+          boxWeightG: box,
+          unitWeightG: unit,
+          inventoryItemCode: materialForm.inventoryItemCode.trim() || undefined,
+        });
+        setMaterialForm({ materialName: "", boxWeightG: "", unitWeightG: "", inventoryItemCode: "" });
       }
     } catch {
       alert("저장에 실패했습니다. 다시 시도해 주세요.");
@@ -427,6 +469,7 @@ export default function AdminPage() {
       materialName: m.materialName,
       boxWeightG: m.boxWeightG > 0 ? String(m.boxWeightG) : "",
       unitWeightG: m.unitWeightG > 0 ? String(m.unitWeightG) : "",
+      inventoryItemCode: m.inventoryItemCode ?? "",
     });
   };
 
@@ -711,6 +754,24 @@ export default function AdminPage() {
                     className="w-full px-3 py-2 bg-space-900 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500/50"
                   />
                 </div>
+                <div className="w-48">
+                  <label className="block text-sm font-medium text-slate-300 mb-1">재고연동 코드(item_code)</label>
+                  <input
+                    type="text"
+                    list="ecount-item-code-options"
+                    value={materialForm.inventoryItemCode}
+                    onChange={(e) => setMaterialForm((p) => ({ ...p, inventoryItemCode: e.target.value }))}
+                    placeholder="예: yy2001"
+                    className="w-full px-3 py-2 bg-space-900 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500/50"
+                  />
+                  <datalist id="ecount-item-code-options">
+                    {ecountItemCodeOptions.map((o) => (
+                      <option key={o.itemCode} value={o.itemCode}>
+                        {o.itemName}
+                      </option>
+                    ))}
+                  </datalist>
+                </div>
                 <div className="flex gap-2">
                   {editingMaterialId && (
                     <button type="button" onClick={clearMaterialForm} className="px-4 py-2.5 rounded-lg border border-slate-600 text-slate-300 font-medium hover:bg-slate-700/50">
@@ -739,6 +800,7 @@ export default function AdminPage() {
                   <thead>
                     <tr className="bg-space-700/80 border-b border-slate-600">
                       <th className="px-4 py-3 text-left text-sm font-semibold text-slate-200">원료명</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-slate-200">재고연동 코드</th>
                       <th className="px-4 py-3 text-right text-sm font-semibold text-slate-200">1박스 중량(g)</th>
                       <th className="px-4 py-3 text-right text-sm font-semibold text-slate-200">1개 중량(g)</th>
                       <th className="px-4 py-3 text-center text-sm font-semibold text-slate-200">비고</th>
@@ -749,6 +811,7 @@ export default function AdminPage() {
                     {materials.map((row) => (
                       <tr key={row.id} className="border-b border-slate-700 hover:bg-space-700/40">
                         <td className="px-4 py-3 font-medium text-slate-100">{row.materialName}</td>
+                        <td className="px-4 py-3 text-slate-300 font-mono text-sm">{row.inventoryItemCode ?? "-"}</td>
                         <td className="px-4 py-3 text-right tabular-nums text-slate-300">
                           {row.boxWeightG === 0 ? "-" : row.boxWeightG.toLocaleString()}
                         </td>

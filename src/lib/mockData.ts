@@ -7,6 +7,8 @@ export interface Material {
   materialName: string;
   boxWeightG: number;
   unitWeightG: number;
+  /** ecount_inventory_current.item_code 와 매핑 (여러 원료명이 같은 코드 가능) */
+  inventoryItemCode?: string;
 }
 
 export interface BomRow {
