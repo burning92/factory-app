@@ -27,7 +27,7 @@ export default function MobileTabBar() {
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex items-center justify-around border-t border-slate-700/60 bg-space-900/98 backdrop-blur"
+      className="md:hidden print:hidden fixed bottom-0 left-0 right-0 z-30 flex items-center justify-around border-t border-slate-700/60 bg-space-900/98 backdrop-blur"
       style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom, 0px))" }}
       role="navigation"
       aria-label="하단 메뉴"
