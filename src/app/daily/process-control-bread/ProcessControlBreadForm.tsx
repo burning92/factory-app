@@ -52,6 +52,13 @@ function parseOptionalNum(s: string): number | null {
   return n;
 }
 
+function syncDateToDatetimeLocal(existing: string, date: string): string {
+  if (!date) return existing;
+  const timePart = existing.includes("T") ? existing.slice(11, 16) : "00:00";
+  const safeTime = timePart.length === 5 ? timePart : "00:00";
+  return `${date}T${safeTime}`;
+}
+
 export function ProcessControlBreadForm({ mode, editLogId }: Props) {
   const router = useRouter();
   const { user, profile, viewOrganizationCode } = useAuth();
@@ -92,6 +99,7 @@ export function ProcessControlBreadForm({ mode, editLogId }: Props) {
   const [currentLogStatus, setCurrentLogStatus] = useState<LogStatus | null>(null);
   const [loadDone, setLoadDone] = useState(mode === "new");
   const [deviationManuallyEdited, setDeviationManuallyEdited] = useState(false);
+  const [correctiveDatetimeManuallyEdited, setCorrectiveDatetimeManuallyEdited] = useState(false);
 
   const fermentationStartTouchedRef = useRef(false);
   const fermentationEndTouchedRef = useRef(false);
@@ -109,8 +117,18 @@ export function ProcessControlBreadForm({ mode, editLogId }: Props) {
     if (!hasAnyIssue) {
       setCorrective((c) => ({ ...c, deviation: "" }));
       setDeviationManuallyEdited(false);
+      setCorrectiveDatetimeManuallyEdited(false);
     }
   }, [hasAnyIssue, deviationManuallyEdited, autoDeviationText]);
+
+  useEffect(() => {
+    if (!hasAnyIssue || !inspectionDate || correctiveDatetimeManuallyEdited) return;
+    setCorrective((c) => {
+      const next = syncDateToDatetimeLocal(c.datetime, inspectionDate);
+      if (next === c.datetime) return c;
+      return { ...c, datetime: next };
+    });
+  }, [hasAnyIssue, inspectionDate, correctiveDatetimeManuallyEdited]);
 
   const isApproved = currentLogStatus === "approved";
   const isLockedForWorker = isApproved && !isManager;
@@ -643,7 +661,7 @@ export function ProcessControlBreadForm({ mode, editLogId }: Props) {
           <div className="grid gap-4">
             <div>
               <label className="block text-xs text-slate-500 mb-1">일시</label>
-              <input type="datetime-local" value={corrective.datetime} onChange={(e) => setCorrective((c) => ({ ...c, datetime: e.target.value }))} disabled={!canEdit} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm" />
+              <input type="datetime-local" value={corrective.datetime} onChange={(e) => { setCorrectiveDatetimeManuallyEdited(true); setCorrective((c) => ({ ...c, datetime: e.target.value })); }} disabled={!canEdit} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm" />
             </div>
             <div>
               <label className="block text-xs text-slate-500 mb-1">이탈내용 (자동 생성, 필요 시 수정)</label>
