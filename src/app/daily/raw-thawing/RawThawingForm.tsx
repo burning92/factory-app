@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
+import DateWheelPicker from "@/components/DateWheelPicker";
 import {
   buildRawThawingAutoDeviationText,
   calcTotalWeightG,
@@ -52,6 +53,46 @@ function syncDateToDatetimeLocal(existing: string, date: string): string {
   return `${date}T${safeTime}`;
 }
 
+/** LOT 직접입력: DateWheelPicker(YYYY-MM-DD) ↔ 저장용 YYYY.MM.DD */
+function isoToDotLot(iso: string): string {
+  const m = iso.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return "";
+  return `${m[1]}.${m[2]}.${m[3]}`;
+}
+
+function parseManualLotToIso(raw: string): string {
+  const t = raw.trim();
+  if (!t) return "";
+  const iso = t.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) return t;
+  const dot = t.match(/^(\d{4})\.(\d{1,2})\.(\d{1,2})$/);
+  if (dot) return `${dot[1]}-${dot[2].padStart(2, "0")}-${dot[3].padStart(2, "0")}`;
+  return "";
+}
+
+function parseInitialLocalDatetime(s: unknown): { date: string; time: string } {
+  if (s == null || s === "") return { date: "", time: "" };
+  const raw = String(s).trim();
+  if (!raw) return { date: "", time: "" };
+  const sliced = raw.includes("T") ? raw.slice(0, 16) : `${raw.slice(0, 10)}T00:00`;
+  const [datePart, timePart] = sliced.split("T");
+  const date = datePart?.slice(0, 10) ?? "";
+  const time = (timePart ?? "00:00").slice(0, 5);
+  return { date, time };
+}
+
+function joinLocalDatetime(date: string, time: string): string {
+  const d = date.trim();
+  if (!d) return "";
+  const t = time.trim();
+  const safeTime = /^\d{2}:\d{2}$/.test(t) ? t : "00:00";
+  return `${d}T${safeTime}`;
+}
+
+function formatIntWithComma(n: number): string {
+  return Math.round(n).toLocaleString("ko-KR");
+}
+
 export function RawThawingForm({ mode, editLogId }: Props) {
   const router = useRouter();
   const { user, profile, viewOrganizationCode } = useAuth();
@@ -69,14 +110,17 @@ export function RawThawingForm({ mode, editLogId }: Props) {
 
   const [selectedItemCode, setSelectedItemCode] = useState("");
   const [selectedLot, setSelectedLot] = useState("");
-  const [manualLot, setManualLot] = useState("");
+  /** LOT 직접입력: YYYY-MM-DD (DateWheelPicker), 저장 시 YYYY.MM.DD 로 변환 */
+  const [manualLotIso, setManualLotIso] = useState("");
 
   const [boxQty, setBoxQty] = useState("");
   const [unitQty, setUnitQty] = useState("");
   const [remainderG, setRemainderG] = useState("");
 
-  const [thawingStartAt, setThawingStartAt] = useState("");
-  const [thawingEndAt, setThawingEndAt] = useState("");
+  const [thawingStartDate, setThawingStartDate] = useState("");
+  const [thawingStartTime, setThawingStartTime] = useState("");
+  const [thawingEndDate, setThawingEndDate] = useState("");
+  const [thawingEndTime, setThawingEndTime] = useState("");
   const [thawingRoomTempC, setThawingRoomTempC] = useState("");
   const [odorResult, setOdorResult] = useState<ThawingResult | "">("");
   const [colorResult, setColorResult] = useState<ThawingResult | "">("");
@@ -258,12 +302,20 @@ export function RawThawingForm({ mode, editLogId }: Props) {
       setPlannedUseDate(String(log.planned_use_date ?? todayStr()));
       setSelectedItemCode(String(log.item_code ?? ""));
       setSelectedLot(String(log.lot_selected ?? ""));
-      setManualLot(String(log.lot_manual ?? ""));
+      setManualLotIso(parseManualLotToIso(String(log.lot_manual ?? "")));
       setBoxQty(log.box_qty != null ? String(log.box_qty) : "");
       setUnitQty(log.unit_qty != null ? String(log.unit_qty) : "");
       setRemainderG(log.remainder_g != null ? String(log.remainder_g) : "");
-      setThawingStartAt(log.thawing_start_at ? String(log.thawing_start_at).slice(0, 16) : "");
-      setThawingEndAt(log.thawing_end_at ? String(log.thawing_end_at).slice(0, 16) : "");
+      {
+        const start = parseInitialLocalDatetime(log.thawing_start_at);
+        setThawingStartDate(start.date);
+        setThawingStartTime(start.time);
+      }
+      {
+        const end = parseInitialLocalDatetime(log.thawing_end_at);
+        setThawingEndDate(end.date);
+        setThawingEndTime(end.time);
+      }
       setThawingRoomTempC(log.thawing_room_temp_c != null ? String(log.thawing_room_temp_c) : "");
       setOdorResult((log.sensory_odor_result as ThawingResult | null) ?? "");
       setColorResult((log.sensory_color_result as ThawingResult | null) ?? "");
@@ -302,7 +354,8 @@ export function RawThawingForm({ mode, editLogId }: Props) {
   }, [hasAnyIssue, corrective]);
 
   const baseHeaderFields = useCallback(() => {
-    const chosenLot = manualLot.trim() || selectedLot.trim();
+    const manualLotStored = manualLotIso ? isoToDotLot(manualLotIso) : "";
+    const chosenLot = manualLotStored || selectedLot.trim();
     return {
       organization_code: orgCode,
       thawing_date: thawingDate.trim(),
@@ -312,15 +365,15 @@ export function RawThawingForm({ mode, editLogId }: Props) {
       material_name: selectedMaterial?.materialName ?? null,
       lot_no: chosenLot || null,
       lot_selected: selectedLot.trim() || null,
-      lot_manual: manualLot.trim() || null,
+      lot_manual: manualLotStored || null,
       box_weight_g: selectedMaterial?.boxWeightG ?? null,
       unit_weight_g: selectedMaterial?.unitWeightG ?? null,
       box_qty: parseOptionalNum(boxQty),
       unit_qty: parseOptionalNum(unitQty),
       remainder_g: parseOptionalNum(remainderG),
       total_weight_g: totalWeightG,
-      thawing_start_at: thawingStartAt || null,
-      thawing_end_at: thawingEndAt || null,
+      thawing_start_at: joinLocalDatetime(thawingStartDate, thawingStartTime) || null,
+      thawing_end_at: joinLocalDatetime(thawingEndDate, thawingEndTime) || null,
       thawing_room_temp_c: parseOptionalNum(thawingRoomTempC),
       sensory_odor_result: odorResult || null,
       sensory_color_result: colorResult || null,
@@ -335,13 +388,15 @@ export function RawThawingForm({ mode, editLogId }: Props) {
     authorName,
     selectedMaterial,
     selectedLot,
-    manualLot,
+    manualLotIso,
     boxQty,
     unitQty,
     remainderG,
     totalWeightG,
-    thawingStartAt,
-    thawingEndAt,
+    thawingStartDate,
+    thawingStartTime,
+    thawingEndDate,
+    thawingEndTime,
     thawingRoomTempC,
     odorResult,
     colorResult,
@@ -483,13 +538,30 @@ export function RawThawingForm({ mode, editLogId }: Props) {
             <select value={selectedLot} onChange={(e) => setSelectedLot(e.target.value)} disabled={!canEdit || !selectedItemCode} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 disabled:opacity-60">
               <option value="">{selectedItemCode ? "LOT 선택" : "원료를 먼저 선택하세요"}</option>
               {lotOptions.map((l) => (
-                <option key={l.lotNo} value={l.lotNo}>{l.lotNo} (재고 {l.qty})</option>
+                <option key={l.lotNo} value={l.lotNo}>
+                  {l.lotNo} (재고 {l.qty.toLocaleString("ko-KR")})
+                </option>
               ))}
             </select>
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">LOT 직접입력</label>
-            <input type="text" value={manualLot} onChange={(e) => setManualLot(e.target.value)} disabled={!canEdit} placeholder="목록에 없으면 직접 입력" className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 disabled:opacity-60" />
+            <label className="block text-xs text-slate-500 mb-1">LOT 직접입력 (소비기한 날짜)</label>
+            <DateWheelPicker
+              value={manualLotIso}
+              onChange={(v) => setManualLotIso(v)}
+              disabled={!canEdit}
+              className="w-full px-3 py-2 rounded-lg"
+              placeholder="목록에 없으면 날짜 선택"
+            />
+            {manualLotIso && canEdit && (
+              <button
+                type="button"
+                onClick={() => setManualLotIso("")}
+                className="mt-1.5 text-xs text-slate-400 hover:text-slate-200 underline"
+              >
+                직접입력 날짜 지우기
+              </button>
+            )}
           </div>
         </div>
       </section>
@@ -522,20 +594,52 @@ export function RawThawingForm({ mode, editLogId }: Props) {
           1박스: {selectedMaterial?.boxWeightG ?? 0}g · 1개: {selectedMaterial?.unitWeightG ?? 0}g
         </p>
         <div className="mt-2 px-3 py-2 rounded-lg border border-cyan-700/40 bg-cyan-900/20 text-cyan-200 text-sm">
-          총중량(g): {totalWeightG.toFixed(1)}
+          총중량(g): {formatIntWithComma(totalWeightG)}
         </div>
       </section>
 
       <section className="rounded-xl border border-slate-700/60 bg-slate-800/50 p-4 mb-6">
         <h2 className="text-sm font-semibold text-cyan-300 mb-3">해동 정보</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">해동 시작일시</label>
-            <input type="datetime-local" value={thawingStartAt} onChange={(e) => setThawingStartAt(e.target.value)} disabled={!canEdit} className="w-full px-3 py-2 rounded-lg border border-slate-600 bg-slate-800 text-slate-100 disabled:opacity-60" />
+          <div className="space-y-2">
+            <label className="block text-xs text-slate-500 mb-1">해동 시작</label>
+            <DateWheelPicker
+              value={thawingStartDate}
+              onChange={(v) => setThawingStartDate(v)}
+              disabled={!canEdit}
+              className="w-full px-3 py-2 rounded-lg"
+              placeholder="시작 날짜"
+            />
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-slate-500 shrink-0 w-10">시간</label>
+              <input
+                type="time"
+                value={thawingStartTime}
+                onChange={(e) => setThawingStartTime(e.target.value)}
+                disabled={!canEdit}
+                className="flex-1 min-w-0 min-h-[44px] px-3 py-2 rounded-lg border border-slate-600 bg-slate-800 text-slate-100 disabled:opacity-60"
+              />
+            </div>
           </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">해동 종료일시</label>
-            <input type="datetime-local" value={thawingEndAt} onChange={(e) => setThawingEndAt(e.target.value)} disabled={!canEdit} className="w-full px-3 py-2 rounded-lg border border-slate-600 bg-slate-800 text-slate-100 disabled:opacity-60" />
+          <div className="space-y-2">
+            <label className="block text-xs text-slate-500 mb-1">해동 종료</label>
+            <DateWheelPicker
+              value={thawingEndDate}
+              onChange={(v) => setThawingEndDate(v)}
+              disabled={!canEdit}
+              className="w-full px-3 py-2 rounded-lg"
+              placeholder="종료 날짜"
+            />
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-slate-500 shrink-0 w-10">시간</label>
+              <input
+                type="time"
+                value={thawingEndTime}
+                onChange={(e) => setThawingEndTime(e.target.value)}
+                disabled={!canEdit}
+                className="flex-1 min-w-0 min-h-[44px] px-3 py-2 rounded-lg border border-slate-600 bg-slate-800 text-slate-100 disabled:opacity-60"
+              />
+            </div>
           </div>
         </div>
         <div className="mb-4">
