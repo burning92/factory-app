@@ -25,6 +25,13 @@ function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function syncDateToDatetimeLocal(existing: string, date: string): string {
+  if (!date) return existing;
+  const timePart = existing.includes("T") ? existing.slice(11, 16) : "00:00";
+  const safeTime = timePart.length === 5 ? timePart : "00:00";
+  return `${date}T${safeTime}`;
+}
+
 function buildAutoDeviationText(results: HygieneFormResults): string {
   const lines: string[] = [];
   WORKER_HYGIENE_CHECKLIST.forEach((cat, ci) => {
@@ -56,6 +63,7 @@ export function WorkerHygieneForm({ mode, editLogId }: Props) {
   const [currentLogStatus, setCurrentLogStatus] = useState<LogStatus | null>(null);
   const [loadDone, setLoadDone] = useState(mode === "new");
   const [deviationManuallyEdited, setDeviationManuallyEdited] = useState(false);
+  const [correctiveDatetimeManuallyEdited, setCorrectiveDatetimeManuallyEdited] = useState(false);
 
   const orgCode = viewOrganizationCode ?? "100";
   const authorName = (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
@@ -72,8 +80,18 @@ export function WorkerHygieneForm({ mode, editLogId }: Props) {
     if (!hasAnyX) {
       setCorrective((c) => ({ ...c, deviation: "" }));
       setDeviationManuallyEdited(false);
+      setCorrectiveDatetimeManuallyEdited(false);
     }
   }, [hasAnyX, deviationManuallyEdited, autoDeviationText]);
+
+  useEffect(() => {
+    if (!hasAnyX || !inspectionDate || correctiveDatetimeManuallyEdited) return;
+    setCorrective((c) => {
+      const next = syncDateToDatetimeLocal(c.datetime, inspectionDate);
+      if (next === c.datetime) return c;
+      return { ...c, datetime: next };
+    });
+  }, [hasAnyX, inspectionDate, correctiveDatetimeManuallyEdited]);
 
   const isApproved = currentLogStatus === "approved";
   const isLockedForWorker = isApproved && !isManager;
@@ -534,7 +552,7 @@ export function WorkerHygieneForm({ mode, editLogId }: Props) {
               <input
                 type="datetime-local"
                 value={corrective.datetime}
-                onChange={(e) => setCorrective((c) => ({ ...c, datetime: e.target.value }))}
+                onChange={(e) => { setCorrectiveDatetimeManuallyEdited(true); setCorrective((c) => ({ ...c, datetime: e.target.value })); }}
                 disabled={!canEdit}
                 className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
               />

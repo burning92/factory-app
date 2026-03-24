@@ -27,6 +27,13 @@ function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function syncDateToDatetimeLocal(existing: string, date: string): string {
+  if (!date) return existing;
+  const timePart = existing.includes("T") ? existing.slice(11, 16) : "00:00";
+  const safeTime = timePart.length === 5 ? timePart : "00:00";
+  return `${date}T${safeTime}`;
+}
+
 type Props = {
   mode: "new" | "edit";
   editLogId?: string;
@@ -43,6 +50,7 @@ export function HygieneForm({ mode, editLogId }: Props) {
   const [currentLogId, setCurrentLogId] = useState<string | null>(null);
   const [currentLogStatus, setCurrentLogStatus] = useState<HygieneLogStatus | null>(null);
   const [loadDone, setLoadDone] = useState(mode === "new");
+  const [correctiveDatetimeManuallyEdited, setCorrectiveDatetimeManuallyEdited] = useState(false);
 
   const orgCode = viewOrganizationCode ?? "100";
   const authorName = (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
@@ -55,6 +63,16 @@ export function HygieneForm({ mode, editLogId }: Props) {
   const canSubmit =
     !isLockedForWorker &&
     (currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus === null);
+
+  useEffect(() => {
+    if (!hasAnyX) setCorrectiveDatetimeManuallyEdited(false);
+    if (!hasAnyX || !inspectionDate || correctiveDatetimeManuallyEdited) return;
+    setCorrective((c) => {
+      const next = syncDateToDatetimeLocal(c.datetime, inspectionDate);
+      if (next === c.datetime) return c;
+      return { ...c, datetime: next };
+    });
+  }, [hasAnyX, inspectionDate, correctiveDatetimeManuallyEdited]);
 
   const setItemResult = useCallback((key: string, value: HygieneItemResult) => {
     setResults((prev) => ({ ...prev, [key]: value }));
@@ -462,7 +480,7 @@ export function HygieneForm({ mode, editLogId }: Props) {
             </div>
             <div>
               <label className="block text-xs text-slate-500 mb-1">일시</label>
-              <input type="datetime-local" value={corrective.datetime} onChange={(e) => setCorrective((c) => ({ ...c, datetime: e.target.value }))} disabled={!canEdit} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm" />
+              <input type="datetime-local" value={corrective.datetime} onChange={(e) => { setCorrectiveDatetimeManuallyEdited(true); setCorrective((c) => ({ ...c, datetime: e.target.value })); }} disabled={!canEdit} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm" />
             </div>
             <div>
               <label className="block text-xs text-slate-500 mb-1">이탈내용</label>
