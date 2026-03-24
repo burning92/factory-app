@@ -6,6 +6,7 @@ import DateWheelPicker from "@/components/DateWheelPicker";
 import { getAppRecentValue, setAppRecentValue } from "@/lib/appRecentValues";
 import { createSafeId } from "@/lib/createSafeId";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabase";
 
 /** 출고 입력 전용 최근 작성자명 (1차 마감과 분리). Supabase 우선, localStorage는 보조 fallback */
 const OUTBOUND_LAST_AUTHOR_KEY = "outbound-last-author-name";
@@ -174,13 +175,48 @@ function sumPendingBoxBagG(
 
 interface OutboundEntryRow {
   id: string;
-  expiryDate: string;
+  /** LOT 직접입력(DateWheelPicker), YYYY-MM-DD */
+  manualLotIso: string;
+  /** 재고 드롭다운에서 선택한 LOT → YYYY-MM-DD */
+  selectedLotIso: string;
   boxQty: string;
   bagQty: string;
   remainderG: string;
 }
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
+
+/** 재고 lot_no → YYYY-MM-DD (FIFO/그룹핑과 동일 형식) */
+function parseLotNoToIso(lotNo: string): string {
+  const t = lotNo.trim();
+  if (!t) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  const m = t.match(/^(\d{4})[\.\-](\d{1,2})[\.\-](\d{1,2})$/);
+  if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+  return "";
+}
+
+function normalizeStoredExpiryToIso(s: string): string {
+  const t = String(s ?? "").trim();
+  if (!t) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  return parseLotNoToIso(t);
+}
+
+function resolveOutboundExpiry(input: {
+  manualLotIso: string;
+  selectedLotIso: string;
+  fallbackIso: string;
+}): string {
+  const m = input.manualLotIso.trim();
+  if (m) return m;
+  const s = input.selectedLotIso.trim();
+  if (s) return s;
+  const f = input.fallbackIso.trim();
+  return f || todayStr();
+}
+
+type EcountLotRow = { lot_no: string; qty: number | null; display_item_name: string | null };
 
 function OutboundModal({
   materialName,
@@ -204,12 +240,19 @@ function OutboundModal({
     quantityType === "g_only" || quantityType === "ea_only" || quantityType === "box_ea" ? quantityType : "g_only";
   const safeEntries = Array.isArray(initialEntries) ? initialEntries : [];
 
+  const [inventoryRows, setInventoryRows] = useState<EcountLotRow[]>([]);
+  const [inventoryLoading, setInventoryLoading] = useState(false);
+  const [inventoryHint, setInventoryHint] = useState<string | null>(null);
+
   const [rows, setRows] = useState<OutboundEntryRow[]>(() => {
     try {
       if (safeEntries.length > 0) {
         return safeEntries.map((e) => ({
           id: createSafeId(),
-          expiryDate: (e && typeof e.expiryDate === "string" ? e.expiryDate : "") || safeExpiry,
+          manualLotIso: normalizeStoredExpiryToIso(
+            e && typeof e.expiryDate === "string" ? e.expiryDate : ""
+          ),
+          selectedLotIso: "",
           boxQty: e && typeof e.boxQty === "number" ? String(e.boxQty) : "0",
           bagQty: e && typeof e.bagQty === "number" ? String(e.bagQty) : "0",
           remainderG: e && typeof e.remainderG === "number" ? String(e.remainderG) : "0",
@@ -221,7 +264,8 @@ function OutboundModal({
     return [
       {
         id: createSafeId(),
-        expiryDate: safeExpiry,
+        manualLotIso: "",
+        selectedLotIso: "",
         boxQty: "",
         bagQty: "",
         remainderG: "",
@@ -229,33 +273,91 @@ function OutboundModal({
     ];
   });
 
+  useEffect(() => {
+    let cancelled = false;
+    const name = String(materialName ?? "").trim();
+    if (!name) {
+      setInventoryRows([]);
+      setInventoryHint(null);
+      return;
+    }
+    (async () => {
+      setInventoryLoading(true);
+      setInventoryHint(null);
+      const { data, error } = await supabase
+        .from("ecount_inventory_current")
+        .select("display_item_name, lot_no, qty")
+        .eq("inventory_type", "원재료")
+        .order("lot_no", { ascending: true });
+      if (cancelled) return;
+      if (error) {
+        setInventoryRows([]);
+        setInventoryHint("재고 LOT 목록을 불러오지 못했습니다.");
+      } else {
+        const raw = (data ?? []) as EcountLotRow[];
+        const filtered = raw.filter((r) => (r.display_item_name ?? "").trim() === name);
+        setInventoryRows(filtered);
+        if (filtered.length === 0) setInventoryHint("이 원료명과 일치하는 재고 LOT가 없습니다. 직접입력을 사용하세요.");
+      }
+      setInventoryLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [materialName]);
+
+  const lotOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: { lotNo: string; qty: number; iso: string }[] = [];
+    for (const r of inventoryRows) {
+      const lotNo = String(r.lot_no ?? "").trim();
+      const iso = parseLotNoToIso(lotNo);
+      if (!iso || seen.has(iso)) continue;
+      seen.add(iso);
+      out.push({ lotNo, qty: Number(r.qty) || 0, iso });
+    }
+    return out.sort((a, b) => a.iso.localeCompare(b.iso));
+  }, [inventoryRows]);
+
+  useEffect(() => {
+    const valid = new Set(lotOptions.map((o) => o.iso));
+    setRows((prev) =>
+      prev.map((r) => (r.selectedLotIso && !valid.has(r.selectedLotIso) ? { ...r, selectedLotIso: "" } : r))
+    );
+  }, [lotOptions]);
+
   const addRow = useCallback(() => {
     setRows((prev) => [
       ...prev,
-      { id: createSafeId(), expiryDate: safeExpiry, boxQty: "", bagQty: "", remainderG: "" },
+      { id: createSafeId(), manualLotIso: "", selectedLotIso: "", boxQty: "", bagQty: "", remainderG: "" },
     ]);
-  }, [safeExpiry]);
+  }, []);
 
   const updateRow = useCallback((id: string, field: keyof OutboundEntryRow, value: string) => {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
   }, []);
 
   const handleSave = useCallback(() => {
-    const entries = rows
-      .filter((r) => r && String(r.expiryDate ?? "").trim() !== "")
-      .map((r) => ({
-        expiryDate: String(r.expiryDate ?? "").trim(),
+    const entries = rows.map((r) => {
+      const expiryDate = resolveOutboundExpiry({
+        manualLotIso: r.manualLotIso,
+        selectedLotIso: r.selectedLotIso,
+        fallbackIso: safeExpiry,
+      });
+      return {
+        expiryDate,
         boxQty: safeType === "box_ea" ? (parseInt(String(r.boxQty ?? ""), 10) || 0) : 0,
         bagQty: safeType === "g_only" ? 0 : (parseInt(String(r.bagQty ?? ""), 10) || 0),
         remainderG: parseInt(String(r.remainderG ?? ""), 10) || 0,
-      }));
+      };
+    });
     if (entries.length) {
       onSave(entries);
       onClose();
     } else {
-      alert("소비기한(날짜)을 입력해 주세요.");
+      alert("출고 라인이 없습니다.");
     }
-  }, [rows, safeType, onSave, onClose]);
+  }, [rows, safeType, safeExpiry, onSave, onClose]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
@@ -268,6 +370,9 @@ function OutboundModal({
           <p className="text-sm text-slate-400 mt-1">필요 수량: {requiredText}</p>
         </div>
         <div className="p-5 overflow-y-auto flex-1">
+          {inventoryHint && (
+            <p className="mb-3 text-xs text-slate-500">{inventoryHint}</p>
+          )}
           <div className="space-y-4">
             {(Array.isArray(rows) ? rows : []).map((row, index) => (
               <div key={row.id} className="p-3 rounded-xl border border-slate-600 bg-space-900/80 space-y-2">
@@ -297,10 +402,62 @@ function OutboundModal({
                     <label className="block text-xs text-slate-400 mb-0.5">{safeType === "g_only" ? "출고 잔량(g)" : "잔량(g)"}</label>
                     <input type="number" min={0} inputMode="numeric" value={row.remainderG} onChange={(e) => updateRow(row.id, "remainderG", e.target.value)} placeholder={safeType === "g_only" ? "g 입력" : "0"} className="w-full px-2 py-1.5 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100 focus:ring-2 focus:ring-cyan-500/50" />
                   </div>
+                </div>
+                <div className="space-y-2 pt-1 border-t border-slate-700/80">
+                  <p className="text-xs text-slate-500">LOT (소비기한)</p>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-0.5">소비기한(날짜)</label>
-                    <DateWheelPicker value={row.expiryDate} onChange={(v) => updateRow(row.id, "expiryDate", v)} className="w-full px-2 py-1.5 text-sm focus:ring-2 focus:ring-cyan-500/50" placeholder="날짜 선택" />
+                    <label className="block text-xs text-slate-400 mb-0.5">LOT 선택 (재고 연동)</label>
+                    <select
+                      value={row.selectedLotIso}
+                      onChange={(e) => updateRow(row.id, "selectedLotIso", e.target.value)}
+                      disabled={inventoryLoading || !String(materialName ?? "").trim()}
+                      className="w-full px-2 py-1.5 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100 focus:ring-2 focus:ring-cyan-500/50 disabled:opacity-60"
+                    >
+                      <option value="">
+                        {!String(materialName ?? "").trim()
+                          ? "원료명 없음"
+                          : inventoryLoading
+                            ? "불러오는 중…"
+                            : "LOT 선택 (선택사항)"}
+                      </option>
+                      {lotOptions.map((l) => (
+                        <option key={l.iso} value={l.iso}>
+                          {l.lotNo} (재고 {l.qty.toLocaleString("ko-KR")})
+                        </option>
+                      ))}
+                    </select>
                   </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-0.5">LOT 직접입력 (소비기한)</label>
+                    <DateWheelPicker
+                      value={row.manualLotIso}
+                      onChange={(v) => updateRow(row.id, "manualLotIso", v)}
+                      className="w-full px-2 py-1.5 text-sm focus:ring-2 focus:ring-cyan-500/50"
+                      placeholder="목록에 없으면 날짜 선택"
+                    />
+                    {row.manualLotIso && (
+                      <button
+                        type="button"
+                        onClick={() => updateRow(row.id, "manualLotIso", "")}
+                        className="mt-1 text-xs text-slate-500 hover:text-slate-300 underline"
+                      >
+                        직접입력 지우기
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-xs text-cyan-400/90">
+                    최종 적용 소비기한:{" "}
+                    <span className="font-medium text-cyan-300">
+                      {resolveOutboundExpiry({
+                        manualLotIso: row.manualLotIso,
+                        selectedLotIso: row.selectedLotIso,
+                        fallbackIso: safeExpiry,
+                      })}
+                    </span>
+                    <span className="text-slate-500 block mt-0.5">
+                      직접입력 → LOT 선택 → 마지막 입력일 순으로 적용됩니다.
+                    </span>
+                  </p>
                 </div>
               </div>
             ))}
