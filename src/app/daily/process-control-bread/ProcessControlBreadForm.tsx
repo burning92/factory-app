@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { parseProductLabel } from "@/features/production/history/productLabel";
 import {
   PROCESS_CONTROL_BREAD_STAGES,
   buildProcessControlBreadAutoDeviationText,
@@ -92,7 +93,6 @@ export function ProcessControlBreadForm({ mode, editLogId }: Props) {
   const [loadDone, setLoadDone] = useState(mode === "new");
   const [deviationManuallyEdited, setDeviationManuallyEdited] = useState(false);
 
-  const productTouchedRef = useRef(false);
   const fermentationStartTouchedRef = useRef(false);
   const fermentationEndTouchedRef = useRef(false);
 
@@ -226,20 +226,22 @@ export function ProcessControlBreadForm({ mode, editLogId }: Props) {
         if (productErr) {
           setProductOptions([]);
           setProductHint("생산 제품 목록을 불러오지 못했습니다.");
+          setProductName("");
         } else {
           const seen = new Set<string>();
           const names: string[] = [];
           (productRows ?? []).forEach((row: { product_name: string | null }) => {
             const n = (row.product_name ?? "").trim();
-            if (!n || seen.has(n)) return;
-            seen.add(n);
-            names.push(n);
+            if (!n) return;
+            const parsed = parseProductLabel(n);
+            const base = parsed.baseProductName.trim() || n;
+            if (seen.has(base)) return;
+            seen.add(base);
+            names.push(base);
           });
           setProductOptions(names);
           setProductHint(names.length === 0 ? "해당 점검일자와 일치하는 생산 제품이 없습니다." : null);
-          if (mode === "new" && !productTouchedRef.current) {
-            setProductName((prev) => (prev.trim() ? prev : names[0] ?? ""));
-          }
+          setProductName(names.join(", "));
         }
         setProductOptionsLoading(false);
       }
@@ -535,24 +537,17 @@ export function ProcessControlBreadForm({ mode, editLogId }: Props) {
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-400 mb-1">제품명</label>
-          <select
+          <label className="block text-sm font-medium text-slate-400 mb-1">제품명 (점검일자 생산 품목)</label>
+          <textarea
             value={productName}
-            disabled={!canEdit || productOptionsLoading}
-            onChange={(e) => {
-              productTouchedRef.current = true;
-              setProductName(e.target.value);
-            }}
-            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 disabled:opacity-60"
-          >
-            <option value="">선택 안 함</option>
-            {productOptions.map((name) => (
-              <option key={name} value={name}>{name}</option>
-            ))}
-            {productName && !productOptions.includes(productName) && (
-              <option value={productName}>{productName}</option>
-            )}
-          </select>
+            readOnly
+            rows={2}
+            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm resize-none"
+          />
+          {!productOptionsLoading && productOptions.length > 0 && (
+            <p className="text-xs text-slate-500 mt-1">{productOptions.length}개 품목 자동 반영</p>
+          )}
+          {productOptionsLoading && <p className="text-xs text-slate-500 mt-1">생산 제품 목록을 불러오는 중…</p>}
           {productHint && <p className="text-xs text-slate-500 mt-1">{productHint}</p>}
         </div>
       </div>
