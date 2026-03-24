@@ -293,6 +293,14 @@ interface RecipeRow {
   basis: "완제품" | "도우";
 }
 
+type EditingMaterialState = {
+  id: string;
+  materialName: string;
+  boxWeightG: string;
+  unitWeightG: string;
+  inventoryItemCode: string;
+};
+
 export default function AdminPage() {
   const {
     materials,
@@ -355,7 +363,7 @@ export default function AdminPage() {
     unitWeightG: "",
     inventoryItemCode: "",
   });
-  const [editingMaterialId, setEditingMaterialId] = useState<string | null>(null);
+  const [editingMaterial, setEditingMaterial] = useState<EditingMaterialState | null>(null);
   const [ecountItemCodeOptions, setEcountItemCodeOptions] = useState<{ itemCode: string; itemName: string }[]>([]);
 
   const [bomBaseName, setBomBaseName] = useState("");
@@ -428,10 +436,9 @@ export default function AdminPage() {
 
   const clearMaterialForm = () => {
     setMaterialForm({ materialName: "", boxWeightG: "", unitWeightG: "", inventoryItemCode: "" });
-    setEditingMaterialId(null);
   };
 
-  const handleAddOrUpdateMaterial = async (e: React.FormEvent) => {
+  const handleAddMaterial = async (e: React.FormEvent) => {
     e.preventDefault();
     const name = materialForm.materialName.trim();
     const box = parseInt(materialForm.boxWeightG, 10) || 0;
@@ -441,31 +448,21 @@ export default function AdminPage() {
       return;
     }
     try {
-      if (editingMaterialId) {
-        await updateMaterial(editingMaterialId, {
-          materialName: name,
-          boxWeightG: box,
-          unitWeightG: unit,
-          inventoryItemCode: materialForm.inventoryItemCode.trim() || undefined,
-        });
-        clearMaterialForm();
-      } else {
-        await addMaterial({
-          materialName: name,
-          boxWeightG: box,
-          unitWeightG: unit,
-          inventoryItemCode: materialForm.inventoryItemCode.trim() || undefined,
-        });
-        setMaterialForm({ materialName: "", boxWeightG: "", unitWeightG: "", inventoryItemCode: "" });
-      }
+      await addMaterial({
+        materialName: name,
+        boxWeightG: box,
+        unitWeightG: unit,
+        inventoryItemCode: materialForm.inventoryItemCode.trim() || undefined,
+      });
+      setMaterialForm({ materialName: "", boxWeightG: "", unitWeightG: "", inventoryItemCode: "" });
     } catch {
       alert("저장에 실패했습니다. 다시 시도해 주세요.");
     }
   };
 
   const handleEditMaterial = (m: Material) => {
-    setEditingMaterialId(m.id);
-    setMaterialForm({
+    setEditingMaterial({
+      id: m.id,
       materialName: m.materialName,
       boxWeightG: m.boxWeightG > 0 ? String(m.boxWeightG) : "",
       unitWeightG: m.unitWeightG > 0 ? String(m.unitWeightG) : "",
@@ -473,11 +470,34 @@ export default function AdminPage() {
     });
   };
 
+  const handleSaveEditingMaterial = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMaterial) return;
+    const name = editingMaterial.materialName.trim();
+    const box = parseInt(editingMaterial.boxWeightG, 10) || 0;
+    const unit = parseInt(editingMaterial.unitWeightG, 10) || 0;
+    if (!name) {
+      alert("원료명을 입력해 주세요.");
+      return;
+    }
+    try {
+      await updateMaterial(editingMaterial.id, {
+        materialName: name,
+        boxWeightG: box,
+        unitWeightG: unit,
+        inventoryItemCode: editingMaterial.inventoryItemCode.trim() || undefined,
+      });
+      setEditingMaterial(null);
+    } catch {
+      alert("수정에 실패했습니다. 다시 시도해 주세요.");
+    }
+  };
+
   const handleDeleteMaterial = async (id: string) => {
     if (!confirm("정말 삭제하시겠습니까?")) return;
     try {
       await deleteMaterial(id);
-      if (editingMaterialId === id) clearMaterialForm();
+      if (editingMaterial?.id === id) setEditingMaterial(null);
     } catch {
       alert("삭제에 실패했습니다. 다시 시도해 주세요.");
     }
@@ -716,10 +736,8 @@ export default function AdminPage() {
         {activeTab === "materials" && (
           <div className="space-y-6">
             <div className="bg-space-800/80 rounded-2xl border border-slate-700 shadow-glow p-6">
-              <h2 className="text-lg font-semibold text-slate-100 mb-4">
-                {editingMaterialId ? "원료 수정" : "새 원료 등록"}
-              </h2>
-              <form onSubmit={handleAddOrUpdateMaterial} className="flex flex-wrap items-end gap-4">
+              <h2 className="text-lg font-semibold text-slate-100 mb-4">새 원료 등록</h2>
+              <form onSubmit={handleAddMaterial} className="flex flex-wrap items-end gap-4">
                 <div className="flex-1 min-w-[140px]">
                   <label className="block text-sm font-medium text-slate-300 mb-1">원료명</label>
                   <input
@@ -773,17 +791,19 @@ export default function AdminPage() {
                   </datalist>
                 </div>
                 <div className="flex gap-2">
-                  {editingMaterialId && (
-                    <button type="button" onClick={clearMaterialForm} className="px-4 py-2.5 rounded-lg border border-slate-600 text-slate-300 font-medium hover:bg-slate-700/50">
-                      취소
-                    </button>
-                  )}
                   <button
                     type="submit"
                     disabled={isSaving}
                     className="px-5 py-2.5 rounded-lg bg-cyan-500 text-space-900 font-medium hover:bg-cyan-400 shadow-glow focus:outline-none focus:ring-2 focus:ring-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {editingMaterialId ? "수정 완료" : "등록"}
+                    등록
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearMaterialForm}
+                    className="px-4 py-2.5 rounded-lg border border-slate-600 text-slate-300 font-medium hover:bg-slate-700/50"
+                  >
+                    초기화
                   </button>
                 </div>
               </form>
@@ -850,6 +870,84 @@ export default function AdminPage() {
               </div>
               )}
             </div>
+
+            {editingMaterial && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+                onClick={() => setEditingMaterial(null)}
+              >
+                <div
+                  className="bg-space-800 rounded-2xl border border-cyan-500/30 shadow-glow max-w-lg w-full"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="p-5 border-b border-slate-600">
+                    <h3 className="text-lg font-bold text-slate-100">원료 수정</h3>
+                    <p className="text-sm text-slate-400 mt-1">목록 위치를 유지한 채 바로 수정합니다.</p>
+                  </div>
+                  <form onSubmit={handleSaveEditingMaterial} className="p-5 space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">원료명</label>
+                      <input
+                        type="text"
+                        value={editingMaterial.materialName}
+                        onChange={(e) => setEditingMaterial((p) => (p ? { ...p, materialName: e.target.value } : p))}
+                        className="w-full px-3 py-2 bg-space-900 border border-slate-600 rounded-lg text-slate-100 focus:ring-2 focus:ring-cyan-500/50"
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-1">1박스 중량(g)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          inputMode="numeric"
+                          value={editingMaterial.boxWeightG}
+                          onChange={(e) => setEditingMaterial((p) => (p ? { ...p, boxWeightG: e.target.value } : p))}
+                          className="w-full px-3 py-2 bg-space-900 border border-slate-600 rounded-lg text-slate-100 focus:ring-2 focus:ring-cyan-500/50"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-1">1개 중량(g)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          inputMode="numeric"
+                          value={editingMaterial.unitWeightG}
+                          onChange={(e) => setEditingMaterial((p) => (p ? { ...p, unitWeightG: e.target.value } : p))}
+                          className="w-full px-3 py-2 bg-space-900 border border-slate-600 rounded-lg text-slate-100 focus:ring-2 focus:ring-cyan-500/50"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">재고연동 코드(item_code)</label>
+                      <input
+                        type="text"
+                        list="ecount-item-code-options"
+                        value={editingMaterial.inventoryItemCode}
+                        onChange={(e) => setEditingMaterial((p) => (p ? { ...p, inventoryItemCode: e.target.value } : p))}
+                        className="w-full px-3 py-2 bg-space-900 border border-slate-600 rounded-lg text-slate-100 focus:ring-2 focus:ring-cyan-500/50"
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditingMaterial(null)}
+                        className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 font-medium hover:bg-slate-700/50"
+                      >
+                        닫기
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isSaving}
+                        className="px-4 py-2 rounded-lg bg-cyan-500 text-space-900 font-medium hover:bg-cyan-400 disabled:opacity-50"
+                      >
+                        수정 저장
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
