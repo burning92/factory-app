@@ -37,6 +37,26 @@ function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** 신규 작성 화면 전용: 마운트 시 1회만 사용 (08:00~08:30, 분 단위 임의) */
+function randomDefaultMorningMeasureTime(): string {
+  const minMin = 8 * 60;
+  const maxMin = 8 * 60 + 30;
+  const total = Math.floor(Math.random() * (maxMin - minMin + 1)) + minMin;
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+/** 신규 작성 화면 전용: 마운트 시 1회만 사용 (16:30~17:50, 분 단위 임의) */
+function randomDefaultAfternoonMeasureTime(): string {
+  const minMin = 16 * 60 + 30;
+  const maxMin = 17 * 60 + 50;
+  const total = Math.floor(Math.random() * (maxMin - minMin + 1)) + minMin;
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
 function formatNumForInput(n: number | null | undefined): string {
   if (n == null || Number.isNaN(Number(n))) return "";
   return String(roundOneDecimal(Number(n)));
@@ -118,8 +138,12 @@ export function ColdStorageHygieneForm({ mode, editLogId }: Props) {
   const { user, profile, viewOrganizationCode } = useAuth();
   const [inspectionDate, setInspectionDate] = useState(todayStr);
   const [results, setResults] = useState<HygieneFormResults>({});
-  const [amTime, setAmTime] = useState("");
-  const [pmTime, setPmTime] = useState("");
+  const [amTime, setAmTime] = useState(() =>
+    mode === "new" ? randomDefaultMorningMeasureTime() : ""
+  );
+  const [pmTime, setPmTime] = useState(() =>
+    mode === "new" ? randomDefaultAfternoonMeasureTime() : ""
+  );
   const [amTemps, setAmTemps] = useState<Record<ColdStorageTempKey, string>>(emptyTempRow);
   const [pmTemps, setPmTemps] = useState<Record<ColdStorageTempKey, string>>(emptyTempRow);
   const [corrective, setCorrective] = useState<CorrectiveState>({
