@@ -47,6 +47,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user || !profile || !uiSettings?.default_landing_path || pathname !== "/") return;
     const path = uiSettings.default_landing_path.trim();
+    // admin은 공통 진입("/") 유지. 기존 admin 전용 /manage 직행만 예외 처리.
+    if (profile.role === "admin" && path === "/manage") return;
     if (path && path !== "/") {
       router.replace(path);
     }
@@ -79,6 +81,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const isManagePage = pathname === "/manage";
   if (isManagePage && profile?.role !== "admin") {
+    router.replace("/");
+    return null;
+  }
+  const isProductionAdminPage = pathname === "/production/admin";
+  if (isProductionAdminPage && profile?.role !== "admin") {
     router.replace("/");
     return null;
   }

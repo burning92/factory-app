@@ -42,13 +42,19 @@ const DESKTOP_DROPDOWN_DAILY: DropdownItem[] = [
   { label: "기타 데일리 점검", comingSoon: true },
 ];
 
-type DropdownKey = "production" | "materials" | "daily";
+const DESKTOP_DROPDOWN_MANAGEMENT: DropdownItem[] = [
+  { href: "/production/admin", label: "제품정보관리" },
+  { href: "/manage", label: "사용자관리" },
+];
+
+type DropdownKey = "production" | "materials" | "daily" | "management";
 
 export default function Header() {
   const [activeDropdown, setActiveDropdown] = useState<DropdownKey | null>(null);
   const pathname = usePathname();
   const desktopDropdownCloseTimeoutRef = useRef<number | null>(null);
   const {
+    profile,
     uiSettings,
     viewOrganizationCode,
     canSwitchOrganization,
@@ -59,6 +65,7 @@ export default function Header() {
 
   const effectiveLogoUrl = viewIsHarang ? HARANG_PEOPLE_ICON_SRC : ARMORED_LOGO_SRC;
   const primaryColor = uiSettings?.primary_color?.trim() || "#06b6d4";
+  const isAdmin = profile?.role === "admin";
 
 
   /** 데스크탑 상단 카테고리: 100 = 생산/원부자재/데일리/계정, 200 = 홈/계정만 */
@@ -154,14 +161,23 @@ export default function Header() {
           })
         ) : (
           <>
-            {(["production", "materials", "daily"] as const).map((key) => {
-              const href = key === "production" ? "/production" : key === "materials" ? "/materials" : "/daily";
+            {(["production", "materials", "daily", ...(isAdmin ? (["management"] as const) : [])] as const).map((key) => {
+              const href =
+                key === "production"
+                  ? "/production"
+                  : key === "materials"
+                    ? "/materials"
+                    : key === "daily"
+                      ? "/daily"
+                      : "/manage";
               const items =
                 key === "production"
                   ? DESKTOP_DROPDOWN_PRODUCTION
                   : key === "materials"
                     ? DESKTOP_DROPDOWN_MATERIALS
-                    : DESKTOP_DROPDOWN_DAILY;
+                    : key === "daily"
+                      ? DESKTOP_DROPDOWN_DAILY
+                      : DESKTOP_DROPDOWN_MANAGEMENT;
               const isActive = pathname === href || pathname.startsWith(href + "/");
               const isOpen = activeDropdown === key;
               return (
@@ -191,7 +207,7 @@ export default function Header() {
                       scheduleDesktopDropdownClose();
                     }}
                   >
-                    {key === "production" ? "생산" : key === "materials" ? "원부자재" : "데일리"}
+                    {key === "production" ? "생산" : key === "materials" ? "원부자재" : key === "daily" ? "데일리" : "관리"}
                   </button>
                   {isOpen && (
                     <div
