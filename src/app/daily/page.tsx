@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { ClipboardCheck, Thermometer, Droplets, UserCheck, Wrench, FileCheck } from "lucide-react";
+import { ClipboardCheck, Thermometer, Droplets, UserCheck, Snowflake, Wrench, FileCheck } from "lucide-react";
 
 const HUB_ITEMS = [
   { href: "/daily/hygiene", label: "영업장환경위생점검일지", Icon: ClipboardCheck },
   { href: "/daily/temperature-humidity", label: "영업장 온·습도점검일지", Icon: Thermometer },
   { href: "/daily/sanitation-facility", label: "위생시설관리점검일지", Icon: Droplets },
   { href: "/daily/worker-hygiene", label: "작업자 위생점검일지", Icon: UserCheck },
+  { href: "/daily/cold-storage-hygiene", label: "냉장 · 냉동온도 및 위생 점검일지", Icon: Snowflake },
   { label: "제조설비 일지", Icon: Wrench },
   { label: "기타 데일리 점검", Icon: FileCheck },
 ] as const;
