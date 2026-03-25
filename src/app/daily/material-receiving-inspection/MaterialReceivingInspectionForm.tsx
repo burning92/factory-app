@@ -139,6 +139,11 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
   const hasAnyIssue = useMemo(() => hasReceivingConformityIssue(lines), [lines]);
   const autoDeviationText = useMemo(() => buildReceivingAutoDeviationText(lines), [lines]);
 
+  /** 포대형 원료 판정(현재 코드에 전용 플래그가 없어 item_name 기반으로만 임시 판정) */
+  function isPouchLikeMaterial(name: string): boolean {
+    return (name ?? "").includes("밀가루");
+  }
+
   useEffect(() => {
     if (hasAnyIssue && !deviationManuallyEdited) {
       setCorrective((c) => ({ ...c, deviation: autoDeviationText }));
@@ -726,7 +731,7 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
                 </label>
                 {hasBoxWeight && (
                   <label className="flex flex-col gap-1">
-                    <span className="text-xs text-slate-500">낱개(포대)</span>
+                    <span className="text-xs text-slate-500">박스</span>
                     <input
                       type="number"
                       inputMode="decimal"
@@ -741,7 +746,9 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
                 )}
                 {hasUnitWeight && (
                   <label className="flex flex-col gap-1">
-                    <span className="text-xs text-slate-500">낱개</span>
+                    <span className="text-xs text-slate-500">
+                      {isPouchLikeMaterial(line.item_name) ? "낱개(포대)" : "낱개"}
+                    </span>
                     <input
                       type="number"
                       inputMode="decimal"
