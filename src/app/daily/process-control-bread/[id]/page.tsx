@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { PROCESS_CONTROL_BREAD_STAGES } from "@/features/daily/processControlBreadChecklist";
 import { canShowDailyApproveReject } from "@/app/daily/dailyLogPermissions";
+import { displayToppingWeightRows } from "@/app/daily/process-control-bread/toppingWeightChecks";
 
 type LogHeader = {
   id: string;
@@ -18,6 +19,7 @@ type LogHeader = {
   fermentation_start_at: string | null;
   fermentation_end_at: string | null;
   topping_weight_check_g: number | null;
+  topping_weight_checks?: unknown;
   notes: string | null;
   status: string;
   approved_at: string | null;
@@ -141,6 +143,8 @@ export default function DailyProcessControlBreadViewPage() {
     header.corrective_remarks ||
     header.corrective_actor;
 
+  const toppingDisplayRows = displayToppingWeightRows(header);
+
   return (
     <div className="min-h-[calc(100vh-3.5rem)] p-4 md:p-6 max-w-2xl mx-auto pb-20 md:pb-6">
       <div className="flex items-center gap-2 mb-4">
@@ -176,7 +180,21 @@ export default function DailyProcessControlBreadViewPage() {
         <p className="text-slate-300">작업종료시간: <span className="text-slate-100">{header.work_end_time || "—"}</span></p>
         <p className="text-slate-300">숙성 시작: <span className="text-slate-100">{formatDt(header.fermentation_start_at)}</span></p>
         <p className="text-slate-300">숙성 종료: <span className="text-slate-100">{formatDt(header.fermentation_end_at)}</span></p>
-        <p className="text-slate-300">토핑 중량체크 평균: <span className="text-slate-100">{header.topping_weight_check_g != null ? `${header.topping_weight_check_g} g` : "—"}</span></p>
+        <div className="text-slate-300 sm:col-span-2">
+          <span className="block mb-1">토핑 원료중량체크 평균 (g)</span>
+          {toppingDisplayRows.length === 0 ? (
+            <span className="text-slate-100">—</span>
+          ) : (
+            <ul className="space-y-1.5 mt-1">
+              {toppingDisplayRows.map((row, idx) => (
+                <li key={`${idx}-${row.product.slice(0, 48)}`} className="text-sm">
+                  <span className="text-slate-500 text-xs block break-words leading-snug">{row.product}</span>
+                  <span className="text-slate-100">{row.gLabel}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
 
       <div className="space-y-2 mb-8">

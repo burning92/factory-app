@@ -12,6 +12,12 @@ import {
   type ProcessControlBreadResult,
   type ProcessControlBreadResultMap,
 } from "@/features/daily/processControlBreadChecklist";
+import {
+  buildToppingWeightChecksJson,
+  entriesToWeightRecord,
+  parseOptionalNum as parseToppingNum,
+  parseToppingWeightChecksJson,
+} from "@/app/daily/process-control-bread/toppingWeightChecks";
 
 type LogStatus = "draft" | "submitted" | "approved" | "rejected";
 
@@ -44,11 +50,7 @@ function combineDateAndTime(date: string, time: string): string {
 }
 
 function parseOptionalNum(s: string): number | null {
-  const t = s.trim();
-  if (t === "") return null;
-  const n = Number(t.replace(",", "."));
-  if (!Number.isFinite(n)) return null;
-  return n;
+  return parseToppingNum(s);
 }
 
 function syncDateToDatetimeLocal(existing: string, date: string): string {
@@ -79,7 +81,10 @@ export function ProcessControlBreadForm({ mode, editLogId }: Props) {
   const [workEndTime, setWorkEndTime] = useState(() => (mode === "new" ? defaultTimesRef.current.workEnd : ""));
   const [fermentationStartAt, setFermentationStartAt] = useState("");
   const [fermentationEndAt, setFermentationEndAt] = useState("");
-  const [toppingWeightCheckG, setToppingWeightCheckG] = useState("");
+  /** 제품명(기본명) → 입력 문자열; 생산 품목 0건일 때는 toppingSingleNoProduct 사용 */
+  const [toppingByProduct, setToppingByProduct] = useState<Record<string, string>>({});
+  const [toppingSingleNoProduct, setToppingSingleNoProduct] = useState("");
+  const [pendingLegacyTopping, setPendingLegacyTopping] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [results, setResults] = useState<ProcessControlBreadResultMap>({});
   const [corrective, setCorrective] = useState<CorrectiveState>({
@@ -171,6 +176,7 @@ export function ProcessControlBreadForm({ mode, editLogId }: Props) {
         fermentation_start_at: string | null;
         fermentation_end_at: string | null;
         topping_weight_check_g: number | null;
+        topping_weight_checks: unknown;
         notes: string | null;
         status: LogStatus;
         corrective_datetime: string | null;
@@ -187,11 +193,20 @@ export function ProcessControlBreadForm({ mode, editLogId }: Props) {
       setWorkEndTime(log.work_end_time ?? "");
       setFermentationStartAt(log.fermentation_start_at ? String(log.fermentation_start_at).slice(0, 16) : "");
       setFermentationEndAt(log.fermentation_end_at ? String(log.fermentation_end_at).slice(0, 16) : "");
-      setToppingWeightCheckG(
-        log.topping_weight_check_g != null && Number.isFinite(Number(log.topping_weight_check_g))
-          ? String(log.topping_weight_check_g)
-          : ""
-      );
+      const jsonMap = entriesToWeightRecord(parseToppingWeightChecksJson(log.topping_weight_checks));
+      if (Object.keys(jsonMap).length > 0) {
+        setToppingByProduct(jsonMap);
+        setPendingLegacyTopping(null);
+        setToppingSingleNoProduct("");
+      } else if (log.topping_weight_check_g != null && Number.isFinite(Number(log.topping_weight_check_g))) {
+        setToppingByProduct({});
+        setPendingLegacyTopping(String(log.topping_weight_check_g));
+        setToppingSingleNoProduct("");
+      } else {
+        setToppingByProduct({});
+        setPendingLegacyTopping(null);
+        setToppingSingleNoProduct("");
+      }
       setNotes(log.notes ?? "");
       setCorrective({
         datetime: log.corrective_datetime ? String(log.corrective_datetime).slice(0, 16) : "",
@@ -287,6 +302,39 @@ export function ProcessControlBreadForm({ mode, editLogId }: Props) {
     };
   }, [inspectionDate, mode]);
 
+  /** 생산 품목 목록과 토핑 입력 state 동기화 + 기존 단일 숫자 legacy를 첫 품목에 채움 */
+  useEffect(() => {
+    if (productOptionsLoading) return;
+    if (productOptions.length === 0) {
+      if (pendingLegacyTopping !== null && pendingLegacyTopping !== "") {
+        setToppingSingleNoProduct((prev) => (prev ? prev : pendingLegacyTopping));
+        setPendingLegacyTopping(null);
+      }
+      return;
+    }
+    setToppingSingleNoProduct("");
+    setToppingByProduct((prev) => {
+      const next: Record<string, string> = {};
+      let legacyPlaced = false;
+      for (let i = 0; i < productOptions.length; i++) {
+        const p = productOptions[i];
+        const existing = prev[p];
+        if (existing !== undefined && existing !== "") {
+          next[p] = existing;
+        } else if (pendingLegacyTopping !== null && pendingLegacyTopping !== "" && !legacyPlaced) {
+          next[p] = pendingLegacyTopping;
+          legacyPlaced = true;
+        } else {
+          next[p] = existing ?? "";
+        }
+      }
+      return next;
+    });
+    if (pendingLegacyTopping !== null && pendingLegacyTopping !== "") {
+      setPendingLegacyTopping(null);
+    }
+  }, [productOptions, productOptionsLoading, pendingLegacyTopping]);
+
   const correctivePayload = useMemo(() => {
     if (!hasAnyIssue) {
       return {
@@ -334,6 +382,19 @@ export function ProcessControlBreadForm({ mode, editLogId }: Props) {
   );
 
   const baseHeaderFields = useCallback(() => {
+    let topping_weight_check_g: number | null;
+    let topping_weight_checks: ReturnType<typeof buildToppingWeightChecksJson> | null;
+    if (productOptions.length === 0) {
+      topping_weight_check_g = parseOptionalNum(toppingSingleNoProduct);
+      topping_weight_checks = null;
+    } else if (productOptions.length === 1) {
+      const only = productOptions[0];
+      topping_weight_check_g = parseOptionalNum(toppingByProduct[only] ?? "");
+      topping_weight_checks = null;
+    } else {
+      topping_weight_check_g = null;
+      topping_weight_checks = buildToppingWeightChecksJson(productOptions, toppingByProduct);
+    }
     return {
       organization_code: orgCode,
       inspection_date: inspectionDate.trim(),
@@ -343,7 +404,8 @@ export function ProcessControlBreadForm({ mode, editLogId }: Props) {
       work_end_time: workEndTime.trim() || null,
       fermentation_start_at: fermentationStartAt || null,
       fermentation_end_at: fermentationEndAt || null,
-      topping_weight_check_g: parseOptionalNum(toppingWeightCheckG),
+      topping_weight_check_g,
+      topping_weight_checks,
       notes: notes.trim() || null,
       ...correctivePayload,
       updated_at: new Date().toISOString(),
@@ -357,7 +419,9 @@ export function ProcessControlBreadForm({ mode, editLogId }: Props) {
     workEndTime,
     fermentationStartAt,
     fermentationEndAt,
-    toppingWeightCheckG,
+    productOptions,
+    toppingByProduct,
+    toppingSingleNoProduct,
     notes,
     correctivePayload,
   ]);
@@ -614,19 +678,56 @@ export function ProcessControlBreadForm({ mode, editLogId }: Props) {
         })}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-        <div>
-          <label className="block text-sm font-medium text-slate-400 mb-1">토핑 원료중량체크 평균 (g)</label>
-          <input
-            type="number"
-            inputMode="decimal"
-            step="0.1"
-            value={toppingWeightCheckG}
-            onChange={(e) => setToppingWeightCheckG(e.target.value)}
-            disabled={!canEdit}
-            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 disabled:opacity-60"
-          />
-        </div>
+      <div className="mb-8 space-y-4">
+        <h2 className="text-sm font-medium text-slate-400">토핑 원료중량체크 평균 (g)</h2>
+        {productOptionsLoading ? (
+          <p className="text-xs text-slate-500">생산 품목을 불러오는 중…</p>
+        ) : productOptions.length === 0 ? (
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">해당 점검일자 생산 품목 없음 — 중량만 입력</label>
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.1"
+              value={toppingSingleNoProduct}
+              onChange={(e) => setToppingSingleNoProduct(e.target.value)}
+              disabled={!canEdit}
+              className="w-full max-w-xs px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 disabled:opacity-60"
+            />
+          </div>
+        ) : productOptions.length === 1 ? (
+          <div>
+            <p className="text-xs text-slate-500 mb-1.5 break-words leading-snug">{productOptions[0]}</p>
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.1"
+              value={toppingByProduct[productOptions[0]] ?? ""}
+              onChange={(e) =>
+                setToppingByProduct((prev) => ({ ...prev, [productOptions[0]]: e.target.value }))
+              }
+              disabled={!canEdit}
+              className="w-full max-w-xs px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 disabled:opacity-60"
+            />
+          </div>
+        ) : (
+          <ul className="space-y-3">
+            {productOptions.map((p) => (
+              <li key={p}>
+                <p className="text-xs text-slate-500 mb-1.5 break-words leading-snug">{p}</p>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.1"
+                  value={toppingByProduct[p] ?? ""}
+                  onChange={(e) => setToppingByProduct((prev) => ({ ...prev, [p]: e.target.value }))}
+                  disabled={!canEdit}
+                  className="w-full max-w-xs px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 disabled:opacity-60"
+                />
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <div className="mb-8">
