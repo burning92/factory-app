@@ -139,11 +139,6 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
   const hasAnyIssue = useMemo(() => hasReceivingConformityIssue(lines), [lines]);
   const autoDeviationText = useMemo(() => buildReceivingAutoDeviationText(lines), [lines]);
 
-  /** 포대형 원료 판정(현재 코드에 전용 플래그가 없어 item_name 기반으로만 임시 판정) */
-  function isPouchLikeMaterial(name: string): boolean {
-    return (name ?? "").includes("밀가루");
-  }
-
   useEffect(() => {
     if (hasAnyIssue && !deviationManuallyEdited) {
       setCorrective((c) => ({ ...c, deviation: autoDeviationText }));
@@ -568,16 +563,78 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
         setToast({ message: "이미지 파일만 선택할 수 있습니다.", error: true });
         return;
       }
-      if (file.size > PHOTO_FILE_MAX_BYTES) {
-        setToast({ message: `사진 용량은 ${PHOTO_FILE_MAX_BYTES / 1000}KB 이하로 선택해 주세요.`, error: true });
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        const url = typeof reader.result === "string" ? reader.result : "";
-        updateLine(clientId, { label_photo_url: url });
+
+      const compressImageIfNeeded = async (input: File): Promise<Blob> => {
+        if (input.size <= PHOTO_FILE_MAX_BYTES) return input;
+
+        const maxDim = 1280; // 기본 리사이즈 상한(가로/세로)
+        const outputMime = "image/jpeg";
+        const qualitySteps = [0.92, 0.82, 0.72, 0.62, 0.52, 0.42, 0.32, 0.22];
+
+        const objectUrl = URL.createObjectURL(input);
+        try {
+          const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+            const el = new Image();
+            el.onload = () => resolve(el);
+            el.onerror = reject;
+            el.src = objectUrl;
+          });
+
+          const srcW = img.naturalWidth || img.width;
+          const srcH = img.naturalHeight || img.height;
+          const scale = srcW > srcH ? Math.min(1, maxDim / srcW) : Math.min(1, maxDim / srcH);
+          const targetW = Math.max(1, Math.round(srcW * scale));
+          const targetH = Math.max(1, Math.round(srcH * scale));
+
+          const canvas = document.createElement("canvas");
+          canvas.width = targetW;
+          canvas.height = targetH;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            // 컨텍스트가 없으면 원본 그대로(이후 size 체크에서 실패 처리)
+            return input;
+          }
+          ctx.drawImage(img, 0, 0, targetW, targetH);
+
+          let lastBlob: Blob | null = null;
+          for (const q of qualitySteps) {
+            const blob = await new Promise<Blob | null>((resolve) => {
+              canvas.toBlob((b) => resolve(b), outputMime, q);
+            });
+            if (!blob) continue;
+            lastBlob = blob;
+            if (blob.size <= PHOTO_FILE_MAX_BYTES) return blob;
+          }
+          if (lastBlob) return lastBlob;
+          return input;
+        } finally {
+          URL.revokeObjectURL(objectUrl);
+        }
       };
-      reader.readAsDataURL(file);
+
+      (async () => {
+        try {
+          const blob = await compressImageIfNeeded(file);
+          if (blob.size > PHOTO_FILE_MAX_BYTES) {
+            setToast({
+              message: `사진 용량은 ${PHOTO_FILE_MAX_BYTES / 1000}KB 이하로 유지해야 합니다. (압축 후에도 초과)`,
+              error: true,
+            });
+            return;
+          }
+          const reader = new FileReader();
+          reader.onload = () => {
+            const url = typeof reader.result === "string" ? reader.result : "";
+            updateLine(clientId, { label_photo_url: url });
+          };
+          reader.readAsDataURL(blob);
+        } catch {
+          setToast({
+            message: `사진 압축에 실패했습니다. 더 작은 사진을 선택해 주세요.`,
+            error: true,
+          });
+        }
+      })();
     },
     [updateLine]
   );
@@ -731,7 +788,7 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
                 </label>
                 {hasBoxWeight && (
                   <label className="flex flex-col gap-1">
-                    <span className="text-xs text-slate-500">박스</span>
+                    <span className="text-xs text-slate-500">박스(포대)</span>
                     <input
                       type="number"
                       inputMode="decimal"
@@ -746,9 +803,7 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
                 )}
                 {hasUnitWeight && (
                   <label className="flex flex-col gap-1">
-                    <span className="text-xs text-slate-500">
-                      {isPouchLikeMaterial(line.item_name) ? "낱개(포대)" : "낱개"}
-                    </span>
+                    <span className="text-xs text-slate-500">낱개</span>
                     <input
                       type="number"
                       inputMode="decimal"

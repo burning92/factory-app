@@ -63,11 +63,6 @@ function conformityLabel(v: string): string {
   return "—";
 }
 
-/** 포대형 원료 판정(현재 코드에 전용 플래그가 없어 item_name 기반으로만 임시 판정) */
-function isPouchLikeMaterial(name: string): boolean {
-  return (name ?? "").includes("밀가루");
-}
-
 export default function DailyMaterialReceivingInspectionViewPage() {
   const router = useRouter();
   const params = useParams();
@@ -206,11 +201,9 @@ export default function DailyMaterialReceivingInspectionViewPage() {
               </div>
               <p className="text-slate-200 font-medium">{row.item_name}</p>
               <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1 text-xs">
-                <dt className="text-slate-500">박스</dt>
+                <dt className="text-slate-500">박스(포대)</dt>
                 <dd className="text-slate-300 col-span-1">{row.box_qty ?? "—"}</dd>
-                <dt className="text-slate-500">
-                  {isPouchLikeMaterial(row.item_name) ? "낱개(포대)" : "낱개"}
-                </dt>
+                <dt className="text-slate-500">낱개</dt>
                 <dd className="text-slate-300 col-span-1">{row.unit_qty ?? "—"}</dd>
                 <dt className="text-slate-500">잔량(g)</dt>
                 <dd className="text-slate-300 col-span-1">{row.remainder_g ?? "—"}</dd>
