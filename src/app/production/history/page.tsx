@@ -459,6 +459,7 @@ function UsageCalculationPageContent() {
     fetchBom,
     fetchProductionHistoryDateStates,
     saveProductionHistoryDateState,
+    deleteProductionHistoryDateState,
     getProductionHistoryDateState,
     productionHistoryDateStatesLoading,
   } = useMasterStore();
@@ -488,6 +489,7 @@ function UsageCalculationPageContent() {
   const [groupStateByDate, setGroupStateByDate] = useState<Record<string, DateGroupState>>({});
   const [toast, setToast] = useState<{ message: string } | null>(null);
   const [saving, setSaving] = useState<{ date: string; type: "first" | "second" } | null>(null);
+  const [resettingDateClosing, setResettingDateClosing] = useState<string | null>(null);
   const hasRestoredRef = useRef(false);
   /** 1차 마감 작성자명 기본값: Supabase(first-close-last-author-name) → localStorage → 빈값 */
   const [defaultAuthor, setDefaultAuthor] = useState(() =>
@@ -968,6 +970,44 @@ function UsageCalculationPageContent() {
     [getOrInitGroupState, setGroupState, getProductionHistoryDateState, saveProductionHistoryDateState]
   );
 
+  const canManageDateClosing =
+    profile?.role === "manager" || profile?.role === "admin";
+
+  const resetDateClosingState = useCallback(
+    async (date: string) => {
+      if (
+        !window.confirm(
+          "이 날짜의 1차/2차 마감 저장값을 초기화합니다. 출고 수정 후 다시 마감해야 합니다. 계속하시겠습니까?"
+        )
+      ) {
+        return;
+      }
+      const logs = productionLogs.filter((l) => (l.생산일자 ?? "").slice(0, 10) === date);
+      setResettingDateClosing(date);
+      try {
+        await deleteProductionHistoryDateState(date);
+        setGroupStateByDate((prev) => ({
+          ...prev,
+          [date]: createInitialDateGroupState(date, logs, materialsList, defaultAuthor),
+        }));
+        setExpandedSecondDate((prev) => (prev === date ? null : prev));
+        setToast({ message: "해당 날짜의 마감 저장값을 초기화했습니다." });
+      } catch (err) {
+        const msg =
+          err instanceof Error ? err.message : "마감 저장값 초기화에 실패했습니다.";
+        setToast({ message: msg });
+      } finally {
+        setResettingDateClosing(null);
+      }
+    },
+    [
+      productionLogs,
+      materialsList,
+      defaultAuthor,
+      deleteProductionHistoryDateState,
+    ]
+  );
+
   return (
     <div className="py-10 px-4 sm:px-6 lg:px-8">
       {/* 토스트 */}
@@ -1027,8 +1067,18 @@ function UsageCalculationPageContent() {
 
                   {isExpanded && (
                     <div className="border-t border-slate-700/80 p-4 sm:p-6 space-y-6 bg-space-900/40">
-                      {/* 생산일지 보기 */}
-                      <div className="flex justify-end">
+                      {/* 생산일지 보기 · 마감 초기화 (manager/admin) */}
+                      <div className="flex flex-wrap justify-end gap-2">
+                        {canManageDateClosing && (
+                          <button
+                            type="button"
+                            disabled={resettingDateClosing === date}
+                            onClick={() => resetDateClosingState(date)}
+                            className="rounded-lg border border-amber-600/60 bg-amber-950/40 text-amber-100 hover:bg-amber-900/50 px-4 py-2 text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+                          >
+                            {resettingDateClosing === date ? "초기화 중..." : "마감 초기화"}
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => openJournal(date)}

@@ -229,6 +229,8 @@ interface MasterState {
     }
   ) => Promise<void>;
   getProductionHistoryDateState: (production_date: string) => ProductionHistoryDateStateRow | null;
+  /** 해당 생산일자의 production_history_date_state 행만 삭제 (마감 스냅샷 초기화) */
+  deleteProductionHistoryDateState: (production_date: string) => Promise<void>;
 
   addMaterial: (m: Omit<Material, "id">) => Promise<void>;
   updateMaterial: (id: string, patch: Partial<Omit<Material, "id">>) => Promise<void>;
@@ -1005,6 +1007,28 @@ export const useMasterStore = create<MasterState>((set, get) => ({
   getProductionHistoryDateState: (production_date: string) => {
     const dateKey = production_date.slice(0, 10);
     return get().productionHistoryDateStates[dateKey] ?? null;
+  },
+
+  deleteProductionHistoryDateState: async (production_date: string) => {
+    const dateKey = production_date.slice(0, 10);
+    set({ error: null });
+    try {
+      const { error: e } = await supabase
+        .from("production_history_date_state")
+        .delete()
+        .eq("production_date", dateKey);
+      if (e) throw e;
+      set((state) => {
+        const next = { ...state.productionHistoryDateStates };
+        delete next[dateKey];
+        return { productionHistoryDateStates: next };
+      });
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err.message : "마감 상태 초기화에 실패했습니다.",
+      });
+      throw err;
+    }
   },
 
   addMaterial: async (m) => {
