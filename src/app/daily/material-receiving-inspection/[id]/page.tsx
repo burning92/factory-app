@@ -201,7 +201,7 @@ export default function DailyMaterialReceivingInspectionViewPage() {
               </div>
               <p className="text-slate-200 font-medium">{row.item_name}</p>
               <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1 text-xs">
-                <dt className="text-slate-500">박스</dt>
+                <dt className="text-slate-500">낱개(포대)</dt>
                 <dd className="text-slate-300 col-span-1">{row.box_qty ?? "—"}</dd>
                 <dt className="text-slate-500">낱개</dt>
                 <dd className="text-slate-300 col-span-1">{row.unit_qty ?? "—"}</dd>
@@ -213,7 +213,7 @@ export default function DailyMaterialReceivingInspectionViewPage() {
                     ? row.total_weight_g.toLocaleString("ko-KR", { maximumFractionDigits: 1 })
                     : "—"}
                 </dd>
-                <dt className="text-slate-500 col-span-2 sm:col-span-1">소비기한/LOT</dt>
+                <dt className="text-slate-500 col-span-2 sm:col-span-1">소비기한/LOT/제조일자</dt>
                 <dd className="text-slate-300 col-span-2 sm:col-span-2">{row.expiry_or_lot ?? "—"}</dd>
               </dl>
               {row.remarks && (

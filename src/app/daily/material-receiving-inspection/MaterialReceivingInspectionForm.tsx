@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { createSafeId } from "@/lib/createSafeId";
+import DateWheelPicker from "@/components/DateWheelPicker";
 import {
   RECEIVING_STORAGE_OPTIONS,
   buildEcountMaterialPickerOptions,
@@ -30,7 +31,9 @@ type LineState = {
   remainder_g: string;
   box_weight_g: string;
   unit_weight_g: string;
-  expiry_or_lot: string;
+  expiry_input_mode: "date" | "text";
+  expiry_date_value: string;
+  expiry_text_value: string;
   label_photo_url: string;
   conformity: "O" | "X" | "";
   remarks: string;
@@ -78,7 +81,9 @@ function emptyLine(): LineState {
     remainder_g: "",
     box_weight_g: "",
     unit_weight_g: "",
-    expiry_or_lot: "",
+    expiry_input_mode: "date",
+    expiry_date_value: "",
+    expiry_text_value: "",
     label_photo_url: "",
     conformity: "",
     remarks: "",
@@ -86,6 +91,24 @@ function emptyLine(): LineState {
 }
 
 const PHOTO_FILE_MAX_BYTES = 750_000;
+
+function parseExpiryValue(raw: string | null): {
+  mode: "date" | "text";
+  dateValue: string;
+  textValue: string;
+} {
+  const v = (raw ?? "").trim();
+  if (!v) return { mode: "date", dateValue: "", textValue: "" };
+  const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) return { mode: "date", dateValue: v, textValue: "" };
+  const dot = v.match(/^(\d{4})\.(\d{1,2})\.(\d{1,2})$/);
+  if (dot) {
+    const mm = dot[2].padStart(2, "0");
+    const dd = dot[3].padStart(2, "0");
+    return { mode: "date", dateValue: `${dot[1]}-${mm}-${dd}`, textValue: "" };
+  }
+  return { mode: "text", dateValue: "", textValue: v };
+}
 
 export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
   const { user, profile, viewOrganizationCode } = useAuth();
@@ -260,7 +283,9 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
             remainder_g: r.remainder_g != null ? String(r.remainder_g) : "",
             box_weight_g: r.box_weight_g != null ? String(r.box_weight_g) : "",
             unit_weight_g: r.unit_weight_g != null ? String(r.unit_weight_g) : "",
-            expiry_or_lot: r.expiry_or_lot ?? "",
+            expiry_input_mode: parseExpiryValue(r.expiry_or_lot ?? null).mode,
+            expiry_date_value: parseExpiryValue(r.expiry_or_lot ?? null).dateValue,
+            expiry_text_value: parseExpiryValue(r.expiry_or_lot ?? null).textValue,
             label_photo_url: r.label_photo_url ?? "",
             conformity: r.conformity === "O" || r.conformity === "X" ? r.conformity : "",
             remarks: r.remarks ?? "",
@@ -324,20 +349,32 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
       toSave.forEach((line, i) => {
         const bw = parseOptionalNum(line.box_weight_g) ?? 0;
         const uw = parseOptionalNum(line.unit_weight_g) ?? 0;
-        const total = calcTotalWeightG(line.box_qty, line.unit_qty, line.remainder_g, bw, uw);
+        const hasBoxWeight = bw > 0;
+        const hasUnitWeight = uw > 0;
+        const total = calcTotalWeightG(
+          hasBoxWeight ? line.box_qty : "",
+          hasUnitWeight ? line.unit_qty : "",
+          line.remainder_g,
+          bw,
+          uw
+        );
+        const expiryOrLot =
+          line.expiry_input_mode === "date"
+            ? line.expiry_date_value.trim()
+            : line.expiry_text_value.trim();
         if (line.conformity !== "O" && line.conformity !== "X") return;
         rows.push({
           log_id: logId,
           line_index: i + 1,
           storage_category: line.storage_category,
           item_name: line.item_name.trim(),
-          box_qty: parseOptionalNum(line.box_qty),
-          unit_qty: parseOptionalNum(line.unit_qty),
+          box_qty: hasBoxWeight ? parseOptionalNum(line.box_qty) : null,
+          unit_qty: hasUnitWeight ? parseOptionalNum(line.unit_qty) : null,
           remainder_g: parseOptionalNum(line.remainder_g),
           box_weight_g: bw,
           unit_weight_g: uw,
           total_weight_g: total,
-          expiry_or_lot: line.expiry_or_lot.trim() || null,
+          expiry_or_lot: expiryOrLot || null,
           label_photo_url: line.label_photo_url.trim() || null,
           conformity: line.conformity,
           remarks: line.remarks.trim() || null,
@@ -611,9 +648,18 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
             ecountMaterialOptionsAll,
             line.storage_category
           );
+          const isMasterSelected = line.materialPicker !== "";
           const bw = parseOptionalNum(line.box_weight_g) ?? 0;
           const uw = parseOptionalNum(line.unit_weight_g) ?? 0;
-          const totalG = calcTotalWeightG(line.box_qty, line.unit_qty, line.remainder_g, bw, uw);
+          const hasBoxWeight = bw > 0;
+          const hasUnitWeight = uw > 0;
+          const totalG = calcTotalWeightG(
+            hasBoxWeight ? line.box_qty : "",
+            hasUnitWeight ? line.unit_qty : "",
+            line.remainder_g,
+            bw,
+            uw
+          );
           return (
             <section
               key={line.clientId}
@@ -678,32 +724,36 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
                     className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
                   />
                 </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-xs text-slate-500">박스(포대)</span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min={0}
-                    step="0.01"
-                    value={line.box_qty}
-                    onChange={(e) => updateLine(line.clientId, { box_qty: e.target.value })}
-                    disabled={!canEdit}
-                    className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
-                  />
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-xs text-slate-500">낱개</span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min={0}
-                    step="0.01"
-                    value={line.unit_qty}
-                    onChange={(e) => updateLine(line.clientId, { unit_qty: e.target.value })}
-                    disabled={!canEdit}
-                    className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
-                  />
-                </label>
+                {hasBoxWeight && (
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs text-slate-500">낱개(포대)</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      step="0.01"
+                      value={line.box_qty}
+                      onChange={(e) => updateLine(line.clientId, { box_qty: e.target.value })}
+                      disabled={!canEdit}
+                      className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
+                    />
+                  </label>
+                )}
+                {hasUnitWeight && (
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs text-slate-500">낱개</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      step="0.01"
+                      value={line.unit_qty}
+                      onChange={(e) => updateLine(line.clientId, { unit_qty: e.target.value })}
+                      disabled={!canEdit}
+                      className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
+                    />
+                  </label>
+                )}
                 <label className="flex flex-col gap-1">
                   <span className="text-xs text-slate-500">잔량 (g)</span>
                   <input
@@ -726,7 +776,7 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
                     step="0.01"
                     value={line.box_weight_g}
                     onChange={(e) => updateLine(line.clientId, { box_weight_g: e.target.value })}
-                    disabled={!canEdit}
+                    disabled={!canEdit || isMasterSelected}
                     className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
                   />
                 </label>
@@ -739,7 +789,7 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
                     step="0.01"
                     value={line.unit_weight_g}
                     onChange={(e) => updateLine(line.clientId, { unit_weight_g: e.target.value })}
-                    disabled={!canEdit}
+                    disabled={!canEdit || isMasterSelected}
                     className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
                   />
                 </label>
@@ -751,27 +801,81 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
                 </div>
                 <label className="flex flex-col gap-1 sm:col-span-2">
                   <span className="text-xs text-slate-500">소비기한 / LOT / 제조일자</span>
-                  <input
-                    type="text"
-                    value={line.expiry_or_lot}
-                    onChange={(e) => updateLine(line.clientId, { expiry_or_lot: e.target.value })}
-                    disabled={!canEdit}
-                    placeholder="자유 입력"
-                    className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
-                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => updateLine(line.clientId, { expiry_input_mode: "date" })}
+                      disabled={!canEdit}
+                      className={`px-3 py-1.5 rounded-lg text-xs border ${
+                        line.expiry_input_mode === "date"
+                          ? "bg-cyan-900/40 border-cyan-600 text-cyan-200"
+                          : "bg-slate-800/80 border-slate-600 text-slate-300"
+                      }`}
+                    >
+                      날짜 입력
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateLine(line.clientId, { expiry_input_mode: "text" })}
+                      disabled={!canEdit}
+                      className={`px-3 py-1.5 rounded-lg text-xs border ${
+                        line.expiry_input_mode === "text"
+                          ? "bg-cyan-900/40 border-cyan-600 text-cyan-200"
+                          : "bg-slate-800/80 border-slate-600 text-slate-300"
+                      }`}
+                    >
+                      직접 입력
+                    </button>
+                  </div>
+                  {line.expiry_input_mode === "date" ? (
+                    <DateWheelPicker
+                      value={line.expiry_date_value}
+                      onChange={(v) => updateLine(line.clientId, { expiry_date_value: v })}
+                      disabled={!canEdit}
+                      className="w-full px-3 py-2 rounded-lg"
+                    />
+                  ) : (
+                    <input
+                      type="text"
+                      value={line.expiry_text_value}
+                      onChange={(e) => updateLine(line.clientId, { expiry_text_value: e.target.value })}
+                      disabled={!canEdit}
+                      placeholder="LOT/제조일자 직접 입력"
+                      className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
+                    />
+                  )}
                 </label>
                 <div className="flex flex-col gap-1 sm:col-span-2">
                   <span className="text-xs text-slate-500">표시사항 사진</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    disabled={!canEdit}
-                    onChange={(e) => {
-                      onPhotoFile(line.clientId, e.target.files?.[0] ?? null);
-                      e.target.value = "";
-                    }}
-                    className="text-sm text-slate-300"
-                  />
+                  <div className="flex flex-wrap gap-2">
+                    <label className="inline-flex items-center justify-center px-3 py-2 rounded-lg border border-slate-600 bg-slate-800/80 text-slate-200 text-sm cursor-pointer">
+                      사진 촬영
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        disabled={!canEdit}
+                        onChange={(e) => {
+                          onPhotoFile(line.clientId, e.target.files?.[0] ?? null);
+                          e.target.value = "";
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                    <label className="inline-flex items-center justify-center px-3 py-2 rounded-lg border border-slate-600 bg-slate-800/80 text-slate-200 text-sm cursor-pointer">
+                      갤러리 선택
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={!canEdit}
+                        onChange={(e) => {
+                          onPhotoFile(line.clientId, e.target.files?.[0] ?? null);
+                          e.target.value = "";
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
                   <input
                     type="url"
                     value={line.label_photo_url.startsWith("data:") ? "" : line.label_photo_url}
