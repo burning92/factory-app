@@ -767,32 +767,36 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
                     className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
                   />
                 </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-xs text-slate-500">1박스 중량 (g)</span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min={0}
-                    step="0.01"
-                    value={line.box_weight_g}
-                    onChange={(e) => updateLine(line.clientId, { box_weight_g: e.target.value })}
-                    disabled={!canEdit || isMasterSelected}
-                    className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
-                  />
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-xs text-slate-500">1낱개 중량 (g)</span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min={0}
-                    step="0.01"
-                    value={line.unit_weight_g}
-                    onChange={(e) => updateLine(line.clientId, { unit_weight_g: e.target.value })}
-                    disabled={!canEdit || isMasterSelected}
-                    className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
-                  />
-                </label>
+                {hasBoxWeight && (
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs text-slate-500">1박스 중량 (g)</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      step="0.01"
+                      value={line.box_weight_g}
+                      onChange={(e) => updateLine(line.clientId, { box_weight_g: e.target.value })}
+                      disabled={!canEdit || isMasterSelected}
+                      className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
+                    />
+                  </label>
+                )}
+                {hasUnitWeight && (
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs text-slate-500">1낱개 중량 (g)</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      step="0.01"
+                      value={line.unit_weight_g}
+                      onChange={(e) => updateLine(line.clientId, { unit_weight_g: e.target.value })}
+                      disabled={!canEdit || isMasterSelected}
+                      className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
+                    />
+                  </label>
+                )}
                 <div className="flex flex-col gap-1 sm:col-span-2">
                   <span className="text-xs text-slate-500">총중량 (g) 자동</span>
                   <p className="px-3 py-2 rounded-lg bg-slate-900/80 border border-slate-700 text-cyan-200 text-sm font-medium">
@@ -847,9 +851,14 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
                 </label>
                 <div className="flex flex-col gap-1 sm:col-span-2">
                   <span className="text-xs text-slate-500">표시사항 사진</span>
+                  {line.label_photo_url && (
+                    <p className="text-xs text-cyan-200">
+                      {line.label_photo_url.startsWith("data:") ? "촬영/선택 완료" : "이미지 URL 반영 완료"}
+                    </p>
+                  )}
                   <div className="flex flex-wrap gap-2">
                     <label className="inline-flex items-center justify-center px-3 py-2 rounded-lg border border-slate-600 bg-slate-800/80 text-slate-200 text-sm cursor-pointer">
-                      사진 촬영
+                      {line.label_photo_url ? "다시 촬영" : "사진 촬영"}
                       <input
                         type="file"
                         accept="image/*"
@@ -863,7 +872,7 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
                       />
                     </label>
                     <label className="inline-flex items-center justify-center px-3 py-2 rounded-lg border border-slate-600 bg-slate-800/80 text-slate-200 text-sm cursor-pointer">
-                      갤러리 선택
+                      {line.label_photo_url ? "다시 선택" : "갤러리 선택"}
                       <input
                         type="file"
                         accept="image/*"
@@ -875,6 +884,16 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
                         className="hidden"
                       />
                     </label>
+                    {line.label_photo_url && (
+                      <button
+                        type="button"
+                        onClick={() => updateLine(line.clientId, { label_photo_url: "" })}
+                        disabled={!canEdit}
+                        className="inline-flex items-center justify-center px-3 py-2 rounded-lg border border-red-700/50 bg-red-900/20 text-red-200 text-sm"
+                      >
+                        삭제
+                      </button>
+                    )}
                   </div>
                   <input
                     type="url"
