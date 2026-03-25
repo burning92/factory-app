@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { TEMP_HUMIDITY_ZONES, type TempHumidityZone } from "@/features/daily/tempHumidityZones";
@@ -65,7 +64,6 @@ function buildAutoDeviationText(
 type Props = { mode: "new" | "edit"; editLogId?: string };
 
 export function TempHumidityForm({ mode, editLogId }: Props) {
-  const router = useRouter();
   const { user, profile, viewOrganizationCode } = useAuth();
   const [inspectionDate, setInspectionDate] = useState(todayStr);
   const [readings, setReadings] = useState<Record<string, ZoneReading>>(emptyReadings);
@@ -86,8 +84,6 @@ export function TempHumidityForm({ mode, editLogId }: Props) {
 
   const orgCode = viewOrganizationCode ?? "100";
   const authorName = (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
-  const role = profile?.role ?? "worker";
-  const isManager = role === "manager" || role === "admin";
 
   const hasDeviation = useMemo(
     () => TEMP_HUMIDITY_ZONES.some((z) => zoneDeviation(z, readings[z.id] ?? { temp: "", humidity: "" })),
@@ -119,12 +115,9 @@ export function TempHumidityForm({ mode, editLogId }: Props) {
     });
   }, [hasDeviation, inspectionDate, correctiveDatetimeManuallyEdited]);
 
-  const isApproved = currentLogStatus === "approved";
-  const isLockedForWorker = isApproved && !isManager;
-  const canEdit = !isLockedForWorker && currentLogStatus !== "submitted";
+  const canEdit = true;
   const canSubmit =
-    !isLockedForWorker &&
-    (currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus === null);
+    currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus === null;
 
   useEffect(() => {
     if (mode === "new" && authorName) {
@@ -183,10 +176,6 @@ export function TempHumidityForm({ mode, editLogId }: Props) {
         corrective_remarks: string | null;
         corrective_actor: string | null;
       };
-      if (log.status === "submitted" || (log.status === "approved" && !isManager)) {
-        router.replace(`/daily/temperature-humidity/${editLogId}`);
-        return;
-      }
       setCurrentLogId(log.id);
       setCurrentLogStatus(log.status);
       setInspectionDate(log.inspection_date ?? todayStr());
@@ -220,7 +209,7 @@ export function TempHumidityForm({ mode, editLogId }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [mode, editLogId, router, isManager, authorName]);
+  }, [mode, editLogId, authorName]);
 
   const correctivePayload = useMemo(() => {
     if (!hasDeviation) {
@@ -285,11 +274,6 @@ export function TempHumidityForm({ mode, editLogId }: Props) {
           .eq("inspection_date", date)
           .maybeSingle();
         const existingRow = existing as { id: string; status: LogStatus } | null;
-        if (existingRow?.status === "approved" && !isManager) {
-          setToast({ message: "승인 완료된 일지는 수정할 수 없습니다.", error: true });
-          setSaving(false);
-          return;
-        }
         if (existingRow) {
           const { error: updateErr } = await supabase
             .from("daily_temp_humidity_logs")
@@ -332,7 +316,6 @@ export function TempHumidityForm({ mode, editLogId }: Props) {
     currentLogId,
     currentLogStatus,
     persistItems,
-    isManager,
   ]);
 
   const handleSubmit = useCallback(async () => {
@@ -353,11 +336,6 @@ export function TempHumidityForm({ mode, editLogId }: Props) {
           .eq("inspection_date", date)
           .maybeSingle();
         const existingRow = existing as { id: string; status: LogStatus } | null;
-        if (existingRow?.status === "approved" && !isManager) {
-          setToast({ message: "승인 완료된 일지는 수정할 수 없습니다.", error: true });
-          setSaving(false);
-          return;
-        }
         if (existingRow) {
           logId = existingRow.id;
         } else {
@@ -416,7 +394,6 @@ export function TempHumidityForm({ mode, editLogId }: Props) {
     authorName,
     correctivePayload,
     persistItems,
-    isManager,
   ]);
 
   const setReading = (zoneId: string, field: keyof ZoneReading, value: string) => {
@@ -496,17 +473,9 @@ export function TempHumidityForm({ mode, editLogId }: Props) {
         </div>
       )}
 
-      {isApproved && (
-        <div
-          className={`mb-4 px-4 py-3 rounded-lg text-sm ${
-            isLockedForWorker
-              ? "bg-amber-900/20 border border-amber-700/50 text-amber-200"
-              : "bg-emerald-900/20 border border-emerald-700/50 text-emerald-200"
-          }`}
-        >
-          {isLockedForWorker
-            ? "승인 완료되어 수정할 수 없습니다."
-            : "승인 완료된 일지이지만 관리자 권한으로 수정 가능합니다."}
+      {currentLogStatus === "approved" && (
+        <div className="mb-4 px-4 py-3 rounded-lg text-sm bg-emerald-900/20 border border-emerald-700/50 text-emerald-200">
+          승인 완료된 일지입니다. 필요 시 수정 후 저장할 수 있습니다.
         </div>
       )}
 
@@ -644,16 +613,14 @@ export function TempHumidityForm({ mode, editLogId }: Props) {
       )}
 
       <div className="flex flex-wrap justify-end gap-2 mb-10">
-        {!isLockedForWorker && (
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="px-6 py-2.5 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-white font-medium text-sm"
-          >
-            {saving ? "저장 중…" : "저장"}
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          className="px-6 py-2.5 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-white font-medium text-sm"
+        >
+          {saving ? "저장 중…" : "저장"}
+        </button>
         {canSubmit && (
           <button
             type="button"

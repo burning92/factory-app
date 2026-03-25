@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import {
@@ -40,7 +39,6 @@ type Props = {
 };
 
 export function HygieneForm({ mode, editLogId }: Props) {
-  const router = useRouter();
   const { user, profile, viewOrganizationCode } = useAuth();
   const [inspectionDate, setInspectionDate] = useState(todayStr);
   const [results, setResults] = useState<HygieneFormResults>({});
@@ -54,15 +52,10 @@ export function HygieneForm({ mode, editLogId }: Props) {
 
   const orgCode = viewOrganizationCode ?? "100";
   const authorName = (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
-  const role = profile?.role ?? "worker";
-  const isManager = role === "manager" || role === "admin";
   const hasAnyX = useMemo(() => Object.values(results).some((v) => v === "X"), [results]);
-  const isApproved = currentLogStatus === "approved";
-  const isLockedForWorker = isApproved && !isManager;
-  const canEdit = !isLockedForWorker && currentLogStatus !== "submitted";
+  const canEdit = true;
   const canSubmit =
-    !isLockedForWorker &&
-    (currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus === null);
+    currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus === null;
 
   useEffect(() => {
     if (!hasAnyX) setCorrectiveDatetimeManuallyEdited(false);
@@ -111,10 +104,6 @@ export function HygieneForm({ mode, editLogId }: Props) {
         corrective_actor: string | null;
         corrective_approver: string | null;
       };
-      if (log.status === "submitted" || (log.status === "approved" && !isManager)) {
-        router.replace(`/daily/hygiene/${editLogId}`);
-        return;
-      }
       setCurrentLogId(log.id);
       setCurrentLogStatus(log.status);
       setInspectionDate(log.inspection_date ?? todayStr());
@@ -145,7 +134,7 @@ export function HygieneForm({ mode, editLogId }: Props) {
       setLoadDone(true);
     })();
     return () => { cancelled = true; };
-  }, [mode, editLogId, router, isManager]);
+  }, [mode, editLogId]);
 
   const handleSave = useCallback(async () => {
     const date = inspectionDate.trim();
@@ -185,11 +174,6 @@ export function HygieneForm({ mode, editLogId }: Props) {
           .eq("inspection_date", date)
           .maybeSingle();
         const existingRow = existing as { id: string; status: HygieneLogStatus } | null;
-        if (existingRow?.status === "approved" && !isManager) {
-          setToast({ message: "승인 완료된 일지는 수정할 수 없습니다.", error: true });
-          setSaving(false);
-          return;
-        }
         if (existingRow) {
           const { error: updateErr } = await supabase
             .from("daily_hygiene_logs")
@@ -255,7 +239,6 @@ export function HygieneForm({ mode, editLogId }: Props) {
     user?.id,
     currentLogId,
     currentLogStatus,
-    isManager,
   ]);
 
   const handleSubmit = useCallback(async () => {
@@ -276,11 +259,6 @@ export function HygieneForm({ mode, editLogId }: Props) {
           .eq("inspection_date", date)
           .maybeSingle();
         const existingRow = existing as { id: string; status: HygieneLogStatus } | null;
-        if (existingRow?.status === "approved" && !isManager) {
-          setToast({ message: "승인 완료된 일지는 수정할 수 없습니다.", error: true });
-          setSaving(false);
-          return;
-        }
         if (existingRow) {
           logId = existingRow.id;
         } else {
@@ -353,7 +331,6 @@ export function HygieneForm({ mode, editLogId }: Props) {
     results,
     corrective,
     hasAnyX,
-    isManager,
   ]);
 
   if (!loadDone) {
@@ -400,17 +377,9 @@ export function HygieneForm({ mode, editLogId }: Props) {
         </div>
       )}
 
-      {isApproved && (
-        <div
-          className={`mb-4 px-4 py-3 rounded-lg text-sm ${
-            isLockedForWorker
-              ? "bg-amber-900/20 border border-amber-700/50 text-amber-200"
-              : "bg-emerald-900/20 border border-emerald-700/50 text-emerald-200"
-          }`}
-        >
-          {isLockedForWorker
-            ? "승인 완료되어 수정할 수 없습니다."
-            : "승인 완료된 일지이지만 관리자 권한으로 수정 가능합니다."}
+      {currentLogStatus === "approved" && (
+        <div className="mb-4 px-4 py-3 rounded-lg text-sm bg-emerald-900/20 border border-emerald-700/50 text-emerald-200">
+          승인 완료된 일지입니다. 필요 시 수정 후 저장할 수 있습니다.
         </div>
       )}
 
@@ -505,11 +474,9 @@ export function HygieneForm({ mode, editLogId }: Props) {
       )}
 
       <div className="flex flex-wrap justify-end gap-2 mb-10">
-        {!isLockedForWorker && (
-          <button type="button" onClick={handleSave} disabled={saving} className="px-6 py-2.5 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-white font-medium text-sm">
-            {saving ? "저장 중…" : "저장"}
-          </button>
-        )}
+        <button type="button" onClick={handleSave} disabled={saving} className="px-6 py-2.5 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-white font-medium text-sm">
+          {saving ? "저장 중…" : "저장"}
+        </button>
         {canSubmit && (
           <button type="button" onClick={handleSubmit} disabled={saving} className="px-6 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-medium text-sm">
             {saving ? "처리 중…" : "제출"}

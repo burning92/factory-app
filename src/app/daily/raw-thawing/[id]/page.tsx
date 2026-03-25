@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { canShowDailyApproveReject } from "@/app/daily/dailyLogPermissions";
 
 type LogHeader = {
   id: string;
@@ -53,6 +54,11 @@ function resultLabel(v: string | null): string {
   return "—";
 }
 
+function formatWeightG(n: number | null): string {
+  if (n == null || Number.isNaN(Number(n))) return "—";
+  return `${Math.round(Number(n)).toLocaleString("ko-KR")}g`;
+}
+
 export default function DailyRawThawingViewPage() {
   const router = useRouter();
   const params = useParams();
@@ -65,8 +71,7 @@ export default function DailyRawThawingViewPage() {
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [rejectReasonInput, setRejectReasonInput] = useState("");
 
-  const canApproveReject = (profile?.role === "manager" || profile?.role === "admin") && header?.status === "submitted";
-  const isManager = profile?.role === "manager" || profile?.role === "admin";
+  const canApproveReject = canShowDailyApproveReject(profile?.role, header?.status);
   const approverName = (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
 
   const load = useCallback(async () => {
@@ -105,7 +110,7 @@ export default function DailyRawThawingViewPage() {
         <p className="text-slate-300">원료명: <span className="text-slate-100">{header.material_name ?? "—"}</span></p>
         <p className="text-slate-300">LOT: <span className="text-slate-100">{header.lot_no ?? "—"}</span></p>
         <p className="text-slate-300">박스/낱개/잔량: <span className="text-slate-100">{header.box_qty ?? 0} / {header.unit_qty ?? 0} / {header.remainder_g ?? 0}g</span></p>
-        <p className="text-slate-300">총중량: <span className="text-cyan-300">{header.total_weight_g ?? 0}g</span></p>
+        <p className="text-slate-300">총중량: <span className="text-cyan-300">{formatWeightG(header.total_weight_g)}</span></p>
         <p className="text-slate-300">해동 시작/종료: <span className="text-slate-100">{formatDt(header.thawing_start_at)} / {formatDt(header.thawing_end_at)}</span></p>
         <p className="text-slate-300">해동 창고 온도: <span className="text-slate-100">{header.thawing_room_temp_c != null ? `${header.thawing_room_temp_c}℃` : "—"}</span></p>
         <p className="text-slate-300">관능검사(이취): <span className="text-slate-100">{resultLabel(header.sensory_odor_result)}</span></p>
@@ -133,12 +138,10 @@ export default function DailyRawThawingViewPage() {
         </div>
       )}
 
-      {isManager && (
-        <div className="flex flex-wrap justify-end gap-2 mb-6">
-          <Link href={`/daily/raw-thawing/${id}/edit`} className="px-4 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium">수정</Link>
-          <button type="button" onClick={async () => { if (!window.confirm("이 일지를 삭제할까요?")) return; setActionLoading(true); const { error: err } = await supabase.from("daily_raw_thawing_logs").delete().eq("id", id); setActionLoading(false); if (err) setError(err.message); else router.push("/daily/raw-thawing"); }} disabled={actionLoading} className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-medium">삭제</button>
-        </div>
-      )}
+      <div className="flex flex-wrap justify-end gap-2 mb-6">
+        <Link href={`/daily/raw-thawing/${id}/edit`} className="px-4 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium">수정</Link>
+        <button type="button" onClick={async () => { if (!window.confirm("이 일지를 삭제할까요?")) return; setActionLoading(true); const { error: err } = await supabase.from("daily_raw_thawing_logs").delete().eq("id", id); setActionLoading(false); if (err) setError(err.message); else router.push("/daily/raw-thawing"); }} disabled={actionLoading} className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-medium">삭제</button>
+      </div>
 
       {rejectModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">

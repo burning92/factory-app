@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import {
@@ -46,12 +45,9 @@ function syncDateToDatetimeLocal(existing: string, date: string): string {
 }
 
 export function MaterialStorage3fForm({ mode, editLogId }: Props) {
-  const router = useRouter();
   const { user, profile, viewOrganizationCode } = useAuth();
   const orgCode = viewOrganizationCode ?? "100";
   const authorName = (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
-  const role = profile?.role ?? "worker";
-  const isManager = role === "manager" || role === "admin";
 
   const [inspectionDate, setInspectionDate] = useState(todayStr);
   const [temps, setTemps] = useState<Record<MaterialStorage3fRoomKey, string>>(EMPTY_ROOM_VALUES);
@@ -101,12 +97,9 @@ export function MaterialStorage3fForm({ mode, editLogId }: Props) {
     });
   }, [hasAnyIssue, inspectionDate, correctiveDatetimeManuallyEdited]);
 
-  const isApproved = currentLogStatus === "approved";
-  const isLockedForWorker = isApproved && !isManager;
-  const canEdit = !isLockedForWorker && currentLogStatus !== "submitted";
+  const canEdit = true;
   const canSubmit =
-    !isLockedForWorker &&
-    (currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus === null);
+    currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus === null;
 
   useEffect(() => {
     if (mode === "new" && authorName) {
@@ -154,10 +147,6 @@ export function MaterialStorage3fForm({ mode, editLogId }: Props) {
         corrective_remarks: string | null;
         corrective_actor: string | null;
       };
-      if (log.status === "submitted" || (log.status === "approved" && !isManager)) {
-        router.replace(`/daily/material-storage-3f/${editLogId}`);
-        return;
-      }
       setCurrentLogId(log.id);
       setCurrentLogStatus(log.status);
       setInspectionDate(log.inspection_date ?? todayStr());
@@ -194,7 +183,7 @@ export function MaterialStorage3fForm({ mode, editLogId }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [mode, editLogId, router, isManager, authorName]);
+  }, [mode, editLogId, authorName]);
 
   const correctivePayload = useMemo(() => {
     if (!hasAnyIssue) {
@@ -293,11 +282,6 @@ export function MaterialStorage3fForm({ mode, editLogId }: Props) {
           .eq("inspection_date", date)
           .maybeSingle();
         const existingRow = existing as { id: string; status: LogStatus } | null;
-        if (existingRow?.status === "approved" && !isManager) {
-          setToast({ message: "승인 완료된 일지는 수정할 수 없습니다.", error: true });
-          setSaving(false);
-          return;
-        }
         if (existingRow) {
           const { error: updateErr } = await supabase
             .from("daily_material_storage_3f_logs")
@@ -328,7 +312,7 @@ export function MaterialStorage3fForm({ mode, editLogId }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [inspectionDate, baseHeaderFields, mode, currentLogId, orgCode, isManager, user?.id, persistItems, currentLogStatus]);
+  }, [inspectionDate, baseHeaderFields, mode, currentLogId, orgCode, user?.id, persistItems, currentLogStatus]);
 
   const handleSubmit = useCallback(async () => {
     const date = inspectionDate.trim();
@@ -348,11 +332,6 @@ export function MaterialStorage3fForm({ mode, editLogId }: Props) {
           .eq("inspection_date", date)
           .maybeSingle();
         const existingRow = existing as { id: string; status: LogStatus } | null;
-        if (existingRow?.status === "approved" && !isManager) {
-          setToast({ message: "승인 완료된 일지는 수정할 수 없습니다.", error: true });
-          setSaving(false);
-          return;
-        }
         if (existingRow) {
           logId = existingRow.id;
         } else {
@@ -395,7 +374,7 @@ export function MaterialStorage3fForm({ mode, editLogId }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [inspectionDate, currentLogId, orgCode, isManager, baseHeaderFields, user?.id, persistItems]);
+  }, [inspectionDate, currentLogId, orgCode, baseHeaderFields, user?.id, persistItems]);
 
   if (!loadDone) {
     return (
@@ -419,6 +398,12 @@ export function MaterialStorage3fForm({ mode, editLogId }: Props) {
       {toast && (
         <div className={`mb-4 px-4 py-2 rounded-lg text-sm ${toast.error ? "bg-red-900/30 text-red-200" : "bg-cyan-900/30 text-cyan-200"}`}>
           {toast.message}
+        </div>
+      )}
+
+      {currentLogStatus === "approved" && (
+        <div className="mb-4 px-4 py-3 rounded-lg text-sm bg-emerald-900/20 border border-emerald-700/50 text-emerald-200">
+          승인 완료된 일지입니다. 필요 시 수정 후 저장할 수 있습니다.
         </div>
       )}
 
@@ -509,11 +494,9 @@ export function MaterialStorage3fForm({ mode, editLogId }: Props) {
       )}
 
       <div className="flex flex-wrap justify-end gap-2 mb-10">
-        {!isLockedForWorker && (
-          <button type="button" onClick={handleSave} disabled={saving} className="px-6 py-2.5 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-white font-medium text-sm">
-            {saving ? "저장 중…" : "저장"}
-          </button>
-        )}
+        <button type="button" onClick={handleSave} disabled={saving} className="px-6 py-2.5 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-white font-medium text-sm">
+          {saving ? "저장 중…" : "저장"}
+        </button>
         {canSubmit && (
           <button type="button" onClick={handleSubmit} disabled={saving} className="px-6 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-medium text-sm">
             {saving ? "처리 중…" : "제출"}

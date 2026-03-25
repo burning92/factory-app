@@ -34,9 +34,8 @@ function statusBadgeClass(s: LogStatus): string {
 }
 
 export default function DailyRawThawingListPage() {
-  const { viewOrganizationCode, profile } = useAuth();
+  const { viewOrganizationCode } = useAuth();
   const orgCode = viewOrganizationCode ?? "100";
-  const isManager = profile?.role === "manager" || profile?.role === "admin";
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; error?: boolean } | null>(null);
@@ -63,7 +62,6 @@ export default function DailyRawThawingListPage() {
 
   const getRowHref = (log: LogRow) => {
     if (log.status === "draft" || log.status === "rejected") return `/daily/raw-thawing/${log.id}/edit`;
-    if (log.status === "approved" && isManager) return `/daily/raw-thawing/${log.id}/edit`;
     return `/daily/raw-thawing/${log.id}`;
   };
 
@@ -101,12 +99,10 @@ export default function DailyRawThawingListPage() {
                     </div>
                     {log.planned_use_date && <p className="mt-1 text-xs text-slate-500">사용예정일: {log.planned_use_date}</p>}
                   </div>
-                  {isManager && (
-                    <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0">
                       <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `/daily/raw-thawing/${log.id}/edit`; }} className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-700/60 bg-slate-900/30 hover:bg-slate-700/40 text-slate-200" title="수정"><Pencil className="w-4 h-4" strokeWidth={2} /></button>
                       <button type="button" onClick={async (e) => { e.preventDefault(); e.stopPropagation(); if (!window.confirm("이 일지를 삭제할까요?")) return; setDeletingId(log.id); const { error } = await supabase.from("daily_raw_thawing_logs").delete().eq("id", log.id); setDeletingId(null); if (error) setToast({ message: error.message, error: true }); else fetchLogs(); }} disabled={deletingId === log.id} className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-red-700/40 bg-red-900/10 hover:bg-red-900/25 text-red-200 disabled:opacity-50" title="삭제"><Trash2 className="w-4 h-4" strokeWidth={2} /></button>
                     </div>
-                  )}
                 </div>
                 {log.status === "rejected" && log.reject_reason && <p className="mt-1 text-xs text-amber-400/90 line-clamp-1">{log.reject_reason}</p>}
               </Link>

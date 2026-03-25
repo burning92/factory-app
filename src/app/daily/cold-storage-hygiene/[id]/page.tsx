@@ -15,6 +15,7 @@ import {
   roundOneDecimal,
   type ColdStorageTempKey,
 } from "@/features/daily/coldStorageHygieneTemperature";
+import { canShowDailyApproveReject } from "@/app/daily/dailyLogPermissions";
 
 type LogHeader = {
   id: string;
@@ -108,9 +109,7 @@ export default function DailyColdStorageHygieneViewPage() {
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [rejectReasonInput, setRejectReasonInput] = useState("");
 
-  const canApproveReject =
-    (profile?.role === "manager" || profile?.role === "admin") && header?.status === "submitted";
-  const isManager = profile?.role === "manager" || profile?.role === "admin";
+  const canApproveReject = canShowDailyApproveReject(profile?.role, header?.status);
   const approverName = (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
 
   const load = useCallback(async () => {
@@ -420,31 +419,29 @@ export default function DailyColdStorageHygieneViewPage() {
         </div>
       )}
 
-      {isManager && (
-        <div className="flex flex-wrap justify-end gap-2 mb-6">
-          <Link
-            href={`/daily/cold-storage-hygiene/${id}/edit`}
-            className="px-4 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium"
-          >
-            수정
-          </Link>
-          <button
-            type="button"
-            onClick={async () => {
-              if (!window.confirm("이 점검일지를 삭제할까요?")) return;
-              setActionLoading(true);
-              const { error: err } = await supabase.from("daily_cold_storage_hygiene_logs").delete().eq("id", id);
-              setActionLoading(false);
-              if (err) setError(err.message);
-              else router.push("/daily/cold-storage-hygiene");
-            }}
-            disabled={actionLoading}
-            className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-medium"
-          >
-            삭제
-          </button>
-        </div>
-      )}
+      <div className="flex flex-wrap justify-end gap-2 mb-6">
+        <Link
+          href={`/daily/cold-storage-hygiene/${id}/edit`}
+          className="px-4 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium"
+        >
+          수정
+        </Link>
+        <button
+          type="button"
+          onClick={async () => {
+            if (!window.confirm("이 점검일지를 삭제할까요?")) return;
+            setActionLoading(true);
+            const { error: err } = await supabase.from("daily_cold_storage_hygiene_logs").delete().eq("id", id);
+            setActionLoading(false);
+            if (err) setError(err.message);
+            else router.push("/daily/cold-storage-hygiene");
+          }}
+          disabled={actionLoading}
+          className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-medium"
+        >
+          삭제
+        </button>
+      </div>
 
       {rejectModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">

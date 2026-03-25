@@ -62,15 +62,13 @@ function statusBadgeClass(s: LogStatus): string {
 }
 
 export default function DailyTempHumidityListPage() {
-  const { viewOrganizationCode, profile } = useAuth();
+  const { viewOrganizationCode } = useAuth();
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; error?: boolean } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const orgCode = viewOrganizationCode ?? "100";
-  const role = profile?.role ?? "worker";
-  const isManager = role === "manager" || role === "admin";
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
@@ -95,17 +93,10 @@ export default function DailyTempHumidityListPage() {
 
   const getRowHref = (log: LogRow) => {
     if (log.status === "draft" || log.status === "rejected") return `/daily/temperature-humidity/${log.id}/edit`;
-    if (log.status === "approved" && isManager) return `/daily/temperature-humidity/${log.id}/edit`;
     return `/daily/temperature-humidity/${log.id}`;
   };
 
-  const getEditHref = (log: LogRow) => {
-    if (log.status === "submitted") return `/daily/temperature-humidity/${log.id}`;
-    return `/daily/temperature-humidity/${log.id}/edit`;
-  };
-
   const handleDelete = async (logId: string) => {
-    if (!isManager) return;
     const ok = window.confirm("이 점검일지를 삭제할까요? (구역 항목도 함께 삭제됩니다)");
     if (!ok) return;
     setDeletingId(logId);
@@ -188,14 +179,13 @@ export default function DailyTempHumidityListPage() {
                     </div>
                   </div>
 
-                  {isManager && (
-                    <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0">
                       <button
                         type="button"
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          window.location.href = getEditHref(log);
+                          window.location.href = `/daily/temperature-humidity/${log.id}/edit`;
                         }}
                         className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-700/60 bg-slate-900/30 hover:bg-slate-700/40 text-slate-200"
                         title="수정"
@@ -218,7 +208,6 @@ export default function DailyTempHumidityListPage() {
                         <Trash2 className="w-4 h-4" strokeWidth={2} />
                       </button>
                     </div>
-                  )}
                 </div>
                 {log.status === "approved" && (log.approved_at || log.approved_by_name) && (
                   <p className="mt-1 text-xs text-slate-500">

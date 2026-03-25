@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import DateWheelPicker from "@/components/DateWheelPicker";
@@ -94,11 +93,9 @@ function formatIntWithComma(n: number): string {
 }
 
 export function RawThawingForm({ mode, editLogId }: Props) {
-  const router = useRouter();
   const { user, profile, viewOrganizationCode } = useAuth();
   const orgCode = viewOrganizationCode ?? "100";
   const authorName = (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
-  const isManager = profile?.role === "manager" || profile?.role === "admin";
 
   const [thawingDate, setThawingDate] = useState(todayStr);
   const [plannedUseDate, setPlannedUseDate] = useState(todayStr);
@@ -262,12 +259,9 @@ export function RawThawingForm({ mode, editLogId }: Props) {
     if (!lots.includes(selectedLot)) setSelectedLot(lots[0]);
   }, [selectedItemCode, lotOptions, selectedLot]);
 
-  const isApproved = currentLogStatus === "approved";
-  const isLockedForWorker = isApproved && !isManager;
-  const canEdit = !isLockedForWorker && currentLogStatus !== "submitted";
+  const canEdit = true;
   const canSubmit =
-    !isLockedForWorker &&
-    (currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus === null);
+    currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus === null;
 
   useEffect(() => {
     if (mode !== "edit" || !editLogId) {
@@ -292,10 +286,6 @@ export function RawThawingForm({ mode, editLogId }: Props) {
         return;
       }
       const log = logData as Record<string, unknown>;
-      if (log.status === "submitted" || (log.status === "approved" && !isManager)) {
-        router.replace(`/daily/raw-thawing/${editLogId}`);
-        return;
-      }
       setCurrentLogId(String(log.id));
       setCurrentLogStatus(log.status as LogStatus);
       setThawingDate(String(log.thawing_date ?? todayStr()));
@@ -332,7 +322,7 @@ export function RawThawingForm({ mode, editLogId }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [mode, editLogId, router, isManager, authorName]);
+  }, [mode, editLogId, authorName]);
 
   const correctivePayload = useMemo(() => {
     if (!hasAnyIssue) {
@@ -509,6 +499,12 @@ export function RawThawingForm({ mode, editLogId }: Props) {
         </div>
       )}
 
+      {currentLogStatus === "approved" && (
+        <div className="mb-4 px-4 py-3 rounded-lg text-sm bg-emerald-900/20 border border-emerald-700/50 text-emerald-200">
+          승인 완료된 일지입니다. 필요 시 수정 후 저장할 수 있습니다.
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
         <div>
           <label className="block text-sm font-medium text-slate-400 mb-1">해동일자</label>
@@ -682,9 +678,7 @@ export function RawThawingForm({ mode, editLogId }: Props) {
       )}
 
       <div className="flex flex-wrap justify-end gap-2 mb-10">
-        {!isLockedForWorker && (
-          <button type="button" onClick={handleSave} disabled={saving} className="px-6 py-2.5 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-white font-medium text-sm">{saving ? "저장 중..." : "저장"}</button>
-        )}
+        <button type="button" onClick={handleSave} disabled={saving} className="px-6 py-2.5 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-white font-medium text-sm">{saving ? "저장 중..." : "저장"}</button>
         {canSubmit && (
           <button type="button" onClick={handleSubmit} disabled={saving} className="px-6 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-medium text-sm">{saving ? "처리 중..." : "제출"}</button>
         )}
