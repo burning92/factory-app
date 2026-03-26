@@ -9,7 +9,7 @@ import { canShowDailyApproveReject } from "@/app/daily/dailyLogPermissions";
 
 type LogHeader = {
   id: string;
-  inspected_at: string;
+  inspection_date: string | null;
   inspector_name: string | null;
   status: string;
   approved_at: string | null;
@@ -29,6 +29,10 @@ type LogItem = {
   measured_lux: number | null;
   conformity: "O" | "X" | null;
 };
+
+function formatDate(value: string | null): string {
+  return value || "—";
+}
 
 function formatDt(iso: string | null): string {
   if (!iso) return "—";
@@ -128,10 +132,10 @@ export default function DailyIlluminationViewPage() {
         <span className="text-slate-600">/</span>
         <Link href="/daily/illumination" className="text-slate-400 hover:text-slate-200 text-sm">영업장 조도 점검일지</Link>
         <span className="text-slate-600">/</span>
-        <span className="text-slate-200 font-medium">{formatDt(header.inspected_at)}</span>
+        <span className="text-slate-200 font-medium">{formatDate(header.inspection_date)}</span>
       </div>
       <h1 className="text-lg font-semibold text-slate-100 mb-1">영업장 조도 점검일지 — 상세</h1>
-      <p className="text-slate-500 text-sm mb-4">점검일시: {formatDt(header.inspected_at)}{header.inspector_name ? ` · 점검자: ${header.inspector_name}` : ""}</p>
+      <p className="text-slate-500 text-sm mb-4">점검일자: {formatDate(header.inspection_date)}{header.inspector_name ? ` · 점검자: ${header.inspector_name}` : ""}</p>
 
       {header.status === "approved" && <div className="mb-4 px-4 py-2 rounded-lg bg-emerald-900/20 border border-emerald-700/50 text-emerald-200 text-sm">승인 완료</div>}
       {header.status === "submitted" && <div className="mb-4 px-4 py-2 rounded-lg bg-slate-800/80 border border-slate-600 text-slate-400 text-sm">제출 완료 · 승인 대기</div>}

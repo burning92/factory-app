@@ -10,7 +10,7 @@ type LogStatus = "draft" | "submitted" | "approved" | "rejected";
 
 type LogRow = {
   id: string;
-  inspected_at: string;
+  inspection_date: string | null;
   inspector_name: string | null;
   status: LogStatus;
   approved_at: string | null;
@@ -32,13 +32,8 @@ function statusBadgeClass(s: LogStatus): string {
   return "bg-slate-700/80 text-slate-400";
 }
 
-function formatDt(iso: string | null): string {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" });
-  } catch {
-    return iso;
-  }
+function formatDate(value: string | null): string {
+  return value || "—";
 }
 
 export default function DailyIlluminationListPage() {
@@ -53,9 +48,9 @@ export default function DailyIlluminationListPage() {
     setLoading(true);
     const { data, error } = await supabase
       .from("daily_illumination_logs")
-      .select("id, inspected_at, inspector_name, status, approved_at, approved_by_name, reject_reason")
+      .select("id, inspection_date, inspector_name, status, approved_at, approved_by_name, reject_reason")
       .eq("organization_code", orgCode)
-      .order("inspected_at", { ascending: false })
+      .order("inspection_date", { ascending: false })
       .limit(100);
     if (error) {
       setToast({ message: error.message, error: true });
@@ -115,7 +110,7 @@ export default function DailyIlluminationListPage() {
               <div className={`flex items-stretch gap-1 rounded-xl border transition-colors ${log.status === "submitted" ? "border-cyan-600/50 bg-slate-800/80" : "border-slate-700/60 bg-slate-800/50"}`}>
                 <Link href={getRowHref(log)} className="flex-1 min-w-0 px-4 py-3 hover:bg-slate-700/40 rounded-l-xl">
                   <div className="flex flex-wrap items-center gap-2 gap-y-1">
-                    <span className="font-medium text-slate-200">{formatDt(log.inspected_at)}</span>
+                    <span className="font-medium text-slate-200">{formatDate(log.inspection_date)}</span>
                     {log.inspector_name && <span className="text-slate-400 text-sm">{log.inspector_name}</span>}
                     <span className={`text-xs font-medium px-2 py-0.5 rounded ${statusBadgeClass(log.status)}`}>
                       {statusLabel(log.status)}

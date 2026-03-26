@@ -25,10 +25,17 @@ type Props = {
   editLogId?: string;
 };
 
-function nowLocalInputString(): string {
+function todayDateString(): string {
   const now = new Date();
   const offsetMs = now.getTimezoneOffset() * 60_000;
-  return new Date(now.getTime() - offsetMs).toISOString().slice(0, 16);
+  return new Date(now.getTime() - offsetMs).toISOString().slice(0, 10);
+}
+
+function syncDateToDatetimeLocal(existing: string, date: string): string {
+  if (!date) return existing;
+  const timePart = existing.includes("T") ? existing.slice(11, 16) : "00:00";
+  const safeTime = timePart.length === 5 ? timePart : "00:00";
+  return `${date}T${safeTime}`;
 }
 
 function localInputToIso(value: string): string {
@@ -47,7 +54,7 @@ function statusLabel(status: LogStatus | null): string {
 
 export function IlluminationForm({ mode, editLogId }: Props) {
   const { user, profile, viewOrganizationCode } = useAuth();
-  const [inspectedAtLocal, setInspectedAtLocal] = useState(nowLocalInputString);
+  const [inspectionDate, setInspectionDate] = useState(todayDateString);
   const [luxByIndex, setLuxByIndex] = useState<Record<number, string>>({});
   const [corrective, setCorrective] = useState<CorrectiveState>({
     datetime: "",
@@ -62,6 +69,7 @@ export function IlluminationForm({ mode, editLogId }: Props) {
   const [currentLogStatus, setCurrentLogStatus] = useState<LogStatus | null>(null);
   const [loadDone, setLoadDone] = useState(mode === "new");
   const [deviationManuallyEdited, setDeviationManuallyEdited] = useState(false);
+  const [correctiveDatetimeManuallyEdited, setCorrectiveDatetimeManuallyEdited] = useState(false);
 
   const orgCode = viewOrganizationCode ?? "100";
   const inspectorName = (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
@@ -101,8 +109,18 @@ export function IlluminationForm({ mode, editLogId }: Props) {
     if (!hasAnyNonConform) {
       setCorrective((prev) => ({ ...prev, deviation: "" }));
       setDeviationManuallyEdited(false);
+      setCorrectiveDatetimeManuallyEdited(false);
     }
   }, [hasAnyNonConform, deviationManuallyEdited, autoDeviationText]);
+
+  useEffect(() => {
+    if (!hasAnyNonConform || !inspectionDate || correctiveDatetimeManuallyEdited) return;
+    setCorrective((prev) => {
+      const next = syncDateToDatetimeLocal(prev.datetime, inspectionDate);
+      if (next === prev.datetime) return prev;
+      return { ...prev, datetime: next };
+    });
+  }, [hasAnyNonConform, inspectionDate, correctiveDatetimeManuallyEdited]);
 
   useEffect(() => {
     if (mode !== "edit" || !editLogId) {
@@ -114,7 +132,7 @@ export function IlluminationForm({ mode, editLogId }: Props) {
       const { data: logData, error: logErr } = await supabase
         .from("daily_illumination_logs")
         .select(
-          "id, inspected_at, status, corrective_datetime, corrective_deviation, corrective_detail, corrective_remarks, corrective_actor"
+          "id, inspection_date, inspected_at, status, corrective_datetime, corrective_deviation, corrective_detail, corrective_remarks, corrective_actor"
         )
         .eq("id", editLogId)
         .maybeSingle();
@@ -130,6 +148,7 @@ export function IlluminationForm({ mode, editLogId }: Props) {
       }
       const log = logData as {
         id: string;
+        inspection_date: string | null;
         inspected_at: string | null;
         status: LogStatus;
         corrective_datetime: string | null;
@@ -140,7 +159,8 @@ export function IlluminationForm({ mode, editLogId }: Props) {
       };
       setCurrentLogId(log.id);
       setCurrentLogStatus(log.status);
-      if (log.inspected_at) setInspectedAtLocal(log.inspected_at.slice(0, 16));
+      if (log.inspection_date) setInspectionDate(log.inspection_date);
+      else if (log.inspected_at) setInspectionDate(log.inspected_at.slice(0, 10));
       setCorrective({
         datetime: log.corrective_datetime ? log.corrective_datetime.slice(0, 16) : "",
         deviation: log.corrective_deviation ?? "",
@@ -148,6 +168,7 @@ export function IlluminationForm({ mode, editLogId }: Props) {
         remarks: log.corrective_remarks ?? "",
         actor: log.corrective_actor ?? inspectorName,
       });
+      setCorrectiveDatetimeManuallyEdited(Boolean(log.corrective_datetime));
 
       const { data: itemData } = await supabase
         .from("daily_illumination_log_items")
@@ -202,6 +223,10 @@ export function IlluminationForm({ mode, editLogId }: Props) {
   }, [hasAnyNonConform, corrective]);
 
   const saveLog = useCallback(async (submit: boolean) => {
+    if (!inspectionDate) {
+      setToast({ message: "점검일자를 선택해 주세요.", error: true });
+      return;
+    }
     if (submit && hasAnyMissingLux) {
       setToast({ message: "실측 조도 미입력 항목이 있습니다. 모든 항목을 입력해 주세요.", error: true });
       return;
@@ -212,7 +237,7 @@ export function IlluminationForm({ mode, editLogId }: Props) {
       const payload = {
         organization_code: orgCode,
         inspector_name: inspectorName || null,
-        inspected_at: localInputToIso(inspectedAtLocal),
+        inspection_date: inspectionDate || todayDateString(),
         ...correctivePayload,
         updated_at: new Date().toISOString(),
       };
@@ -268,7 +293,7 @@ export function IlluminationForm({ mode, editLogId }: Props) {
     currentLogId,
     currentLogStatus,
     hasAnyMissingLux,
-    inspectedAtLocal,
+    inspectionDate,
     inspectorName,
     mode,
     orgCode,
@@ -297,7 +322,7 @@ export function IlluminationForm({ mode, editLogId }: Props) {
       <h1 className="text-lg font-semibold text-slate-100 mb-1">
         {mode === "new" ? "영업장 조도 점검일지 — 새 작성" : "영업장 조도 점검일지 — 수정"}
       </h1>
-      <p className="text-slate-500 text-sm mb-4">점검일시는 자동 기록됩니다. 각 항목의 실측 조도(lx)를 입력하세요.</p>
+      <p className="text-slate-500 text-sm mb-4">점검일자를 선택하고 각 항목의 실측 조도(lx)를 입력하세요.</p>
 
       {toast && (
         <div className={`mb-4 px-4 py-2 rounded-lg text-sm ${toast.error ? "bg-red-900/30 text-red-200" : "bg-cyan-900/30 text-cyan-200"}`}>
@@ -318,12 +343,12 @@ export function IlluminationForm({ mode, editLogId }: Props) {
           <p className="text-slate-200">{inspectorName || "-"}</p>
         </div>
         <div>
-          <label className="block text-slate-500 text-xs mb-1">점검일시</label>
+          <label className="block text-slate-500 text-xs mb-1">점검일자</label>
           <input
-            type="datetime-local"
-            value={inspectedAtLocal}
-            readOnly
-            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-300 text-sm"
+            type="date"
+            value={inspectionDate}
+            onChange={(e) => setInspectionDate(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-sm"
           />
         </div>
       </div>
@@ -380,7 +405,10 @@ export function IlluminationForm({ mode, editLogId }: Props) {
               <input
                 type="datetime-local"
                 value={corrective.datetime}
-                onChange={(e) => setCorrective((prev) => ({ ...prev, datetime: e.target.value }))}
+                onChange={(e) => {
+                  setCorrectiveDatetimeManuallyEdited(true);
+                  setCorrective((prev) => ({ ...prev, datetime: e.target.value }));
+                }}
                 className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
               />
             </div>
