@@ -39,6 +39,7 @@ const DESKTOP_DROPDOWN_DAILY: DropdownItem[] = [
   { href: "/daily/material-storage-3f", label: "원부자재 창고 점검표(3F)" },
   { href: "/daily/raw-thawing", label: "원료 해동 일지" },
   { href: "/daily/material-receiving-inspection", label: "원료 입고 검수일지" },
+  { href: "/daily/illumination", label: "영업장 조도 점검일지" },
   { label: "제조설비 일지", comingSoon: true },
   { label: "기타 데일리 점검", comingSoon: true },
 ];
