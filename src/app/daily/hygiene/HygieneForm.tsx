@@ -346,14 +346,14 @@ export function HygieneForm({ mode, editLogId }: Props) {
       <div className="flex items-center gap-2 mb-4">
         <Link href="/daily" className="text-slate-400 hover:text-slate-200 text-sm">데일리</Link>
         <span className="text-slate-600">/</span>
-        <Link href="/daily/hygiene" className="text-slate-400 hover:text-slate-200 text-sm">영업장환경위생점검일지</Link>
+        <Link href="/daily/hygiene" className="text-slate-400 hover:text-slate-200 text-sm">영업장 환경 위생 점검일지</Link>
         <span className="text-slate-600">/</span>
         <span className="text-slate-200 font-medium">{mode === "new" ? "새 작성" : "수정"}</span>
       </div>
       <h1 className="text-lg font-semibold text-slate-100 mb-1">
-        {mode === "new" ? "새 점검일지 작성" : "점검일지 수정"}
+        {mode === "new" ? "영업장 환경 위생 점검일지 — 새 작성" : "영업장 환경 위생 점검일지 — 수정"}
       </h1>
-      <p className="text-slate-500 text-sm mb-4">점검일자 선택 후 O/X 입력, 부적합 시 조치 내용을 입력한 뒤 저장하세요.</p>
+      <p className="text-slate-500 text-sm mb-4">점검일자 선택 후 O/X를 입력하고 저장하세요. 부적합 시 조치 내용도 입력합니다.</p>
 
       {toast && (
         <div className={`mb-4 px-4 py-2 rounded-lg text-sm ${toast.error ? "bg-red-900/30 text-red-200" : "bg-cyan-900/30 text-cyan-200"}`}>
@@ -369,8 +369,8 @@ export function HygieneForm({ mode, editLogId }: Props) {
             currentLogStatus === "submitted" ? "text-cyan-400" :
             currentLogStatus === "rejected" ? "text-amber-400" : "text-slate-300"
           }>
-            {currentLogStatus === "draft" && "작성중"}
-            {currentLogStatus === "submitted" && "제출됨"}
+            {currentLogStatus === "draft" && "작성 중"}
+            {currentLogStatus === "submitted" && "제출 완료"}
             {currentLogStatus === "approved" && "승인 완료"}
             {currentLogStatus === "rejected" && "반려"}
           </span>
@@ -452,8 +452,8 @@ export function HygieneForm({ mode, editLogId }: Props) {
               <input type="datetime-local" value={corrective.datetime} onChange={(e) => { setCorrectiveDatetimeManuallyEdited(true); setCorrective((c) => ({ ...c, datetime: e.target.value })); }} disabled={!canEdit} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm" />
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1">이탈내용</label>
-              <textarea value={corrective.deviation} onChange={(e) => setCorrective((c) => ({ ...c, deviation: e.target.value }))} rows={2} disabled={!canEdit} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm resize-none disabled:opacity-70" placeholder="이탈내용" />
+              <label className="block text-xs text-slate-500 mb-1">이탈 내용</label>
+              <textarea value={corrective.deviation} onChange={(e) => setCorrective((c) => ({ ...c, deviation: e.target.value }))} rows={2} disabled={!canEdit} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm resize-none disabled:opacity-70" placeholder="이탈 내용" />
             </div>
             <div>
               <label className="block text-xs text-slate-500 mb-1">세부 개선 조치 내역</label>
@@ -461,7 +461,7 @@ export function HygieneForm({ mode, editLogId }: Props) {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs text-slate-500 mb-1">개선조치자</label>
+                <label className="block text-xs text-slate-500 mb-1">개선 조치자</label>
                 <input type="text" value={corrective.actor} onChange={(e) => setCorrective((c) => ({ ...c, actor: e.target.value }))} disabled={!canEdit} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm disabled:opacity-70" />
               </div>
               <div>

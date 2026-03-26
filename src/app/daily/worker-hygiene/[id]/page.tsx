@@ -140,7 +140,7 @@ export default function DailyWorkerHygieneViewPage() {
   if (error || !header) {
     return (
       <div className="min-h-[calc(100vh-3.5rem)] p-4 md:p-6 max-w-2xl mx-auto">
-        <p className="text-red-400 text-sm mb-4">{error ?? "데이터 없음"}</p>
+        <p className="text-red-400 text-sm mb-4">{error ?? "데이터가 없습니다."}</p>
         <Link href="/daily/worker-hygiene" className="text-cyan-400 hover:text-cyan-300 text-sm">
           목록으로
         </Link>
@@ -170,12 +170,12 @@ export default function DailyWorkerHygieneViewPage() {
         </Link>
         <span className="text-slate-600">/</span>
         <Link href="/daily/worker-hygiene" className="text-slate-400 hover:text-slate-200 text-sm">
-          작업자 위생점검일지
+          작업자 위생 점검일지
         </Link>
         <span className="text-slate-600">/</span>
         <span className="text-slate-200 font-medium">{header.inspection_date}</span>
       </div>
-      <h1 className="text-lg font-semibold text-slate-100 mb-1">작업자 위생점검일지</h1>
+      <h1 className="text-lg font-semibold text-slate-100 mb-1">작업자 위생 점검일지 — 상세</h1>
       <p className="text-slate-500 text-sm mb-3">
         조직·점검일자당 1건의 종합 점검 기록입니다. 항목은 현장 작업자 전체 기준 판정입니다.
       </p>
@@ -192,7 +192,7 @@ export default function DailyWorkerHygieneViewPage() {
       )}
       {header.status === "rejected" && (
         <div className="mb-4 px-4 py-3 rounded-lg bg-amber-900/20 border border-amber-700/50 text-amber-200 text-sm">
-          <span className="font-medium">반려됨</span>
+          <span className="font-medium">반려</span>
           {header.reject_reason && (
             <p className="mt-1 text-slate-300 whitespace-pre-wrap">{header.reject_reason}</p>
           )}
@@ -201,7 +201,7 @@ export default function DailyWorkerHygieneViewPage() {
       )}
       {header.status === "submitted" && (
         <div className="mb-4 px-4 py-2 rounded-lg bg-slate-800/80 border border-slate-600 text-slate-400 text-sm">
-          제출됨 · 승인 대기 중
+          제출 완료 · 승인 대기
         </div>
       )}
 
@@ -258,7 +258,7 @@ export default function DailyWorkerHygieneViewPage() {
             )}
             {header.corrective_deviation && (
               <>
-                <dt className="text-slate-500">이탈내용</dt>
+                <dt className="text-slate-500">이탈 내용</dt>
                 <dd className="text-slate-200 whitespace-pre-wrap">{header.corrective_deviation}</dd>
               </>
             )}

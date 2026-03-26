@@ -31,11 +31,11 @@ function formatDate(iso: string | null): string {
 function statusLabel(s: LogStatus): string {
   switch (s) {
     case "draft":
-      return "작성중";
+      return "작성 중";
     case "submitted":
-      return "제출됨";
+      return "제출 완료";
     case "approved":
-      return "승인완료";
+      return "승인 완료";
     case "rejected":
       return "반려";
     default:
@@ -114,9 +114,9 @@ export default function DailyProcessControlBreadListPage() {
       </div>
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <h1 className="text-lg font-semibold text-slate-100">공정관리 점검일지(빵류)</h1>
+        <h1 className="text-lg font-semibold text-slate-100">공정관리 점검일지(빵류) — 목록</h1>
         <Link href="/daily/process-control-bread/new" className="shrink-0 inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-sm">
-          새 점검일지 작성
+          새 일지 작성
         </Link>
       </div>
 
@@ -130,9 +130,9 @@ export default function DailyProcessControlBreadListPage() {
         <p className="text-slate-500 text-sm">불러오는 중…</p>
       ) : logs.length === 0 ? (
         <div className="rounded-xl border border-slate-700/60 bg-slate-800/30 p-8 text-center">
-          <p className="text-slate-500 text-sm mb-4">저장된 점검일지가 없습니다.</p>
+          <p className="text-slate-500 text-sm mb-4">저장된 일지가 없습니다.</p>
           <Link href="/daily/process-control-bread/new" className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium">
-            새 점검일지 작성
+            새 일지 작성
           </Link>
         </div>
       ) : (

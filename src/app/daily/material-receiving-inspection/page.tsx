@@ -18,9 +18,9 @@ type LogRow = {
 };
 
 function statusLabel(s: LogStatus): string {
-  if (s === "draft") return "작성중";
-  if (s === "submitted") return "제출됨";
-  if (s === "approved") return "승인완료";
+  if (s === "draft") return "작성 중";
+  if (s === "submitted") return "제출 완료";
+  if (s === "approved") return "승인 완료";
   return "반려";
 }
 
@@ -84,7 +84,7 @@ export default function DailyMaterialReceivingInspectionListPage() {
         <span className="text-slate-200 font-medium">원료 입고 검수일지</span>
       </div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <h1 className="text-lg font-semibold text-slate-100">원료 입고 검수일지</h1>
+        <h1 className="text-lg font-semibold text-slate-100">원료 입고 검수일지 — 목록</h1>
         <Link
           href="/daily/material-receiving-inspection/new"
           className="shrink-0 inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-sm"
@@ -100,7 +100,7 @@ export default function DailyMaterialReceivingInspectionListPage() {
         </div>
       )}
       {loading ? (
-        <p className="text-slate-500 text-sm">불러오는 중...</p>
+        <p className="text-slate-500 text-sm">불러오는 중…</p>
       ) : logs.length === 0 ? (
         <div className="rounded-xl border border-slate-700/60 bg-slate-800/30 p-8 text-center">
           <p className="text-slate-500 text-sm mb-4">저장된 일지가 없습니다.</p>

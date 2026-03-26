@@ -4,11 +4,11 @@ import Link from "next/link";
 import { ClipboardCheck, Thermometer, Droplets, UserCheck, Snowflake, ClipboardList, Warehouse, Refrigerator, PackageSearch, Wrench, FileCheck } from "lucide-react";
 
 const HUB_ITEMS = [
-  { href: "/daily/hygiene", label: "영업장환경위생점검일지", Icon: ClipboardCheck },
-  { href: "/daily/temperature-humidity", label: "영업장 온·습도점검일지", Icon: Thermometer },
-  { href: "/daily/sanitation-facility", label: "위생시설관리점검일지", Icon: Droplets },
-  { href: "/daily/worker-hygiene", label: "작업자 위생점검일지", Icon: UserCheck },
-  { href: "/daily/cold-storage-hygiene", label: "냉장 · 냉동온도 및 위생 점검일지", Icon: Snowflake },
+  { href: "/daily/hygiene", label: "영업장 환경 위생 점검일지", Icon: ClipboardCheck },
+  { href: "/daily/temperature-humidity", label: "영업장 온·습도 점검일지", Icon: Thermometer },
+  { href: "/daily/sanitation-facility", label: "위생시설 관리 점검일지", Icon: Droplets },
+  { href: "/daily/worker-hygiene", label: "작업자 위생 점검일지", Icon: UserCheck },
+  { href: "/daily/cold-storage-hygiene", label: "냉장·냉동 온도 및 위생 점검일지", Icon: Snowflake },
   { href: "/daily/process-control-bread", label: "공정관리 점검일지(빵류)", Icon: ClipboardList },
   { href: "/daily/material-storage-3f", label: "원부자재 창고 점검표(3F)", Icon: Warehouse },
   { href: "/daily/raw-thawing", label: "원료 해동 일지", Icon: Refrigerator },
@@ -21,7 +21,7 @@ export default function DailyHubPage() {
   return (
     <div className="min-h-[calc(100vh-3.5rem)] md:min-h-0 p-4 md:p-6 max-w-2xl mx-auto">
       <h1 className="text-lg font-semibold text-slate-100 mb-1">데일리</h1>
-      <p className="text-slate-500 text-sm mb-4">일별 점검·일지 업무</p>
+      <p className="text-slate-500 text-sm mb-4">일별 점검·일지</p>
       <ul className="flex flex-col gap-2">
         {HUB_ITEMS.map((item) => (
           <li key={"href" in item ? item.href : item.label}>
@@ -45,7 +45,7 @@ export default function DailyHubPage() {
                   <span className="font-medium">{item.label}</span>
                 </div>
                 <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-slate-700/80 text-slate-500">
-                  준비중
+                  준비 중
                 </span>
               </div>
             )}

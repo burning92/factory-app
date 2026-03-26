@@ -30,11 +30,11 @@ const DESKTOP_DROPDOWN_MATERIALS: DropdownItem[] = [
 ];
 
 const DESKTOP_DROPDOWN_DAILY: DropdownItem[] = [
-  { href: "/daily/hygiene", label: "영업장환경위생점검일지" },
-  { href: "/daily/temperature-humidity", label: "영업장 온·습도점검일지" },
-  { href: "/daily/sanitation-facility", label: "위생시설관리점검일지" },
-  { href: "/daily/worker-hygiene", label: "작업자 위생점검일지" },
-  { href: "/daily/cold-storage-hygiene", label: "냉장 · 냉동온도 및 위생 점검일지" },
+  { href: "/daily/hygiene", label: "영업장 환경 위생 점검일지" },
+  { href: "/daily/temperature-humidity", label: "영업장 온·습도 점검일지" },
+  { href: "/daily/sanitation-facility", label: "위생시설 관리 점검일지" },
+  { href: "/daily/worker-hygiene", label: "작업자 위생 점검일지" },
+  { href: "/daily/cold-storage-hygiene", label: "냉장·냉동 온도 및 위생 점검일지" },
   { href: "/daily/process-control-bread", label: "공정관리 점검일지(빵류)" },
   { href: "/daily/material-storage-3f", label: "원부자재 창고 점검표(3F)" },
   { href: "/daily/raw-thawing", label: "원료 해동 일지" },
@@ -225,7 +225,7 @@ export default function Header() {
                             aria-disabled
                           >
                             <span>{item.label}</span>
-                            <span className="text-xs text-slate-500 bg-slate-700/80 px-1.5 py-0.5 rounded">준비중</span>
+                            <span className="text-xs text-slate-500 bg-slate-700/80 px-1.5 py-0.5 rounded">준비 중</span>
                           </div>
                         ) : "href" in item ? (
                           <Link

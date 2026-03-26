@@ -393,7 +393,7 @@ export function MaterialStorage3fForm({ mode, editLogId }: Props) {
         <span className="text-slate-600">/</span>
         <span className="text-slate-200 font-medium">{mode === "new" ? "새 작성" : "수정"}</span>
       </div>
-      <h1 className="text-lg font-semibold text-slate-100 mb-1">{mode === "new" ? "새 점검일지 작성" : "점검일지 수정"}</h1>
+      <h1 className="text-lg font-semibold text-slate-100 mb-1">{mode === "new" ? "원부자재 창고 점검표(3F) — 새 작성" : "원부자재 창고 점검표(3F) — 수정"}</h1>
 
       {toast && (
         <div className={`mb-4 px-4 py-2 rounded-lg text-sm ${toast.error ? "bg-red-900/30 text-red-200" : "bg-cyan-900/30 text-cyan-200"}`}>

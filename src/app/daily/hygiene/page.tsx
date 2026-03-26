@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * 영업장환경위생점검일지 — 목록 전용 페이지.
+ * 영업장 환경 위생 점검일지 — 목록 전용 페이지.
  * 입력 폼은 /daily/hygiene/new, 수정은 /daily/hygiene/[id]/edit, 상세는 /daily/hygiene/[id]
  */
 
@@ -35,9 +35,9 @@ function formatDate(iso: string | null): string {
 
 function statusLabel(s: HygieneLogStatus): string {
   switch (s) {
-    case "draft": return "작성중";
-    case "submitted": return "제출됨";
-    case "approved": return "승인완료";
+    case "draft": return "작성 중";
+    case "submitted": return "제출 완료";
+    case "approved": return "승인 완료";
     case "rejected": return "반려";
     default: return s;
   }
@@ -108,16 +108,16 @@ export default function DailyHygieneListPage() {
           데일리
         </Link>
         <span className="text-slate-600">/</span>
-        <span className="text-slate-200 font-medium">영업장환경위생점검일지</span>
+        <span className="text-slate-200 font-medium">영업장 환경 위생 점검일지</span>
       </div>
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <h1 className="text-lg font-semibold text-slate-100">영업장환경위생점검일지</h1>
+        <h1 className="text-lg font-semibold text-slate-100">영업장 환경 위생 점검일지 — 목록</h1>
         <Link
           href="/daily/hygiene/new"
           className="shrink-0 inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-sm"
         >
-          새 점검일지 작성
+          새 일지 작성
         </Link>
       </div>
 
@@ -135,12 +135,12 @@ export default function DailyHygieneListPage() {
         <p className="text-slate-500 text-sm">불러오는 중…</p>
       ) : logs.length === 0 ? (
         <div className="rounded-xl border border-slate-700/60 bg-slate-800/30 p-8 text-center">
-          <p className="text-slate-500 text-sm mb-4">저장된 점검일지가 없습니다.</p>
+          <p className="text-slate-500 text-sm mb-4">저장된 일지가 없습니다.</p>
           <Link
             href="/daily/hygiene/new"
             className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium"
           >
-            새 점검일지 작성
+            새 일지 작성
           </Link>
         </div>
       ) : (

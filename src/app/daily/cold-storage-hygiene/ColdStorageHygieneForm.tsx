@@ -542,13 +542,13 @@ export function ColdStorageHygieneForm({ mode, editLogId }: Props) {
         </Link>
         <span className="text-slate-600">/</span>
         <Link href="/daily/cold-storage-hygiene" className="text-slate-400 hover:text-slate-200 text-sm">
-          냉장 · 냉동온도 및 위생 점검일지
+          냉장·냉동 온도 및 위생 점검일지
         </Link>
         <span className="text-slate-600">/</span>
         <span className="text-slate-200 font-medium">{mode === "new" ? "새 작성" : "수정"}</span>
       </div>
       <h1 className="text-lg font-semibold text-slate-100 mb-1">
-        {mode === "new" ? "새 점검일지 작성" : "점검일지 수정"}
+        {mode === "new" ? "냉장·냉동 온도 및 위생 점검일지 — 새 작성" : "냉장·냉동 온도 및 위생 점검일지 — 수정"}
       </h1>
       <p className="text-slate-500 text-sm mb-4">
         점검 항목과 오전·오후 온도를 입력합니다. 부적합 또는 온도 기준 이탈 시 이탈내용이 자동 생성됩니다.
@@ -578,8 +578,8 @@ export function ColdStorageHygieneForm({ mode, editLogId }: Props) {
                     : "text-slate-300"
             }
           >
-            {currentLogStatus === "draft" && "작성중"}
-            {currentLogStatus === "submitted" && "제출됨"}
+            {currentLogStatus === "draft" && "작성 중"}
+            {currentLogStatus === "submitted" && "제출 완료"}
             {currentLogStatus === "approved" && "승인 완료"}
             {currentLogStatus === "rejected" && "반려"}
           </span>
@@ -738,7 +738,7 @@ export function ColdStorageHygieneForm({ mode, editLogId }: Props) {
               />
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1">이탈내용 (자동 생성, 필요 시 수정)</label>
+              <label className="block text-xs text-slate-500 mb-1">이탈 내용 (자동 생성, 필요 시 수정)</label>
               <textarea
                 value={corrective.deviation}
                 onChange={(e) => {
@@ -751,7 +751,7 @@ export function ColdStorageHygieneForm({ mode, editLogId }: Props) {
               />
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1">개선조치내용</label>
+              <label className="block text-xs text-slate-500 mb-1">개선 조치 내용</label>
               <textarea
                 value={corrective.detail}
                 onChange={(e) => setCorrective((c) => ({ ...c, detail: e.target.value }))}
@@ -771,7 +771,7 @@ export function ColdStorageHygieneForm({ mode, editLogId }: Props) {
               />
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1">개선조치자</label>
+              <label className="block text-xs text-slate-500 mb-1">개선 조치자</label>
               <input
                 type="text"
                 value={corrective.actor}

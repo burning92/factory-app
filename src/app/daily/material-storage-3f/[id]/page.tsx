@@ -124,7 +124,7 @@ export default function DailyMaterialStorage3fViewPage() {
   }, [load]);
 
   if (loading) return <div className="min-h-[calc(100vh-3.5rem)] p-4 md:p-6 max-w-2xl mx-auto"><p className="text-slate-500 text-sm">불러오는 중…</p></div>;
-  if (error || !header) return <div className="min-h-[calc(100vh-3.5rem)] p-4 md:p-6 max-w-2xl mx-auto"><p className="text-red-400 text-sm mb-4">{error ?? "데이터 없음"}</p><Link href="/daily/material-storage-3f" className="text-cyan-400 hover:text-cyan-300 text-sm">목록으로</Link></div>;
+  if (error || !header) return <div className="min-h-[calc(100vh-3.5rem)] p-4 md:p-6 max-w-2xl mx-auto"><p className="text-red-400 text-sm mb-4">{error ?? "데이터가 없습니다."}</p><Link href="/daily/material-storage-3f" className="text-cyan-400 hover:text-cyan-300 text-sm">목록으로</Link></div>;
 
   const itemMap = new Map<string, string>();
   items.forEach((i) => {
@@ -144,7 +144,7 @@ export default function DailyMaterialStorage3fViewPage() {
         <span className="text-slate-600">/</span>
         <span className="text-slate-200 font-medium">{header.inspection_date}</span>
       </div>
-      <h1 className="text-lg font-semibold text-slate-100 mb-1">원부자재 창고 점검표(3F)</h1>
+      <h1 className="text-lg font-semibold text-slate-100 mb-1">원부자재 창고 점검표(3F) — 상세</h1>
       <p className="text-slate-500 text-sm mb-4">점검일자: {header.inspection_date}{header.author_name ? ` · 작성: ${header.author_name}` : ""}</p>
 
       {MATERIAL_STORAGE_3F_ROOMS.map((room) => (
@@ -185,10 +185,10 @@ export default function DailyMaterialStorage3fViewPage() {
           <h2 className="text-sm font-semibold text-amber-300 mb-4">개선조치</h2>
           <dl className="grid gap-3 text-sm">
             {header.corrective_datetime && <><dt className="text-slate-500">일시</dt><dd className="text-slate-200">{formatDt(header.corrective_datetime)}</dd></>}
-            {header.corrective_deviation && <><dt className="text-slate-500">이탈내용</dt><dd className="text-slate-200 whitespace-pre-wrap">{header.corrective_deviation}</dd></>}
-            {header.corrective_detail && <><dt className="text-slate-500">개선조치내용</dt><dd className="text-slate-200 whitespace-pre-wrap">{header.corrective_detail}</dd></>}
+            {header.corrective_deviation && <><dt className="text-slate-500">이탈 내용</dt><dd className="text-slate-200 whitespace-pre-wrap">{header.corrective_deviation}</dd></>}
+            {header.corrective_detail && <><dt className="text-slate-500">개선 조치 내용</dt><dd className="text-slate-200 whitespace-pre-wrap">{header.corrective_detail}</dd></>}
             {header.corrective_remarks && <><dt className="text-slate-500">비고</dt><dd className="text-slate-200 whitespace-pre-wrap">{header.corrective_remarks}</dd></>}
-            {header.corrective_actor && <><dt className="text-slate-500">개선조치자</dt><dd className="text-slate-200">{header.corrective_actor}</dd></>}
+            {header.corrective_actor && <><dt className="text-slate-500">개선 조치자</dt><dd className="text-slate-200">{header.corrective_actor}</dd></>}
           </dl>
         </section>
       )}

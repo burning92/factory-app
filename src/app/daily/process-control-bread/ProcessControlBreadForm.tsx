@@ -566,7 +566,7 @@ export function ProcessControlBreadForm({ mode, editLogId }: Props) {
         <span className="text-slate-600">/</span>
         <span className="text-slate-200 font-medium">{mode === "new" ? "새 작성" : "수정"}</span>
       </div>
-      <h1 className="text-lg font-semibold text-slate-100 mb-1">{mode === "new" ? "새 점검일지 작성" : "점검일지 수정"}</h1>
+      <h1 className="text-lg font-semibold text-slate-100 mb-1">{mode === "new" ? "공정관리 점검일지(빵류) — 새 작성" : "공정관리 점검일지(빵류) — 수정"}</h1>
 
       {toast && (
         <div className={`mb-4 px-4 py-2 rounded-lg text-sm ${toast.error ? "bg-red-900/30 text-red-200" : "bg-cyan-900/30 text-cyan-200"}`}>
@@ -578,8 +578,8 @@ export function ProcessControlBreadForm({ mode, editLogId }: Props) {
         <div className="mb-4 px-4 py-2 rounded-lg text-sm bg-slate-800/80 border border-slate-600">
           <span className="text-slate-400">상태: </span>
           <span className={currentLogStatus === "approved" ? "text-emerald-400 font-medium" : currentLogStatus === "submitted" ? "text-cyan-400" : currentLogStatus === "rejected" ? "text-amber-400" : "text-slate-300"}>
-            {currentLogStatus === "draft" && "작성중"}
-            {currentLogStatus === "submitted" && "제출됨"}
+            {currentLogStatus === "draft" && "작성 중"}
+            {currentLogStatus === "submitted" && "제출 완료"}
             {currentLogStatus === "approved" && "승인 완료"}
             {currentLogStatus === "rejected" && "반려"}
           </span>

@@ -123,7 +123,7 @@ export default function DailyHygieneViewPage() {
   if (error || !header) {
     return (
       <div className="min-h-[calc(100vh-3.5rem)] p-4 md:p-6 max-w-2xl mx-auto">
-        <p className="text-red-400 text-sm mb-4">{error ?? "데이터 없음"}</p>
+        <p className="text-red-400 text-sm mb-4">{error ?? "데이터가 없습니다."}</p>
         <Link href="/daily/hygiene" className="text-cyan-400 hover:text-cyan-300 text-sm">
           목록으로
         </Link>
@@ -153,12 +153,12 @@ export default function DailyHygieneViewPage() {
         </Link>
         <span className="text-slate-600">/</span>
         <Link href="/daily/hygiene" className="text-slate-400 hover:text-slate-200 text-sm">
-          영업장환경위생점검일지
+          영업장 환경 위생 점검일지
         </Link>
         <span className="text-slate-600">/</span>
         <span className="text-slate-200 font-medium">{header.inspection_date}</span>
       </div>
-      <h1 className="text-lg font-semibold text-slate-100 mb-1">영업장환경위생점검일지</h1>
+      <h1 className="text-lg font-semibold text-slate-100 mb-1">영업장 환경 위생 점검일지 — 상세</h1>
       {header.status === "approved" && (
         <div className="mb-4 px-4 py-3 rounded-lg bg-emerald-900/20 border border-emerald-700/50 text-emerald-200 text-sm font-medium">
           승인 완료
@@ -172,7 +172,7 @@ export default function DailyHygieneViewPage() {
       )}
       {header.status === "rejected" && (
         <div className="mb-4 px-4 py-3 rounded-lg bg-amber-900/20 border border-amber-700/50 text-amber-200 text-sm">
-          <span className="font-medium">반려됨</span>
+          <span className="font-medium">반려</span>
           {header.reject_reason && (
             <p className="mt-1 text-slate-300 whitespace-pre-wrap">{header.reject_reason}</p>
           )}
@@ -181,7 +181,7 @@ export default function DailyHygieneViewPage() {
       )}
       {header.status === "submitted" && (
         <div className="mb-4 px-4 py-2 rounded-lg bg-slate-800/80 border border-slate-600 text-slate-400 text-sm">
-          제출됨 · 승인 대기 중
+          제출 완료 · 승인 대기
         </div>
       )}
 

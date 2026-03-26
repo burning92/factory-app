@@ -522,7 +522,7 @@ export function RawThawingForm({ mode, editLogId }: Props) {
           <div>
             <label className="block text-xs text-slate-500 mb-1">원료명 (냉동 카테고리)</label>
             <select value={selectedItemCode} onChange={(e) => setSelectedItemCode(e.target.value)} disabled={!canEdit || inventoryLoading} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 disabled:opacity-60">
-              <option value="">{inventoryLoading ? "불러오는 중..." : "원료 선택"}</option>
+              <option value="">{inventoryLoading ? "불러오는 중…" : "원료 선택"}</option>
               {materialOptions.map((m) => (
                 <option key={m.itemCode} value={m.itemCode}>{m.materialName}</option>
               ))}
@@ -680,7 +680,7 @@ export function RawThawingForm({ mode, editLogId }: Props) {
       <div className="flex flex-wrap justify-end gap-2 mb-10">
         <button type="button" onClick={handleSave} disabled={saving} className="px-6 py-2.5 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-white font-medium text-sm">{saving ? "저장 중..." : "저장"}</button>
         {canSubmit && (
-          <button type="button" onClick={handleSubmit} disabled={saving} className="px-6 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-medium text-sm">{saving ? "처리 중..." : "제출"}</button>
+          <button type="button" onClick={handleSubmit} disabled={saving} className="px-6 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-medium text-sm">{saving ? "처리 중…" : "제출"}</button>
         )}
       </div>
 

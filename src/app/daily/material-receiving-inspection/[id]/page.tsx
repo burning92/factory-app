@@ -141,7 +141,7 @@ export default function DailyMaterialReceivingInspectionViewPage() {
   if (error || !header) {
     return (
       <div className="min-h-[calc(100vh-3.5rem)] p-4 md:p-6 max-w-3xl mx-auto">
-        <p className="text-red-400 text-sm mb-4">{error ?? "데이터 없음"}</p>
+        <p className="text-red-400 text-sm mb-4">{error ?? "데이터가 없습니다."}</p>
         <Link href="/daily/material-receiving-inspection" className="text-cyan-400 hover:text-cyan-300 text-sm">
           목록으로
         </Link>
@@ -169,7 +169,7 @@ export default function DailyMaterialReceivingInspectionViewPage() {
         <span className="text-slate-600">/</span>
         <span className="text-slate-200 font-medium">{formatDt(header.received_at)}</span>
       </div>
-      <h1 className="text-lg font-semibold text-slate-100 mb-1">원료 입고 검수일지</h1>
+      <h1 className="text-lg font-semibold text-slate-100 mb-1">원료 입고 검수일지 — 상세</h1>
       <p className="text-slate-500 text-sm mb-4">
         반입일시: {formatDt(header.received_at)}
         {header.author_name ? ` · 반입자: ${header.author_name}` : ""}
@@ -247,7 +247,7 @@ export default function DailyMaterialReceivingInspectionViewPage() {
             )}
             {header.corrective_deviation && (
               <>
-                <dt className="text-slate-500">이탈내용</dt>
+                <dt className="text-slate-500">이탈 내용</dt>
                 <dd className="text-slate-200 whitespace-pre-wrap">{header.corrective_deviation}</dd>
               </>
             )}

@@ -1049,7 +1049,7 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
               />
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1">이탈내용 (자동 생성, 필요 시 수정)</label>
+              <label className="block text-xs text-slate-500 mb-1">이탈 내용 (자동 생성, 필요 시 수정)</label>
               <textarea
                 value={corrective.deviation}
                 onChange={(e) => {

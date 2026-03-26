@@ -88,8 +88,8 @@ export default function DailyRawThawingViewPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  if (loading) return <div className="min-h-[calc(100vh-3.5rem)] p-4 md:p-6 max-w-2xl mx-auto"><p className="text-slate-500 text-sm">불러오는 중...</p></div>;
-  if (error || !header) return <div className="min-h-[calc(100vh-3.5rem)] p-4 md:p-6 max-w-2xl mx-auto"><p className="text-red-400 text-sm mb-4">{error ?? "데이터 없음"}</p><Link href="/daily/raw-thawing" className="text-cyan-400 hover:text-cyan-300 text-sm">목록으로</Link></div>;
+  if (loading) return <div className="min-h-[calc(100vh-3.5rem)] p-4 md:p-6 max-w-2xl mx-auto"><p className="text-slate-500 text-sm">불러오는 중…</p></div>;
+  if (error || !header) return <div className="min-h-[calc(100vh-3.5rem)] p-4 md:p-6 max-w-2xl mx-auto"><p className="text-red-400 text-sm mb-4">{error ?? "데이터가 없습니다."}</p><Link href="/daily/raw-thawing" className="text-cyan-400 hover:text-cyan-300 text-sm">목록으로</Link></div>;
 
   const hasCorrective = header.corrective_datetime || header.corrective_deviation || header.corrective_detail || header.corrective_remarks || header.corrective_actor;
 
@@ -102,7 +102,7 @@ export default function DailyRawThawingViewPage() {
         <span className="text-slate-600">/</span>
         <span className="text-slate-200 font-medium">{header.thawing_date}</span>
       </div>
-      <h1 className="text-lg font-semibold text-slate-100 mb-4">원료 해동 일지</h1>
+      <h1 className="text-lg font-semibold text-slate-100 mb-4">원료 해동 일지 — 상세</h1>
 
       <section className="rounded-xl border border-slate-700/60 bg-slate-800/50 p-4 mb-6 text-sm space-y-2">
         <p className="text-slate-300">해동일자: <span className="text-slate-100">{header.thawing_date}</span></p>
@@ -123,17 +123,17 @@ export default function DailyRawThawingViewPage() {
           <h2 className="text-sm font-semibold text-amber-300 mb-3">개선조치</h2>
           <dl className="grid gap-3 text-sm">
             {header.corrective_datetime && <><dt className="text-slate-500">일시</dt><dd className="text-slate-200">{formatDt(header.corrective_datetime)}</dd></>}
-            {header.corrective_deviation && <><dt className="text-slate-500">이탈내용</dt><dd className="text-slate-200 whitespace-pre-wrap">{header.corrective_deviation}</dd></>}
-            {header.corrective_detail && <><dt className="text-slate-500">개선조치내용</dt><dd className="text-slate-200 whitespace-pre-wrap">{header.corrective_detail}</dd></>}
+            {header.corrective_deviation && <><dt className="text-slate-500">이탈 내용</dt><dd className="text-slate-200 whitespace-pre-wrap">{header.corrective_deviation}</dd></>}
+            {header.corrective_detail && <><dt className="text-slate-500">개선 조치 내용</dt><dd className="text-slate-200 whitespace-pre-wrap">{header.corrective_detail}</dd></>}
             {header.corrective_remarks && <><dt className="text-slate-500">비고</dt><dd className="text-slate-200 whitespace-pre-wrap">{header.corrective_remarks}</dd></>}
-            {header.corrective_actor && <><dt className="text-slate-500">개선조치자</dt><dd className="text-slate-200">{header.corrective_actor}</dd></>}
+            {header.corrective_actor && <><dt className="text-slate-500">개선 조치자</dt><dd className="text-slate-200">{header.corrective_actor}</dd></>}
           </dl>
         </section>
       )}
 
       {canApproveReject && (
         <div className="flex flex-wrap gap-2 mb-6">
-          <button type="button" onClick={async () => { setActionLoading(true); const { error: err } = await supabase.from("daily_raw_thawing_logs").update({ status: "approved", approved_at: new Date().toISOString(), approved_by: user?.id ?? null, approved_by_name: approverName || null, updated_at: new Date().toISOString() }).eq("id", id); setActionLoading(false); if (err) setError(err.message); else load(); }} disabled={actionLoading} className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-medium">{actionLoading ? "처리 중..." : "승인"}</button>
+          <button type="button" onClick={async () => { setActionLoading(true); const { error: err } = await supabase.from("daily_raw_thawing_logs").update({ status: "approved", approved_at: new Date().toISOString(), approved_by: user?.id ?? null, approved_by_name: approverName || null, updated_at: new Date().toISOString() }).eq("id", id); setActionLoading(false); if (err) setError(err.message); else load(); }} disabled={actionLoading} className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-medium">{actionLoading ? "처리 중…" : "승인"}</button>
           <button type="button" onClick={() => { setRejectReasonInput(""); setRejectModalOpen(true); }} disabled={actionLoading} className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-sm font-medium">반려</button>
         </div>
       )}

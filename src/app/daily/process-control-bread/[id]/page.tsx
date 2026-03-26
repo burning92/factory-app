@@ -130,7 +130,7 @@ export default function DailyProcessControlBreadViewPage() {
     return <div className="min-h-[calc(100vh-3.5rem)] p-4 md:p-6 max-w-2xl mx-auto"><p className="text-slate-500 text-sm">불러오는 중…</p></div>;
   }
   if (error || !header) {
-    return <div className="min-h-[calc(100vh-3.5rem)] p-4 md:p-6 max-w-2xl mx-auto"><p className="text-red-400 text-sm mb-4">{error ?? "데이터 없음"}</p><Link href="/daily/process-control-bread" className="text-cyan-400 hover:text-cyan-300 text-sm">목록으로</Link></div>;
+    return <div className="min-h-[calc(100vh-3.5rem)] p-4 md:p-6 max-w-2xl mx-auto"><p className="text-red-400 text-sm mb-4">{error ?? "데이터가 없습니다."}</p><Link href="/daily/process-control-bread" className="text-cyan-400 hover:text-cyan-300 text-sm">목록으로</Link></div>;
   }
 
   const itemMap = new Map<number, string>();
@@ -154,7 +154,7 @@ export default function DailyProcessControlBreadViewPage() {
         <span className="text-slate-600">/</span>
         <span className="text-slate-200 font-medium">{header.inspection_date}</span>
       </div>
-      <h1 className="text-lg font-semibold text-slate-100 mb-1">공정관리 점검일지(빵류)</h1>
+      <h1 className="text-lg font-semibold text-slate-100 mb-1">공정관리 점검일지(빵류) — 상세</h1>
 
       {header.status === "approved" && (
         <div className="mb-4 px-4 py-3 rounded-lg bg-emerald-900/20 border border-emerald-700/50 text-emerald-200 text-sm font-medium">
@@ -164,12 +164,12 @@ export default function DailyProcessControlBreadViewPage() {
       )}
       {header.status === "rejected" && (
         <div className="mb-4 px-4 py-3 rounded-lg bg-amber-900/20 border border-amber-700/50 text-amber-200 text-sm">
-          <span className="font-medium">반려됨</span>
+          <span className="font-medium">반려</span>
           {header.reject_reason && <p className="mt-1 text-slate-300 whitespace-pre-wrap">{header.reject_reason}</p>}
           <p className="mt-1 text-slate-500 text-xs">수정 후 다시 제출할 수 있습니다.</p>
         </div>
       )}
-      {header.status === "submitted" && <div className="mb-4 px-4 py-2 rounded-lg bg-slate-800/80 border border-slate-600 text-slate-400 text-sm">제출됨 · 승인 대기 중</div>}
+      {header.status === "submitted" && <div className="mb-4 px-4 py-2 rounded-lg bg-slate-800/80 border border-slate-600 text-slate-400 text-sm">제출 완료 · 승인 대기</div>}
 
       <div className="rounded-xl border border-slate-700/60 bg-slate-800/50 p-4 mb-6 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
         <p className="text-slate-300">점검일자: <span className="text-slate-100">{header.inspection_date}</span></p>
@@ -221,7 +221,7 @@ export default function DailyProcessControlBreadViewPage() {
           <h2 className="text-sm font-semibold text-amber-300 mb-4">개선조치</h2>
           <dl className="grid gap-3 text-sm">
             {header.corrective_datetime && <><dt className="text-slate-500">일시</dt><dd className="text-slate-200">{formatDt(header.corrective_datetime)}</dd></>}
-            {header.corrective_deviation && <><dt className="text-slate-500">이탈내용</dt><dd className="text-slate-200 whitespace-pre-wrap">{header.corrective_deviation}</dd></>}
+            {header.corrective_deviation && <><dt className="text-slate-500">이탈 내용</dt><dd className="text-slate-200 whitespace-pre-wrap">{header.corrective_deviation}</dd></>}
             {header.corrective_detail && <><dt className="text-slate-500">개선조치내용</dt><dd className="text-slate-200 whitespace-pre-wrap">{header.corrective_detail}</dd></>}
             {header.corrective_remarks && <><dt className="text-slate-500">비고</dt><dd className="text-slate-200 whitespace-pre-wrap">{header.corrective_remarks}</dd></>}
             {header.corrective_actor && <><dt className="text-slate-500">개선조치자</dt><dd className="text-slate-200">{header.corrective_actor}</dd></>}
