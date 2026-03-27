@@ -14,7 +14,7 @@ const HUB_ITEMS = [
   { href: "/daily/raw-thawing", label: "원료 해동 일지", Icon: Refrigerator },
   { href: "/daily/material-receiving-inspection", label: "원료 입고 검수일지", Icon: PackageSearch },
   { href: "/daily/illumination", label: "영업장 조도 점검일지", Icon: Lightbulb },
-  { label: "제조설비 일지", Icon: Wrench },
+  { href: "/daily/manufacturing-equipment", label: "제조설비 점검표", Icon: Wrench },
   { label: "기타 데일리 점검", Icon: FileCheck },
 ] as const;
 
