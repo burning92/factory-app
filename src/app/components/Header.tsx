@@ -42,6 +42,7 @@ const DESKTOP_DROPDOWN_DAILY: DropdownItem[] = [
   { href: "/daily/illumination", label: "영업장 조도 점검일지" },
   { href: "/daily/manufacturing-equipment", label: "제조설비 점검표" },
   { href: "/daily/air-conditioning-equipment", label: "공조설비 점검표" },
+  { href: "/daily/hoist-inspection", label: "호이스트 점검기록" },
   { label: "기타 데일리 점검", comingSoon: true },
 ];
 
