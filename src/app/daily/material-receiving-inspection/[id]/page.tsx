@@ -200,21 +200,31 @@ export default function DailyMaterialReceivingInspectionViewPage() {
                 </span>
               </div>
               <p className="text-slate-200 font-medium">{row.item_name}</p>
-              <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1 text-xs">
-                <dt className="text-slate-500">박스(포대)</dt>
-                <dd className="text-slate-300 col-span-1">{row.box_qty ?? "—"}</dd>
-                <dt className="text-slate-500">낱개</dt>
-                <dd className="text-slate-300 col-span-1">{row.unit_qty ?? "—"}</dd>
-                <dt className="text-slate-500">잔량(g)</dt>
-                <dd className="text-slate-300 col-span-1">{row.remainder_g ?? "—"}</dd>
-                <dt className="text-slate-500">총중량(g)</dt>
-                <dd className="text-slate-300 col-span-1">
-                  {row.total_weight_g != null
-                    ? row.total_weight_g.toLocaleString("ko-KR", { maximumFractionDigits: 1 })
-                    : "—"}
-                </dd>
-                <dt className="text-slate-500 col-span-2 sm:col-span-1">소비기한/LOT/제조일자</dt>
-                <dd className="text-slate-300 col-span-2 sm:col-span-2">{row.expiry_or_lot ?? "—"}</dd>
+              <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 text-xs">
+                <div className="min-w-0">
+                  <dt className="text-slate-500">박스(포대)</dt>
+                  <dd className="text-slate-300 mt-0.5 m-0">{row.box_qty ?? "—"}</dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-slate-500">낱개</dt>
+                  <dd className="text-slate-300 mt-0.5 m-0">{row.unit_qty ?? "—"}</dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-slate-500">잔량(g)</dt>
+                  <dd className="text-slate-300 mt-0.5 m-0">{row.remainder_g ?? "—"}</dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-slate-500">총중량(g)</dt>
+                  <dd className="text-slate-300 mt-0.5 m-0">
+                    {row.total_weight_g != null
+                      ? row.total_weight_g.toLocaleString("ko-KR", { maximumFractionDigits: 1 })
+                      : "—"}
+                  </dd>
+                </div>
+                <div className="min-w-0 col-span-2 sm:col-span-1">
+                  <dt className="text-slate-500">소비기한/LOT/제조일자</dt>
+                  <dd className="text-slate-300 mt-0.5 m-0 break-words">{row.expiry_or_lot ?? "—"}</dd>
+                </div>
               </dl>
               {row.remarks && (
                 <p className="text-slate-400 text-xs whitespace-pre-wrap">비고: {row.remarks}</p>
