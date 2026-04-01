@@ -104,18 +104,14 @@ function migrateSingleState(cached: DateGroupState, defaultAuthor?: string): Dat
   return { ...cached, materials, authorName };
 }
 
-const STOCK_FIELD_LABELS: Record<
-  "prevDayUnitCount" | "prevDayRemainderG" | "currentDayUnitCount" | "currentDayRemainderG",
-  string
-> = {
-  prevDayUnitCount: "전날재고 낱개",
-  prevDayRemainderG: "전날재고 잔량(g)",
-  currentDayUnitCount: "당일재고 낱개",
-  currentDayRemainderG: "당일재고 잔량(g)",
-};
+type MissingStockFieldKey =
+  | "prevDayUnitCount"
+  | "prevDayRemainderG"
+  | "currentDayUnitCount"
+  | "currentDayRemainderG";
 
-function collectMissingStockFieldKeys(row: LotRow, isGOnly: boolean): (keyof typeof STOCK_FIELD_LABELS)[] {
-  const keys: (keyof typeof STOCK_FIELD_LABELS)[] = [];
+function collectMissingStockFieldKeys(row: LotRow, isGOnly: boolean): MissingStockFieldKey[] {
+  const keys: MissingStockFieldKey[] = [];
   if (!isGOnly) {
     if (row.prevDayUnitCount === "") keys.push("prevDayUnitCount");
     if (row.currentDayUnitCount === "") keys.push("currentDayUnitCount");
@@ -152,41 +148,6 @@ function countFullyEmptyLotsInDate(state: DateGroupState, materialsList: Materia
     }
   }
   return total;
-}
-
-/** 미완성 LOT 행 개수 (출고 LOT 줄 단위, 각 줄당 최대 1건) */
-function countIncompleteLotsInDate(state: DateGroupState, materialsList: MaterialLike[]): number {
-  let total = 0;
-  for (const card of state.materials) {
-    const mat = materialsList.find((m) => m.materialName === card.materialName);
-    const isGOnly = mat ? mat.boxWeightG === 0 && mat.unitWeightG === 0 : false;
-    for (const row of card.lots) {
-      if (isLotStockIncomplete(row, isGOnly)) total += 1;
-    }
-  }
-  return total;
-}
-
-/** 1차 마감 저장 차단 시 사용자 안내용 (최대 줄 수 제한) */
-function buildFirstCloseMissingMessage(state: DateGroupState, materialsList: MaterialLike[]): string {
-  const lines: string[] = [];
-  const maxLines = 12;
-  for (const card of state.materials) {
-    const mat = materialsList.find((m) => m.materialName === card.materialName);
-    const isGOnly = mat ? mat.boxWeightG === 0 && mat.unitWeightG === 0 : false;
-    for (const row of card.lots) {
-      const missing = collectMissingStockFieldKeys(row, isGOnly);
-      if (missing.length === 0) continue;
-      const lotLabel = (row.expiryDate ?? "").trim() || "소비기한 미입력";
-      const labels = missing.map((k) => STOCK_FIELD_LABELS[k]).join(", ");
-      lines.push(`• ${card.materialName} (LOT ${lotLabel}): ${labels}`);
-      if (lines.length >= maxLines) {
-        lines.push("• … (이하 생략)");
-        return lines.join("\n");
-      }
-    }
-  }
-  return lines.join("\n");
 }
 
 /** 이전 날짜 중 같은 원료명+같은 소비기한(LOT)인 당일재고를 찾아 전날재고용 값 반환. 가장 최근 날짜 1건만. */
@@ -902,14 +863,6 @@ function UsageCalculationPageContent() {
   const closeFirst = useCallback(
     async (date: string) => {
       const s = getOrInitGroupState(date);
-      const incompleteLotCount = countIncompleteLotsInDate(s, materialsList);
-      if (incompleteLotCount > 0) {
-        const detail = buildFirstCloseMissingMessage(s, materialsList);
-        setToast({
-          message: `1차 마감을 저장할 수 없습니다. 미완성 원료 LOT ${incompleteLotCount}건이 있습니다.\n${detail}`,
-        });
-        return;
-      }
       if (s.authorName.trim()) {
         setAppRecentValue(FIRST_CLOSE_LAST_AUTHOR_KEY, s.authorName.trim());
         setLastAuthorNameToStorage(s.authorName.trim());
@@ -938,7 +891,7 @@ function UsageCalculationPageContent() {
         setSaving(null);
       }
     },
-    [getOrInitGroupState, setGroupState, getProductionHistoryDateState, saveProductionHistoryDateState, materialsList]
+    [getOrInitGroupState, setGroupState, getProductionHistoryDateState, saveProductionHistoryDateState]
   );
 
   const toggleSecondExpand = useCallback((date: string) => {
