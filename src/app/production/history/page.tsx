@@ -104,6 +104,91 @@ function migrateSingleState(cached: DateGroupState, defaultAuthor?: string): Dat
   return { ...cached, materials, authorName };
 }
 
+const STOCK_FIELD_LABELS: Record<
+  "prevDayUnitCount" | "prevDayRemainderG" | "currentDayUnitCount" | "currentDayRemainderG",
+  string
+> = {
+  prevDayUnitCount: "전날재고 낱개",
+  prevDayRemainderG: "전날재고 잔량(g)",
+  currentDayUnitCount: "당일재고 낱개",
+  currentDayRemainderG: "당일재고 잔량(g)",
+};
+
+function collectMissingStockFieldKeys(row: LotRow, isGOnly: boolean): (keyof typeof STOCK_FIELD_LABELS)[] {
+  const keys: (keyof typeof STOCK_FIELD_LABELS)[] = [];
+  if (!isGOnly) {
+    if (row.prevDayUnitCount === "") keys.push("prevDayUnitCount");
+    if (row.currentDayUnitCount === "") keys.push("currentDayUnitCount");
+  }
+  if (row.prevDayRemainderG === "") keys.push("prevDayRemainderG");
+  if (row.currentDayRemainderG === "") keys.push("currentDayRemainderG");
+  return keys;
+}
+
+/** LOT 1행 기준 미완성 여부. 집계는 LOT당 최대 1건 (g전용은 잔량 2칸만 검사). */
+function isLotStockIncomplete(row: LotRow, isGOnly: boolean): boolean {
+  return collectMissingStockFieldKeys(row, isGOnly).length > 0;
+}
+
+/** 필수 재고 칸이 전부 빈 값인 LOT (배지·건수용). 하나라도 숫자 입력 시 false. */
+function isLotStockFullyEmpty(row: LotRow, isGOnly: boolean): boolean {
+  if (!isGOnly) {
+    if (row.prevDayUnitCount !== "") return false;
+    if (row.currentDayUnitCount !== "") return false;
+  }
+  if (row.prevDayRemainderG !== "") return false;
+  if (row.currentDayRemainderG !== "") return false;
+  return true;
+}
+
+/** 전부 빈 LOT 줄 개수 (섹션 배지용) */
+function countFullyEmptyLotsInDate(state: DateGroupState, materialsList: MaterialLike[]): number {
+  let total = 0;
+  for (const card of state.materials) {
+    const mat = materialsList.find((m) => m.materialName === card.materialName);
+    const isGOnly = mat ? mat.boxWeightG === 0 && mat.unitWeightG === 0 : false;
+    for (const row of card.lots) {
+      if (isLotStockFullyEmpty(row, isGOnly)) total += 1;
+    }
+  }
+  return total;
+}
+
+/** 미완성 LOT 행 개수 (출고 LOT 줄 단위, 각 줄당 최대 1건) */
+function countIncompleteLotsInDate(state: DateGroupState, materialsList: MaterialLike[]): number {
+  let total = 0;
+  for (const card of state.materials) {
+    const mat = materialsList.find((m) => m.materialName === card.materialName);
+    const isGOnly = mat ? mat.boxWeightG === 0 && mat.unitWeightG === 0 : false;
+    for (const row of card.lots) {
+      if (isLotStockIncomplete(row, isGOnly)) total += 1;
+    }
+  }
+  return total;
+}
+
+/** 1차 마감 저장 차단 시 사용자 안내용 (최대 줄 수 제한) */
+function buildFirstCloseMissingMessage(state: DateGroupState, materialsList: MaterialLike[]): string {
+  const lines: string[] = [];
+  const maxLines = 12;
+  for (const card of state.materials) {
+    const mat = materialsList.find((m) => m.materialName === card.materialName);
+    const isGOnly = mat ? mat.boxWeightG === 0 && mat.unitWeightG === 0 : false;
+    for (const row of card.lots) {
+      const missing = collectMissingStockFieldKeys(row, isGOnly);
+      if (missing.length === 0) continue;
+      const lotLabel = (row.expiryDate ?? "").trim() || "소비기한 미입력";
+      const labels = missing.map((k) => STOCK_FIELD_LABELS[k]).join(", ");
+      lines.push(`• ${card.materialName} (LOT ${lotLabel}): ${labels}`);
+      if (lines.length >= maxLines) {
+        lines.push("• … (이하 생략)");
+        return lines.join("\n");
+      }
+    }
+  }
+  return lines.join("\n");
+}
+
 /** 이전 날짜 중 같은 원료명+같은 소비기한(LOT)인 당일재고를 찾아 전날재고용 값 반환. 가장 최근 날짜 1건만. */
 function findPreviousDayStock(
   groupStateByDate: Record<string, DateGroupState>,
@@ -744,10 +829,10 @@ function UsageCalculationPageContent() {
         sourceType: "manual",
         expiryDate: "",
         outboundQty: 0,
-        prevDayUnitCount: 0,
-        prevDayRemainderG: 0,
-        currentDayUnitCount: 0,
-        currentDayRemainderG: 0,
+        prevDayUnitCount: "",
+        prevDayRemainderG: "",
+        currentDayUnitCount: "",
+        currentDayRemainderG: "",
       };
       const materials = s.materials.map((card) => {
         if (card.materialCardId !== materialCardId) return card;
@@ -802,10 +887,10 @@ function UsageCalculationPageContent() {
             sourceType: "manual",
             expiryDate: "",
             outboundQty: 0,
-            prevDayUnitCount: 0,
-            prevDayRemainderG: 0,
-            currentDayUnitCount: 0,
-            currentDayRemainderG: 0,
+            prevDayUnitCount: "",
+            prevDayRemainderG: "",
+            currentDayUnitCount: "",
+            currentDayRemainderG: "",
           },
         ],
       };
@@ -817,6 +902,14 @@ function UsageCalculationPageContent() {
   const closeFirst = useCallback(
     async (date: string) => {
       const s = getOrInitGroupState(date);
+      const incompleteLotCount = countIncompleteLotsInDate(s, materialsList);
+      if (incompleteLotCount > 0) {
+        const detail = buildFirstCloseMissingMessage(s, materialsList);
+        setToast({
+          message: `1차 마감을 저장할 수 없습니다. 미완성 원료 LOT ${incompleteLotCount}건이 있습니다.\n${detail}`,
+        });
+        return;
+      }
       if (s.authorName.trim()) {
         setAppRecentValue(FIRST_CLOSE_LAST_AUTHOR_KEY, s.authorName.trim());
         setLastAuthorNameToStorage(s.authorName.trim());
@@ -845,7 +938,7 @@ function UsageCalculationPageContent() {
         setSaving(null);
       }
     },
-    [getOrInitGroupState, setGroupState, getProductionHistoryDateState, saveProductionHistoryDateState]
+    [getOrInitGroupState, setGroupState, getProductionHistoryDateState, saveProductionHistoryDateState, materialsList]
   );
 
   const toggleSecondExpand = useCallback((date: string) => {
@@ -1013,7 +1106,7 @@ function UsageCalculationPageContent() {
       {/* 토스트 */}
       {toast && (
         <div
-          className="fixed top-4 left-1/2 -translate-x-1/2 z-50 rounded-lg bg-cyan-600 text-white px-4 py-2 text-sm font-medium shadow-lg"
+          className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-[min(100vw-2rem,28rem)] rounded-lg bg-cyan-600 text-white px-4 py-2 text-sm font-medium shadow-lg whitespace-pre-line break-words"
           role="alert"
         >
           {toast.message}
@@ -1149,6 +1242,15 @@ function UsageCalculationPageContent() {
                       <div className="space-y-4">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="text-sm font-semibold text-slate-300">원료별 출고·재고</h3>
+                          {(() => {
+                            const emptyLots = countFullyEmptyLotsInDate(state, materialsList);
+                            if (emptyLots === 0) return null;
+                            return (
+                              <span className="text-xs font-medium text-amber-200 bg-amber-950/50 border border-amber-600/50 rounded-full px-2.5 py-0.5">
+                                미입력 원료/LOT {emptyLots}건
+                              </span>
+                            );
+                          })()}
                           {(() => {
                             const existing = new Set(state.materials.map((m) => m.materialName));
                             const addable = getAddableBomMaterialNames(
@@ -1502,15 +1604,17 @@ function MaterialCardBlock({
   const mat = materialsList.find((m) => m.materialName === card.materialName);
   const isGOnly = mat ? mat.boxWeightG === 0 && mat.unitWeightG === 0 : false;
   const inputCls = "w-full rounded-lg border border-slate-600 bg-space-900 px-3 py-2 text-sm text-slate-100 focus:ring-2 focus:ring-cyan-500/50 min-w-0";
+  const stockInputCls = (isEmpty: boolean) =>
+    `${inputCls} ${isEmpty ? "border-amber-500/55 bg-amber-950/25 ring-1 ring-amber-500/35 placeholder:text-amber-200/70" : ""}`;
   const numVal = (v: number | "") => (v === "" ? "" : v);
   return (
     <div className="rounded-xl border border-slate-700 bg-space-800/80 p-4 shadow-glow">
-      <div className="flex items-center justify-between mb-4">
-        <h4 className="font-semibold text-slate-100">{card.materialName}</h4>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <h4 className="font-semibold text-slate-100 min-w-0">{card.materialName}</h4>
         <button
           type="button"
           onClick={onAddLot}
-          className="text-sm font-medium text-cyan-400 hover:text-cyan-300 py-2 px-3 rounded-lg border border-slate-600 hover:border-cyan-500/50"
+          className="text-sm font-medium text-cyan-400 hover:text-cyan-300 py-2 px-3 rounded-lg border border-slate-600 hover:border-cyan-500/50 shrink-0"
         >
           + 추가
         </button>
@@ -1519,8 +1623,14 @@ function MaterialCardBlock({
         {card.lots.map((row) => (
           <li
             key={row.lotRowId}
-            className="flex flex-wrap items-start gap-3 rounded-lg bg-space-900/80 p-3 border border-slate-700"
+            className="flex flex-col gap-2 rounded-lg bg-space-900/80 p-3 border border-slate-700"
           >
+            {isLotStockFullyEmpty(row, isGOnly) && (
+              <span className="text-[11px] font-medium shrink-0 text-amber-200 bg-amber-950/45 border border-amber-600/45 rounded-full px-2 py-0.5 w-fit">
+                미입력
+              </span>
+            )}
+            <div className="flex flex-wrap items-start gap-3">
             <div className="w-full sm:w-[120px]">
               <span className="text-xs text-slate-500 block mb-1">소비기한(LOT)</span>
               {row.sourceType === "from-log" ? (
@@ -1567,8 +1677,8 @@ function MaterialCardBlock({
                         type="number"
                         min={0}
                         inputMode="numeric"
-                        className={inputCls}
-                        placeholder="0"
+                        className={stockInputCls(row.prevDayUnitCount === "")}
+                        placeholder="미입력"
                         value={numVal(row.prevDayUnitCount)}
                         onChange={(e) => {
                           const v = e.target.value;
@@ -1585,8 +1695,8 @@ function MaterialCardBlock({
                       type="number"
                       min={0}
                       inputMode="numeric"
-                      className={inputCls}
-                      placeholder="0"
+                      className={stockInputCls(row.prevDayRemainderG === "")}
+                      placeholder="미입력"
                       value={numVal(row.prevDayRemainderG)}
                       onChange={(e) => {
                         const v = e.target.value;
@@ -1613,8 +1723,8 @@ function MaterialCardBlock({
                         type="number"
                         min={0}
                         inputMode="numeric"
-                        className={inputCls}
-                        placeholder="0"
+                        className={stockInputCls(row.currentDayUnitCount === "")}
+                        placeholder="미입력"
                         value={numVal(row.currentDayUnitCount)}
                         onChange={(e) => {
                           const v = e.target.value;
@@ -1631,8 +1741,8 @@ function MaterialCardBlock({
                       type="number"
                       min={0}
                       inputMode="numeric"
-                      className={inputCls}
-                      placeholder="0"
+                      className={stockInputCls(row.currentDayRemainderG === "")}
+                      placeholder="미입력"
                       value={numVal(row.currentDayRemainderG)}
                       onChange={(e) => {
                         const v = e.target.value;
@@ -1654,6 +1764,7 @@ function MaterialCardBlock({
                 삭제
               </button>
             )}
+            </div>
           </li>
         ))}
       </ul>
