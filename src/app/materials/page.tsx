@@ -1,16 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Boxes, FileText, Package, Layers, Calculator } from "lucide-react";
+import { Boxes, Package, ClipboardList, Refrigerator, PackageSearch } from "lucide-react";
 
 const LINK_ITEMS = [
   { href: "/inventory/ecount", label: "재고 현황", Icon: Boxes },
-] as const;
-
-const COMING_ITEMS = [
-  { label: "하랑 입고 관리", Icon: Package },
-  { label: "하랑 현재고", Icon: Layers },
-  { label: "원부자재 필요량", Icon: Calculator },
+  { href: "/production/outbound", label: "원료 생산 출고 입력", Icon: Package },
+  { href: "/production/outbound-history", label: "원료 생산 출고 현황", Icon: ClipboardList },
+  { href: "/daily/raw-thawing", label: "원료 해동 일지", Icon: Refrigerator },
+  { href: "/daily/material-receiving-inspection", label: "원료 입고 검수일지", Icon: PackageSearch },
 ] as const;
 
 export default function MaterialsHubPage() {
@@ -28,22 +26,6 @@ export default function MaterialsHubPage() {
               <Icon className="w-5 h-5 shrink-0 text-cyan-400/90" strokeWidth={1.8} />
               <span className="font-medium">{label}</span>
             </Link>
-          </li>
-        ))}
-        {COMING_ITEMS.map(({ label, Icon }) => (
-          <li key={label}>
-            <div
-              className="flex items-center justify-between w-full p-4 rounded-xl border border-slate-700/60 bg-slate-800/30 text-slate-400 cursor-not-allowed"
-              aria-disabled
-            >
-              <div className="flex items-center gap-3">
-                <Icon className="w-5 h-5 shrink-0 text-slate-500" strokeWidth={1.8} />
-                <span className="font-medium">{label}</span>
-              </div>
-              <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-slate-700/80 text-slate-500">
-                준비중
-              </span>
-            </div>
           </li>
         ))}
       </ul>

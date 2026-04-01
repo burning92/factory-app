@@ -13,37 +13,45 @@ const ARMORED_LOGO_SRC = "/brand/helmet-furnace-mark.png";
 type DropdownItem = { href: string; label: string } | { label: string; comingSoon: true };
 
 const DESKTOP_DROPDOWN_PRODUCTION: DropdownItem[] = [
-  { href: "/production/outbound", label: "출고 입력" },
-  { href: "/production/outbound-history", label: "출고 현황" },
-  { href: "/production/history", label: "사용량 계산" },
-  { href: "/production/history/completed", label: "생산일지 목록" },
-  { href: "/production/dough-usage", label: "반죽사용량 입력" },
-  { href: "/production/dough-logs", label: "반죽 내역 관리" },
+  { href: "/production/dough-usage", label: "반죽사용량" },
+  { href: "/production/dough-logs", label: "반죽 내역" },
+  { href: "/production/history", label: "원료 사용량" },
+  { href: "/production/history/completed", label: "생산일지" },
   { href: "/production/plan", label: "생산계획" },
 ];
 
 const DESKTOP_DROPDOWN_MATERIALS: DropdownItem[] = [
   { href: "/inventory/ecount", label: "재고 현황" },
-  { label: "하랑 입고 관리", comingSoon: true },
-  { label: "하랑 현재고", comingSoon: true },
-  { label: "원부자재 필요량", comingSoon: true },
-];
-
-const DESKTOP_DROPDOWN_DAILY: DropdownItem[] = [
-  { href: "/daily/hygiene", label: "영업장 환경 위생 점검일지" },
-  { href: "/daily/temperature-humidity", label: "영업장 온·습도 점검일지" },
-  { href: "/daily/sanitation-facility", label: "위생시설 관리 점검일지" },
-  { href: "/daily/worker-hygiene", label: "작업자 위생 점검일지" },
-  { href: "/daily/cold-storage-hygiene", label: "냉장·냉동 온도 및 위생 점검일지" },
-  { href: "/daily/process-control-bread", label: "공정관리 점검일지(빵류)" },
-  { href: "/daily/material-storage-3f", label: "원부자재 창고 점검표(3F)" },
+  { href: "/production/outbound", label: "원료 생산 출고 입력" },
+  { href: "/production/outbound-history", label: "원료 생산 출고 현황" },
   { href: "/daily/raw-thawing", label: "원료 해동 일지" },
   { href: "/daily/material-receiving-inspection", label: "원료 입고 검수일지" },
-  { href: "/daily/illumination", label: "영업장 조도 점검일지" },
-  { href: "/daily/manufacturing-equipment", label: "제조설비 점검표" },
-  { href: "/daily/air-conditioning-equipment", label: "공조설비 점검표" },
-  { href: "/daily/hoist-inspection", label: "호이스트 점검기록" },
-  { label: "기타 데일리 점검", comingSoon: true },
+];
+
+type DailyDropdownBlock = { section: string; items: { href: string; label: string }[] };
+
+const DESKTOP_DROPDOWN_DAILY_BLOCKS: DailyDropdownBlock[] = [
+  {
+    section: "위생 및 공정",
+    items: [
+      { href: "/daily/sanitation-facility", label: "위생시설 관리 점검일지" },
+      { href: "/daily/worker-hygiene", label: "작업자 위생 점검일지" },
+      { href: "/daily/hygiene", label: "영업장 환경 위생 점검일지" },
+      { href: "/daily/temperature-humidity", label: "영업장 온·습도 점검일지" },
+      { href: "/daily/cold-storage-hygiene", label: "냉장·냉동 온도 및 위생 점검일지" },
+      { href: "/daily/process-control-bread", label: "공정관리 점검일지(빵류)" },
+      { href: "/daily/illumination", label: "영업장 조도 점검일지" },
+      { href: "/daily/material-storage-3f", label: "원부자재 창고 점검표(3F)" },
+    ],
+  },
+  {
+    section: "제조 설비",
+    items: [
+      { href: "/daily/manufacturing-equipment", label: "제조설비 점검일지" },
+      { href: "/daily/air-conditioning-equipment", label: "공조설비 점검일지" },
+      { href: "/daily/hoist-inspection", label: "호이스트 점검기록" },
+    ],
+  },
 ];
 
 const DESKTOP_DROPDOWN_MANAGEMENT: DropdownItem[] = [
@@ -180,7 +188,7 @@ export default function Header() {
                   : key === "materials"
                     ? DESKTOP_DROPDOWN_MATERIALS
                     : key === "daily"
-                      ? DESKTOP_DROPDOWN_DAILY
+                      ? null
                       : DESKTOP_DROPDOWN_MANAGEMENT;
               const isActive = pathname === href || pathname.startsWith(href + "/");
               const isOpen = activeDropdown === key;
@@ -219,32 +227,58 @@ export default function Header() {
                       role="menu"
                     >
                       <div className="rounded-lg border border-slate-600 bg-slate-800/95 shadow-xl py-2">
-                      {items.map((item, i) =>
-                        "comingSoon" in item && item.comingSoon ? (
-                          <div
-                            key={i}
-                            className="flex items-center justify-between gap-2 px-4 py-2 text-sm text-slate-500 cursor-not-allowed"
-                            role="menuitem"
-                            aria-disabled
-                          >
-                            <span>{item.label}</span>
-                            <span className="text-xs text-slate-500 bg-slate-700/80 px-1.5 py-0.5 rounded">준비 중</span>
-                          </div>
-                        ) : "href" in item ? (
-                          <Link
-                            key={i}
-                            href={item.href}
-                            className={`block px-4 py-2 text-sm transition-colors ${
-                              pathname === item.href || pathname.startsWith(item.href + "/")
-                                ? "text-cyan-300 bg-cyan-500/10"
-                                : "text-slate-300 hover:bg-slate-700/80 hover:text-slate-100"
-                            }`}
-                            role="menuitem"
-                          >
-                            {item.label}
-                          </Link>
-                        ) : null
-                      )}
+                      {key === "daily"
+                        ? DESKTOP_DROPDOWN_DAILY_BLOCKS.map((block, bi) => (
+                            <div key={block.section}>
+                              {bi > 0 && <div className="my-1.5 border-t border-slate-600/70" role="presentation" />}
+                              <div
+                                className="px-4 pt-2 pb-1 text-[11px] font-semibold tracking-wide text-slate-500"
+                                role="presentation"
+                              >
+                                {block.section}
+                              </div>
+                              {block.items.map((item) => (
+                                <Link
+                                  key={item.href}
+                                  href={item.href}
+                                  className={`block px-4 py-2 text-sm transition-colors ${
+                                    pathname === item.href || pathname.startsWith(item.href + "/")
+                                      ? "text-cyan-300 bg-cyan-500/10"
+                                      : "text-slate-300 hover:bg-slate-700/80 hover:text-slate-100"
+                                  }`}
+                                  role="menuitem"
+                                >
+                                  {item.label}
+                                </Link>
+                              ))}
+                            </div>
+                          ))
+                        : items!.map((item, i) =>
+                            "comingSoon" in item && item.comingSoon ? (
+                              <div
+                                key={i}
+                                className="flex items-center justify-between gap-2 px-4 py-2 text-sm text-slate-500 cursor-not-allowed"
+                                role="menuitem"
+                                aria-disabled
+                              >
+                                <span>{item.label}</span>
+                                <span className="text-xs text-slate-500 bg-slate-700/80 px-1.5 py-0.5 rounded">준비 중</span>
+                              </div>
+                            ) : "href" in item ? (
+                              <Link
+                                key={i}
+                                href={item.href}
+                                className={`block px-4 py-2 text-sm transition-colors ${
+                                  pathname === item.href || pathname.startsWith(item.href + "/")
+                                    ? "text-cyan-300 bg-cyan-500/10"
+                                    : "text-slate-300 hover:bg-slate-700/80 hover:text-slate-100"
+                                }`}
+                                role="menuitem"
+                              >
+                                {item.label}
+                              </Link>
+                            ) : null
+                          )}
                       </div>
                     </div>
                   )}

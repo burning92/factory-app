@@ -1,15 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { Package, ClipboardList, Calculator, FileText, Plus, List, CalendarDays } from "lucide-react";
+import { Calculator, FileText, Plus, List, CalendarDays } from "lucide-react";
 
 const HUB_ITEMS = [
-  { href: "/production/outbound", label: "출고 입력", Icon: Package },
-  { href: "/production/outbound-history", label: "출고 현황", Icon: ClipboardList },
-  { href: "/production/history", label: "사용량 계산", Icon: Calculator },
-  { href: "/production/history/completed", label: "생산일지 목록", Icon: FileText },
-  { href: "/production/dough-usage", label: "반죽사용량 입력", Icon: Plus },
-  { href: "/production/dough-logs", label: "반죽 내역 관리", Icon: List },
+  { href: "/production/dough-usage", label: "반죽사용량", Icon: Plus },
+  { href: "/production/dough-logs", label: "반죽 내역", Icon: List },
+  { href: "/production/history", label: "원료 사용량", Icon: Calculator },
+  { href: "/production/history/completed", label: "생산일지", Icon: FileText },
   { href: "/production/plan", label: "생산계획", Icon: CalendarDays },
 ] as const;
 
