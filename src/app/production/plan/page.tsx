@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getProductionPlanPageData } from "@/features/production/plan/getProductionPlanPageData";
 import { formatDateTimeKorea } from "@/lib/formatDateTimeKorea";
 import MobilePlanList from "./MobilePlanList";
+import AutoScrollToToday from "./AutoScrollToToday";
 
 export const dynamic = "force-dynamic";
 
@@ -71,6 +72,15 @@ function versionBadgeClass(v: "master" | "draft" | "end"): string {
   return "bg-emerald-500/20 text-emerald-200 border border-emerald-500/40";
 }
 
+function getTodayIsoInKST(): string {
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
 export default async function ProductionPlanPage({
   searchParams,
 }: {
@@ -109,10 +119,14 @@ export default async function ProductionPlanPage({
     typeof requestedMonthRaw === "string" && /^\d{4}-\d{2}$/.test(requestedMonthRaw)
       ? requestedMonthRaw
       : null;
+  const todayIso = getTodayIsoInKST();
+  const todayMonthKey = todayIso.slice(0, 7);
   const monthKey =
     requestedMonth && monthKeys.includes(requestedMonth)
       ? requestedMonth
-      : monthKeys.length > 0
+      : monthKeys.includes(todayMonthKey)
+        ? todayMonthKey
+        : monthKeys.length > 0
         ? monthKeys[monthKeys.length - 1]
         : null;
 
@@ -127,13 +141,6 @@ export default async function ProductionPlanPage({
   }
   const sortedDates = Array.from(byDate.keys()).sort((a, b) => a.localeCompare(b));
   const monthVersions = Array.from(new Set(monthRows.map((r) => r.plan_version))).sort();
-  const monthSheetNames = Array.from(
-    new Set(
-      monthRows
-        .map((r) => (r.source_sheet_name ?? "").trim())
-        .filter((name) => name !== "")
-    )
-  ).sort();
 
   let daysInMonth = 0;
   let firstWeekday = 0;
@@ -247,11 +254,6 @@ export default async function ProductionPlanPage({
                   </span>
                 ))}
               </div>
-              {monthSheetNames.length > 0 && (
-                <p className="text-xs text-slate-500">
-                  원본 시트: {monthSheetNames.join(", ")}
-                </p>
-              )}
             </section>
           )}
           {monthKey && (
@@ -273,6 +275,8 @@ export default async function ProductionPlanPage({
                   return (
                     <div
                       key={`${dateKey ?? "empty"}-${idx}`}
+                      id={dateKey ? `plan-day-${dateKey}` : undefined}
+                      data-plan-today={dateKey === todayIso ? "true" : undefined}
                       className="min-h-[160px] border-r border-b border-slate-700/60 last:border-r-0 p-3"
                     >
                       {dateKey ? (
@@ -281,12 +285,7 @@ export default async function ProductionPlanPage({
                           <div className="space-y-2">
                             {dayRows.map((row) => (
                               <div key={row.id} className={`rounded-md px-2 py-1 text-[11px] ${getRowClass(row.category, row.product_name)}`}>
-                                <div className="flex items-center justify-between gap-1">
-                                  <p className="leading-snug">{getDisplayName(row.category, row.product_name)}</p>
-                                  <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[9px] ${versionBadgeClass(row.plan_version)}`}>
-                                    {versionLabel(row.plan_version)}
-                                  </span>
-                                </div>
+                                <p className="leading-snug">{getDisplayName(row.category, row.product_name)}</p>
                                 {row.qty != null && Number.isFinite(row.qty) ? (
                                   <p className="text-[10px] mt-0.5 tabular-nums">수량 {formatQty(row.qty)}</p>
                                 ) : null}
@@ -312,13 +311,16 @@ export default async function ProductionPlanPage({
                   date,
                   rows: dayRows.map((row) => ({
                     id: row.id,
-                    label: `${getDisplayName(row.category, row.product_name)} [${versionLabel(row.plan_version)}]`,
+                    label: getDisplayName(row.category, row.product_name),
                     qty: row.qty,
-                    note: row.note ?? (row.source_sheet_name ? `원본: ${row.source_sheet_name}` : null),
+                    note: row.note ?? null,
                     className: getRowClass(row.category, row.product_name),
                   })),
                 }))}
             />
+          )}
+          {monthKey && (
+            <AutoScrollToToday targetDate={monthKey === todayMonthKey ? todayIso : null} />
           )}
         </>
       )}
