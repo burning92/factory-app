@@ -55,6 +55,10 @@ export async function POST(req: NextRequest) {
         qty: r.qty,
         category: r.category,
         note: r.note,
+        plan_year: r.plan_year,
+        plan_month: r.plan_month,
+        plan_version: r.plan_version,
+        source_sheet_name: r.source_sheet_name,
         sort_order: r.sort_order,
         updated_at: now,
       }));

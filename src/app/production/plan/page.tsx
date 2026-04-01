@@ -55,7 +55,28 @@ function getDisplayName(category: string | null, productName: string): string {
   return productName;
 }
 
-export default async function ProductionPlanPage() {
+function monthKeyFromYM(year: number, month: number): string {
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+function versionLabel(v: "master" | "draft" | "end"): string {
+  if (v === "end") return "END";
+  if (v === "draft") return "가안";
+  return "MASTER";
+}
+
+function versionBadgeClass(v: "master" | "draft" | "end"): string {
+  if (v === "end") return "bg-violet-500/20 text-violet-200 border border-violet-500/40";
+  if (v === "draft") return "bg-amber-500/20 text-amber-200 border border-amber-500/40";
+  return "bg-emerald-500/20 text-emerald-200 border border-emerald-500/40";
+}
+
+export default async function ProductionPlanPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const resolvedSearchParams = (await searchParams) ?? {};
   let data;
   try {
     data = await getProductionPlanPageData();
@@ -76,15 +97,43 @@ export default async function ProductionPlanPage() {
   }
 
   const rows = data.rows;
-  const byDate = new Map<string, typeof rows>();
-  for (const r of rows) {
+  const monthKeys = Array.from(
+    new Set(
+      rows
+        .filter((r) => Number.isFinite(r.plan_year) && Number.isFinite(r.plan_month))
+        .map((r) => monthKeyFromYM(r.plan_year, r.plan_month))
+    )
+  ).sort((a, b) => a.localeCompare(b));
+  const requestedMonthRaw = resolvedSearchParams.m;
+  const requestedMonth =
+    typeof requestedMonthRaw === "string" && /^\d{4}-\d{2}$/.test(requestedMonthRaw)
+      ? requestedMonthRaw
+      : null;
+  const monthKey =
+    requestedMonth && monthKeys.includes(requestedMonth)
+      ? requestedMonth
+      : monthKeys.length > 0
+        ? monthKeys[monthKeys.length - 1]
+        : null;
+
+  const monthRows = monthKey
+    ? rows.filter((r) => monthKeyFromYM(r.plan_year, r.plan_month) === monthKey)
+    : [];
+  const byDate = new Map<string, typeof monthRows>();
+  for (const r of monthRows) {
     const list = byDate.get(r.plan_date) ?? [];
     list.push(r);
     byDate.set(r.plan_date, list);
   }
   const sortedDates = Array.from(byDate.keys()).sort((a, b) => a.localeCompare(b));
-  const targetDate = sortedDates[0] ?? null;
-  const monthKey = targetDate ? targetDate.slice(0, 7) : null;
+  const monthVersions = Array.from(new Set(monthRows.map((r) => r.plan_version))).sort();
+  const monthSheetNames = Array.from(
+    new Set(
+      monthRows
+        .map((r) => (r.source_sheet_name ?? "").trim())
+        .filter((name) => name !== "")
+    )
+  ).sort();
 
   let daysInMonth = 0;
   let firstWeekday = 0;
@@ -105,6 +154,13 @@ export default async function ProductionPlanPage() {
     }
     while (dayCells.length % 7 !== 0) dayCells.push(null);
   }
+
+  const selectedMonthIndex = monthKey ? monthKeys.indexOf(monthKey) : -1;
+  const prevMonth = selectedMonthIndex > 0 ? monthKeys[selectedMonthIndex - 1] : null;
+  const nextMonth =
+    selectedMonthIndex >= 0 && selectedMonthIndex < monthKeys.length - 1
+      ? monthKeys[selectedMonthIndex + 1]
+      : null;
 
   return (
     <div className="min-h-[calc(100vh-3.5rem)] md:min-h-0 p-4 md:px-8 md:py-6 xl:px-10 max-w-[1280px] mx-auto">
@@ -139,6 +195,66 @@ export default async function ProductionPlanPage() {
       ) : (
         <>
           {monthKey && (
+            <section className="rounded-xl border border-slate-700 bg-space-800/60 p-3 mb-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  {prevMonth ? (
+                    <Link
+                      href={`/production/plan?m=${prevMonth}`}
+                      className="px-2.5 py-1 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700/60 text-xs"
+                    >
+                      이전월
+                    </Link>
+                  ) : (
+                    <span className="px-2.5 py-1 rounded-lg border border-slate-700 text-slate-600 text-xs">
+                      이전월
+                    </span>
+                  )}
+                  {nextMonth ? (
+                    <Link
+                      href={`/production/plan?m=${nextMonth}`}
+                      className="px-2.5 py-1 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700/60 text-xs"
+                    >
+                      다음월
+                    </Link>
+                  ) : (
+                    <span className="px-2.5 py-1 rounded-lg border border-slate-700 text-slate-600 text-xs">
+                      다음월
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {monthKeys.map((m) => (
+                    <Link
+                      key={m}
+                      href={`/production/plan?m=${m}`}
+                      className={`px-2 py-1 rounded-md text-xs border ${
+                        m === monthKey
+                          ? "border-cyan-500/70 bg-cyan-500/15 text-cyan-200"
+                          : "border-slate-600 text-slate-300 hover:bg-slate-700/60"
+                      }`}
+                    >
+                      {m.slice(2).replace("-", ".")}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-slate-500">버전:</span>
+                {monthVersions.map((v) => (
+                  <span key={v} className={`px-2 py-0.5 rounded-full ${versionBadgeClass(v)}`}>
+                    {versionLabel(v)}
+                  </span>
+                ))}
+              </div>
+              {monthSheetNames.length > 0 && (
+                <p className="text-xs text-slate-500">
+                  원본 시트: {monthSheetNames.join(", ")}
+                </p>
+              )}
+            </section>
+          )}
+          {monthKey && (
             <section className="hidden md:block rounded-xl border border-slate-700 bg-space-800/50 overflow-hidden">
               <div className="px-4 py-3 border-b border-slate-700/80 bg-space-900/40">
                 <h2 className="text-base font-semibold text-cyan-300/90">{formatMonthTitle(monthKey)}</h2>
@@ -165,7 +281,12 @@ export default async function ProductionPlanPage() {
                           <div className="space-y-2">
                             {dayRows.map((row) => (
                               <div key={row.id} className={`rounded-md px-2 py-1 text-[11px] ${getRowClass(row.category, row.product_name)}`}>
-                                <p className="leading-snug">{getDisplayName(row.category, row.product_name)}</p>
+                                <div className="flex items-center justify-between gap-1">
+                                  <p className="leading-snug">{getDisplayName(row.category, row.product_name)}</p>
+                                  <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[9px] ${versionBadgeClass(row.plan_version)}`}>
+                                    {versionLabel(row.plan_version)}
+                                  </span>
+                                </div>
                                 {row.qty != null && Number.isFinite(row.qty) ? (
                                   <p className="text-[10px] mt-0.5 tabular-nums">수량 {formatQty(row.qty)}</p>
                                 ) : null}
@@ -191,9 +312,9 @@ export default async function ProductionPlanPage() {
                   date,
                   rows: dayRows.map((row) => ({
                     id: row.id,
-                    label: getDisplayName(row.category, row.product_name),
+                    label: `${getDisplayName(row.category, row.product_name)} [${versionLabel(row.plan_version)}]`,
                     qty: row.qty,
-                    note: row.note,
+                    note: row.note ?? (row.source_sheet_name ? `원본: ${row.source_sheet_name}` : null),
                     className: getRowClass(row.category, row.product_name),
                   })),
                 }))}

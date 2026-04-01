@@ -9,8 +9,11 @@ export async function getProductionPlanPageData(): Promise<ProductionPlanPageDat
   const [rowsRes, syncRes] = await Promise.all([
     supabase
       .from("production_plan_rows")
-      .select("id, plan_date, product_name, qty, category, note, sort_order, updated_at")
-      .order("plan_date", { ascending: false })
+      .select("id, plan_date, product_name, qty, category, note, plan_year, plan_month, plan_version, source_sheet_name, sort_order, updated_at")
+      .order("plan_year", { ascending: false })
+      .order("plan_month", { ascending: false })
+      .order("plan_version", { ascending: false })
+      .order("plan_date", { ascending: true })
       .order("sort_order", { ascending: true })
       .order("id", { ascending: true }),
     supabase
@@ -29,6 +32,16 @@ export async function getProductionPlanPageData(): Promise<ProductionPlanPageDat
     qty: r.qty != null && Number.isFinite(Number(r.qty)) ? Number(r.qty) : null,
     category: r.category != null ? String(r.category) : null,
     note: r.note != null ? String(r.note) : null,
+    plan_year: Number.isFinite(Number(r.plan_year)) ? Number(r.plan_year) : Number(String(r.plan_date).slice(0, 4)),
+    plan_month:
+      Number.isFinite(Number(r.plan_month)) ? Number(r.plan_month) : Number(String(r.plan_date).slice(5, 7)),
+    plan_version:
+      String(r.plan_version ?? "master").toLowerCase() === "draft"
+        ? "draft"
+        : String(r.plan_version ?? "master").toLowerCase() === "end"
+          ? "end"
+          : "master",
+    source_sheet_name: r.source_sheet_name != null ? String(r.source_sheet_name) : null,
     sort_order: Number(r.sort_order) || 0,
     updated_at: r.updated_at ? String(r.updated_at) : "",
   }));

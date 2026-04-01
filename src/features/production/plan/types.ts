@@ -6,6 +6,11 @@ export type RawProductionPlanRow = {
   qty?: string | number | null;
   category?: string | null;
   note?: string | null;
+  plan_year?: string | number | null;
+  plan_month?: string | number | null;
+  /** master | draft | end */
+  plan_version?: string | null;
+  source_sheet_name?: string | null;
   [key: string]: unknown;
 };
 
@@ -23,6 +28,10 @@ export type ProductionPlanRow = {
   qty: number | null;
   category: string | null;
   note: string | null;
+  plan_year: number;
+  plan_month: number;
+  plan_version: "master" | "draft" | "end";
+  source_sheet_name: string | null;
   sort_order: number;
   updated_at: string;
 };
