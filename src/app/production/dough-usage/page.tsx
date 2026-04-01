@@ -144,7 +144,8 @@ function DoughUsageContent() {
   const isEditMode = !!editDate;
 
   const { profile } = useAuth();
-  const { getDoughLogByDate, saveDoughLog, saving, fetchDoughBoms, fetchDoughLogs, doughBoms, doughLogsMap } = useMasterStore();
+  const { getDoughLogByDate, saveNewDoughLog, updateDoughLogById, saving, fetchDoughBoms, fetchDoughLogs, doughBoms, doughLogsMap } =
+    useMasterStore();
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [autoLotNoticeDate, setAutoLotNoticeDate] = useState<string | null>(null);
 
@@ -163,6 +164,9 @@ function DoughUsageContent() {
   const [batchExtraKgs, setBatchExtraKgs] = useState<string[]>([]);
 
   const [usageDate, setUsageDate] = useState(() => getDefaultUsageDate(todayStr()));
+  /** 수정 모드에서 편집 중인 dough_logs 행 id (URL date로 최초 로드 시 1회만 고정). 저장은 id 기준 update. */
+  const [editingDoughLogId, setEditingDoughLogId] = useState<string | null>(null);
+  const editBoundForDateRef = useRef<string | null>(null);
 
   useEffect(() => {
     fetchDoughBoms();
@@ -188,16 +192,27 @@ function DoughUsageContent() {
     setAutoLotNoticeDate(null);
   }, [editDate]);
 
-  // 수정 모드: URL date 기준으로 Store에서 최신 데이터 패칭 후 날짜 세팅 (Store 믿지 않고 URL 기준)
+  useEffect(() => {
+    if (!isEditMode) {
+      editBoundForDateRef.current = null;
+      setEditingDoughLogId(null);
+    }
+  }, [isEditMode]);
+
+  // 수정 모드에서 URL date가 바뀌면 이전 편집 id/ref를 비워서 새 행으로 다시 바인딩되게 함
   useEffect(() => {
     if (!isEditMode || !editDate || !/^\d{4}-\d{2}-\d{2}$/.test(editDate)) return;
-    fetchDoughLogs().then(() => {
-      setUsageDate(editDate);
-      setDoughDate(editDate);
-    });
+    editBoundForDateRef.current = null;
+    setEditingDoughLogId(null);
+  }, [isEditMode, editDate]);
+
+  // 수정 모드: URL date 기준으로 목록만 패칭 (폼은 아래 edit 바인딩에서 한 번만 채움)
+  useEffect(() => {
+    if (!isEditMode || !editDate || !/^\d{4}-\d{2}-\d{2}$/.test(editDate)) return;
+    void fetchDoughLogs();
   }, [isEditMode, editDate, fetchDoughLogs]);
 
-  // 도우 BOM 로드 후 첫 항목 자동 선택 — 수정 모드면 절대 덮어쓰지 않음 (editData 바인딩이 도우를 세팅함)
+  // 도우 BOM 로드 후 첫 항목 자동 선택 — 수정 모드면 절대 덮어쓰지 않음 (edit 바인딩이 도우를 세팅함)
   useEffect(() => {
     if (isEditMode) return;
     if (doughBoms.length > 0 && selectedDough === null) setSelectedDough(doughBoms[0]);
@@ -262,10 +277,6 @@ function DoughUsageContent() {
     });
   }, [extraKg, batchSplits, getTargetIndexForExtraKg]);
 
-  const existing = useMemo(() => getDoughLogByDate(usageDate), [usageDate, getDoughLogByDate]);
-  /** 수정 모드로 열린 원본 데이터 (리스트에서 수정 클릭 시 전달되는 날짜로 store에서 조회) */
-  const editData = existing;
-
   const latestDoughLog = useMemo(() => {
     const entries = Object.entries(doughLogsMap ?? {});
     if (entries.length === 0) return null;
@@ -273,73 +284,81 @@ function DoughUsageContent() {
     return entries[0]?.[1] ?? null;
   }, [doughLogsMap]);
 
-  // 수정 모드이고 URL date로 패칭된 editData가 있을 때만 원본 바인딩. 신규일 때만 최근 LOT 자동완성.
+  // 수정 모드: URL의 사용일자(editDate)로만 최초 1회 폼 바인딩. 사용일자 필드를 바꿔도 다른 행을 다시 로드하지 않음.
   useEffect(() => {
-    if (isEditMode && editData) {
-      setUsageDate(editData.사용일자);
-      setDoughDate(editData.반죽일자 ?? editData.사용일자);
-      setTargetQty(String(editData.예상수량 ?? ""));
-      setAuthorName(editData.작성자명 ?? "");
+    if (!isEditMode || !editDate || !/^\d{4}-\d{2}-\d{2}$/.test(editDate)) return;
+    const row = getDoughLogByDate(editDate);
+    if (!row) return;
+    if (row.dough_id && doughBoms.length === 0) return;
+    if (editBoundForDateRef.current === editDate) return;
+    editBoundForDateRef.current = editDate;
+    setEditingDoughLogId(row.id ?? null);
+    setUsageDate(row.사용일자);
+    setDoughDate(row.반죽일자 ?? row.사용일자);
+    setTargetQty(String(row.예상수량 ?? ""));
+    setAuthorName(row.작성자명 ?? "");
 
-      const flourLines = editData.반죽원료?.["밀가루"] ?? [];
-      const flourG = flourLines.reduce((s, l) => s + (l.사용량_g ?? 0), 0);
-      if (flourG > 0) {
-        setActualBags(String(Math.floor(flourG / FLOUR_G_PER_BAG)));
-        setExtraKg(String((flourG % FLOUR_G_PER_BAG) / 1000));
-      }
-
-      const doughDateForHydration = editData.반죽일자 ?? editData.사용일자;
-      setHydrationPercent(getHydrationByDayOfWeek(doughDateForHydration));
-      setHydrationAutoMessage(null);
-
-      if (editData.dough_id && doughBoms.length > 0) {
-        const matched = doughBoms.find((d) => d.id === editData.dough_id);
-        setSelectedDough(matched ?? doughBoms[0]);
-      } else if (doughBoms.length > 0) {
-        setSelectedDough(doughBoms[0]);
-      }
-
-      const next반죽: Record<string, DoughLineInput[]> = {};
-      for (const k of DOUGH_INGREDIENT_KEYS) {
-        next반죽[k] = toInputLines(editData.반죽원료?.[k] ?? []);
-      }
-      set반죽원료(next반죽);
-      const next덧: Record<string, DoughLineInput[]> = {};
-      for (const k of DUST_OIL_KEYS) {
-        next덧[k] = toInputLines(editData.덧가루덧기름?.[k] ?? []);
-      }
-      set덧가루덧기름(next덧);
-      setAutoLotNoticeDate(null);
-    } else if (!isEditMode) {
-      // 신규 작성 시에만: 최근 덧가루·원료 LOT 자동 세팅 (수정 모드에서는 절대 실행 안 함). 작성자명은 아래 useEffect에서 Supabase → localStorage 순으로 로드.
-      const getLatestLot = (lines: DoughProcessLine[] | undefined): string => {
-        const firstLot = (lines?.[0]?.lot ?? "").trim();
-        if (!firstLot || firstLot === "—") return "";
-        return firstLot;
-      };
-      const getLatestUsageG = (lines: DoughProcessLine[] | undefined): string => {
-        const g = lines?.[0]?.사용량_g;
-        if (g == null || !Number.isFinite(Number(g))) return "";
-        const n = Math.max(0, Math.round(Number(g)));
-        return n > 0 ? String(n) : "";
-      };
-      const next반죽: Record<string, DoughLineInput[]> = {};
-      for (const k of DOUGH_INGREDIENT_KEYS) {
-        next반죽[k] = [{ 사용량_g: "", lot: getLatestLot(latestDoughLog?.반죽원료?.[k]) }];
-      }
-      set반죽원료(next반죽);
-      const next덧: Record<string, DoughLineInput[]> = {};
-      for (const k of DUST_OIL_KEYS) {
-        const lines = latestDoughLog?.덧가루덧기름?.[k];
-        const usageG = getLatestUsageG(lines);
-        next덧[k] = [{ 사용량_g: usageG, lot: getLatestLot(lines) }];
-      }
-      set덧가루덧기름(next덧);
-      const hasAutoLot = Object.values(next반죽).some((rows) => (rows[0]?.lot ?? "").trim() !== "")
-        || Object.values(next덧).some((rows) => (rows[0]?.lot ?? "").trim() !== "");
-      setAutoLotNoticeDate(hasAutoLot ? (latestDoughLog?.사용일자 ?? null) : null);
+    const flourLines = row.반죽원료?.["밀가루"] ?? [];
+    const flourG = flourLines.reduce((s, l) => s + (l.사용량_g ?? 0), 0);
+    if (flourG > 0) {
+      setActualBags(String(Math.floor(flourG / FLOUR_G_PER_BAG)));
+      setExtraKg(String((flourG % FLOUR_G_PER_BAG) / 1000));
     }
-  }, [isEditMode, editData, latestDoughLog, doughBoms]);
+
+    const doughDateForHydration = row.반죽일자 ?? row.사용일자;
+    setHydrationPercent(getHydrationByDayOfWeek(doughDateForHydration));
+    setHydrationAutoMessage(null);
+
+    if (row.dough_id && doughBoms.length > 0) {
+      const matched = doughBoms.find((d) => d.id === row.dough_id);
+      setSelectedDough(matched ?? doughBoms[0]);
+    } else if (doughBoms.length > 0) {
+      setSelectedDough(doughBoms[0]);
+    }
+
+    const next반죽: Record<string, DoughLineInput[]> = {};
+    for (const k of DOUGH_INGREDIENT_KEYS) {
+      next반죽[k] = toInputLines(row.반죽원료?.[k] ?? []);
+    }
+    set반죽원료(next반죽);
+    const next덧: Record<string, DoughLineInput[]> = {};
+    for (const k of DUST_OIL_KEYS) {
+      next덧[k] = toInputLines(row.덧가루덧기름?.[k] ?? []);
+    }
+    set덧가루덧기름(next덧);
+    setAutoLotNoticeDate(null);
+  }, [isEditMode, editDate, doughLogsMap, getDoughLogByDate, doughBoms]);
+
+  // 신규 작성 시에만: 최근 덧가루·원료 LOT 자동 세팅. 작성자명은 아래 useEffect에서 Supabase → localStorage 순으로 로드.
+  useEffect(() => {
+    if (isEditMode) return;
+    const getLatestLot = (lines: DoughProcessLine[] | undefined): string => {
+      const firstLot = (lines?.[0]?.lot ?? "").trim();
+      if (!firstLot || firstLot === "—") return "";
+      return firstLot;
+    };
+    const getLatestUsageG = (lines: DoughProcessLine[] | undefined): string => {
+      const g = lines?.[0]?.사용량_g;
+      if (g == null || !Number.isFinite(Number(g))) return "";
+      const n = Math.max(0, Math.round(Number(g)));
+      return n > 0 ? String(n) : "";
+    };
+    const next반죽: Record<string, DoughLineInput[]> = {};
+    for (const k of DOUGH_INGREDIENT_KEYS) {
+      next반죽[k] = [{ 사용량_g: "", lot: getLatestLot(latestDoughLog?.반죽원료?.[k]) }];
+    }
+    set반죽원료(next반죽);
+    const next덧: Record<string, DoughLineInput[]> = {};
+    for (const k of DUST_OIL_KEYS) {
+      const lines = latestDoughLog?.덧가루덧기름?.[k];
+      const usageG = getLatestUsageG(lines);
+      next덧[k] = [{ 사용량_g: usageG, lot: getLatestLot(lines) }];
+    }
+    set덧가루덧기름(next덧);
+    const hasAutoLot = Object.values(next반죽).some((rows) => (rows[0]?.lot ?? "").trim() !== "")
+      || Object.values(next덧).some((rows) => (rows[0]?.lot ?? "").trim() !== "");
+    setAutoLotNoticeDate(hasAutoLot ? (latestDoughLog?.사용일자 ?? null) : null);
+  }, [isEditMode, latestDoughLog, doughBoms]);
 
   /** 신규 작성 모드: 작성자 기본값 주입 (로그인 사용자 이름 우선 → Supabase → localStorage) */
   useEffect(() => {
@@ -500,7 +519,15 @@ function DoughUsageContent() {
       dough_id: selectedDough?.id ?? undefined,
     };
     try {
-      await saveDoughLog(usageDate, data);
+      if (isEditMode) {
+        if (!editingDoughLogId) {
+          setToast({ message: "수정할 반죽 내역을 불러오지 못했습니다. 목록에서 다시 열어 주세요.", type: "error" });
+          return;
+        }
+        await updateDoughLogById(editingDoughLogId, data);
+      } else {
+        await saveNewDoughLog(usageDate, data);
+      }
       setToast({ message: "저장되었습니다.", type: "success" });
       router.push("/production/dough-logs");
     } catch (err) {
@@ -513,7 +540,20 @@ function DoughUsageContent() {
       console.error("[반죽 사용량 저장 실패]", { error: err, detail, usageDate, data });
       setToast({ message: `저장에 실패했습니다. ${detail}`, type: "error" });
     }
-  }, [usageDate, authorName, 반죽원료, 덧가루덧기름, doughDate, targetQty, selectedDough, saveDoughLog, router]);
+  }, [
+    usageDate,
+    authorName,
+    반죽원료,
+    덧가루덧기름,
+    doughDate,
+    targetQty,
+    selectedDough,
+    isEditMode,
+    editingDoughLogId,
+    saveNewDoughLog,
+    updateDoughLogById,
+    router,
+  ]);
 
   return (
     <div className="py-10 px-4 sm:px-6 lg:px-8">
@@ -529,7 +569,7 @@ function DoughUsageContent() {
       )}
 
       <div className="max-w-3xl mx-auto">
-        <h1 className="text-2xl font-bold text-slate-100 mb-2">{editData ? "반죽사용량 수정" : "반죽사용량 입력"}</h1>
+        <h1 className="text-2xl font-bold text-slate-100 mb-2">{isEditMode ? "반죽사용량 수정" : "반죽사용량 입력"}</h1>
         <p className="text-slate-400 text-sm mb-6">
           권장량 확인 → 실제 투입량 결정 → 배치 분할표 확인 → 실제 사용량 입력 및 저장. 관리일지 출력 시 해당 날짜로 자동 매핑됩니다.
         </p>

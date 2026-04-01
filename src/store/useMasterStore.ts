@@ -113,6 +113,8 @@ export interface DoughBom {
 
 /** Independent dough log keyed by usage_date (사용일자). Used for auto-join on production date when printing journal. */
 export interface DoughLogRecord {
+  /** Supabase dough_logs.id. 수정 저장 시 필수. */
+  id?: string;
   사용일자: string;
   작성자명: string;
   반죽원료: Record<string, DoughProcessLine[]>;
@@ -203,7 +205,10 @@ interface MasterState {
   fetchLastUsedDates: () => Promise<void>;
   fetchDoughLogs: () => Promise<void>;
   getDoughLogByDate: (usageDate: string) => DoughLogRecord | null;
-  saveDoughLog: (usageDate: string, data: DoughLogRecord) => Promise<void>;
+  /** 신규: usage_date 기준 upsert */
+  saveNewDoughLog: (usageDate: string, data: DoughLogRecord) => Promise<void>;
+  /** 수정: row id 기준 update (usage_date 변경 시 타 행과 충돌하면 실패) */
+  updateDoughLogById: (id: string, data: DoughLogRecord) => Promise<void>;
   deleteDoughLog: (usageDate: string) => Promise<void>;
   fetchUsageCalculations: () => Promise<void>;
   saveUsageCalculation: (data: UsageCalculationRecord) => Promise<void>;
@@ -418,6 +423,7 @@ function mapProductionLogFromDb(row: {
 }
 
 function mapDoughLogFromDb(row: {
+  id?: string;
   usage_date: string;
   author_name?: string | null;
   dough_ingredients?: unknown;
@@ -433,6 +439,7 @@ function mapDoughLogFromDb(row: {
   const 예상수량 = meta != null && typeof meta.target_quantity === "number" ? meta.target_quantity : undefined;
   const dough_id = meta != null && typeof meta.dough_id === "string" && meta.dough_id.trim() !== "" ? meta.dough_id.trim() : undefined;
   return {
+    id: row.id != null ? String(row.id) : undefined,
     사용일자: usage_date,
     작성자명: row.author_name ?? "",
     반죽원료,
@@ -440,6 +447,36 @@ function mapDoughLogFromDb(row: {
     반죽일자: dough_date || undefined,
     예상수량,
     dough_id: dough_id || undefined,
+  };
+}
+
+function buildDoughLogDbPayload(usageDateKey: string, data: DoughLogRecord) {
+  const sanitizeLine = (l: DoughProcessLine): { 사용량_g: number; lot: string } => ({
+    사용량_g: Number.isFinite(l.사용량_g) && !Number.isNaN(l.사용량_g) ? Math.max(0, Number(l.사용량_g)) : 0,
+    lot: l.lot != null && String(l.lot).trim() !== "" ? String(l.lot).trim() : "—",
+  });
+  const sanitizeRecord = (rec: Record<string, DoughProcessLine[]>): Record<string, { 사용량_g: number; lot: string }[]> => {
+    const out: Record<string, { 사용량_g: number; lot: string }[]> = {};
+    for (const key of Object.keys(rec ?? {})) {
+      const arr = rec[key];
+      if (Array.isArray(arr) && arr.length > 0)
+        out[key] = arr.map(sanitizeLine);
+    }
+    return out;
+  };
+  const doughIng = sanitizeRecord(data.반죽원료 ?? {});
+  const dustOil = sanitizeRecord(data.덧가루덧기름 ?? {});
+  const meta: { target_quantity?: number; dough_id?: string } = {};
+  if (data.예상수량 != null && Number.isFinite(data.예상수량)) meta.target_quantity = Math.round(data.예상수량);
+  if (data.dough_id != null && String(data.dough_id).trim() !== "") meta.dough_id = String(data.dough_id).trim();
+  return {
+    usage_date: usageDateKey,
+    author_name: data.작성자명 != null && String(data.작성자명).trim() !== "" ? String(data.작성자명).trim() : null,
+    dough_ingredients: Object.keys(doughIng).length ? doughIng : {},
+    dust_oil: Object.keys(dustOil).length ? dustOil : {},
+    dough_date: data.반죽일자 != null && String(data.반죽일자).trim() !== "" ? String(data.반죽일자).trim().slice(0, 10) : null,
+    meta: Object.keys(meta).length ? meta : null,
+    updated_at: new Date().toISOString(),
   };
 }
 
@@ -677,7 +714,7 @@ export const useMasterStore = create<MasterState>((set, get) => ({
     try {
       const { data, error: e } = await supabase
         .from("dough_logs")
-        .select("usage_date, author_name, dough_ingredients, dust_oil, dough_date, meta")
+        .select("id, usage_date, author_name, dough_ingredients, dust_oil, dough_date, meta")
         .order("usage_date", { ascending: false });
       if (e) throw e;
       const map: Record<string, DoughLogRecord> = {};
@@ -699,45 +736,62 @@ export const useMasterStore = create<MasterState>((set, get) => ({
     return get().doughLogsMap[dateKey] ?? null;
   },
 
-  saveDoughLog: async (usageDate: string, data: DoughLogRecord) => {
+  saveNewDoughLog: async (usageDate: string, data: DoughLogRecord) => {
     set({ saving: "logs", error: null });
     const dateKey = usageDate.slice(0, 10);
-    const sanitizeLine = (l: DoughProcessLine): { 사용량_g: number; lot: string } => ({
-      사용량_g: Number.isFinite(l.사용량_g) && !Number.isNaN(l.사용량_g) ? Math.max(0, Number(l.사용량_g)) : 0,
-      lot: l.lot != null && String(l.lot).trim() !== "" ? String(l.lot).trim() : "—",
-    });
-    const sanitizeRecord = (rec: Record<string, DoughProcessLine[]>): Record<string, { 사용량_g: number; lot: string }[]> => {
-      const out: Record<string, { 사용량_g: number; lot: string }[]> = {};
-      for (const key of Object.keys(rec ?? {})) {
-        const arr = rec[key];
-        if (Array.isArray(arr) && arr.length > 0)
-          out[key] = arr.map(sanitizeLine);
-      }
-      return out;
-    };
     try {
-      const doughIng = sanitizeRecord(data.반죽원료 ?? {});
-      const dustOil = sanitizeRecord(data.덧가루덧기름 ?? {});
-      const meta: { target_quantity?: number; dough_id?: string } = {};
-      if (data.예상수량 != null && Number.isFinite(data.예상수량)) meta.target_quantity = Math.round(data.예상수량);
-      if (data.dough_id != null && String(data.dough_id).trim() !== "") meta.dough_id = String(data.dough_id).trim();
-      const payload = {
-        usage_date: dateKey,
-        author_name: data.작성자명 != null && String(data.작성자명).trim() !== "" ? String(data.작성자명).trim() : null,
-        dough_ingredients: Object.keys(doughIng).length ? doughIng : {},
-        dust_oil: Object.keys(dustOil).length ? dustOil : {},
-        dough_date: data.반죽일자 != null && String(data.반죽일자).trim() !== "" ? String(data.반죽일자).trim().slice(0, 10) : null,
-        meta: Object.keys(meta).length ? meta : null,
-        updated_at: new Date().toISOString(),
-      };
+      const payload = buildDoughLogDbPayload(dateKey, data);
       const { error: e } = await supabase.from("dough_logs").upsert(payload, {
         onConflict: "usage_date",
       });
       if (e) throw e;
       set((state) => ({
-        doughLogsMap: { ...state.doughLogsMap, [dateKey]: data },
+        doughLogsMap: { ...state.doughLogsMap, [dateKey]: { ...data, 사용일자: dateKey } },
         saving: "",
       }));
+    } catch (err) {
+      const msg = getErrorMessage(err);
+      set({
+        saving: "",
+        error: msg || "반죽 사용량 저장에 실패했습니다.",
+      });
+      throw err;
+    }
+  },
+
+  updateDoughLogById: async (id: string, data: DoughLogRecord) => {
+    set({ saving: "logs", error: null });
+    const dateKey = data.사용일자.slice(0, 10);
+    if (!id || String(id).trim() === "") {
+      const msg = "저장할 반죽 내역 id가 없습니다.";
+      set({ saving: "", error: msg });
+      throw new Error(msg);
+    }
+    try {
+      const { data: conflictRow, error: conflictErr } = await supabase
+        .from("dough_logs")
+        .select("id")
+        .eq("usage_date", dateKey)
+        .neq("id", id)
+        .maybeSingle();
+      if (conflictErr) throw conflictErr;
+      if (conflictRow) {
+        const msg =
+          "이미 해당 사용일자에 다른 반죽 내역이 있습니다. 날짜를 바꾸거나 해당 기록을 먼저 처리한 뒤 저장하세요.";
+        set({ saving: "", error: msg });
+        throw new Error(msg);
+      }
+      const payload = buildDoughLogDbPayload(dateKey, data);
+      const { error: e } = await supabase.from("dough_logs").update(payload).eq("id", id);
+      if (e) throw e;
+      set((state) => {
+        const next = { ...state.doughLogsMap };
+        for (const k of Object.keys(next)) {
+          if (next[k]?.id === id) delete next[k];
+        }
+        next[dateKey] = { ...data, id, 사용일자: dateKey };
+        return { doughLogsMap: next, saving: "" };
+      });
     } catch (err) {
       const msg = getErrorMessage(err);
       set({
