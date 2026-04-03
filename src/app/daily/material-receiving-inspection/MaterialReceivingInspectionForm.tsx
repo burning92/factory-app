@@ -9,6 +9,8 @@ import DateWheelPicker from "@/components/DateWheelPicker";
 import {
   RECEIVING_STORAGE_OPTIONS,
   buildEcountMaterialPickerOptions,
+  masterRowsToPickerOptions,
+  mergeInventoryAndMasterPickerOptions,
   buildReceivingAutoDeviationText,
   calcTotalWeightG,
   filterEcountOptionsByReceivingCategory,
@@ -164,30 +166,66 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
     (async () => {
       setEcountMaterialsLoading(true);
       setEcountMaterialsHint(null);
-      const { data, error } = await supabase
-        .from("ecount_inventory_current")
-        .select("item_code, display_item_name, category, box_weight_g, unit_weight_g")
-        .eq("inventory_type", "원재료")
-        .order("display_item_name", { ascending: true })
-        .order("lot_no", { ascending: true });
+      const [invRes, masterRes] = await Promise.all([
+        supabase
+          .from("ecount_inventory_current")
+          .select("item_code, display_item_name, category, box_weight_g, unit_weight_g")
+          .eq("inventory_type", "원재료")
+          .order("display_item_name", { ascending: true })
+          .order("lot_no", { ascending: true }),
+        supabase
+          .from("ecount_item_master")
+          .select("item_code, item_name, category, box_weight_g, unit_weight_g")
+          .eq("inventory_type", "원재료")
+          .eq("is_active", true)
+          .order("item_name", { ascending: true }),
+      ]);
       if (cancelled) return;
-      if (error) {
-        setEcountMaterialOptionsAll([]);
-        setEcountMaterialsHint("이카운트 원재료 목록을 불러오지 못했습니다. 직접 입력만 사용할 수 있습니다.");
-      } else {
-        const opts = buildEcountMaterialPickerOptions(
-          (data ?? []) as Array<{
-            item_code: string | null;
-            display_item_name: string | null;
-            category: string | null;
-            box_weight_g: number | null;
-            unit_weight_g: number | null;
-          }>
+
+      const invErr = invRes.error;
+      const masterErr = masterRes.error;
+
+      const invOpts = invErr
+        ? []
+        : buildEcountMaterialPickerOptions(
+            (invRes.data ?? []) as Array<{
+              item_code: string | null;
+              display_item_name: string | null;
+              category: string | null;
+              box_weight_g: number | null;
+              unit_weight_g: number | null;
+            }>
+          );
+
+      const masterOpts = masterErr
+        ? []
+        : masterRowsToPickerOptions(
+            (masterRes.data ?? []) as Array<{
+              item_code: string | null;
+              item_name: string | null;
+              category: string | null;
+              box_weight_g: number | null;
+              unit_weight_g: number | null;
+            }>
+          );
+
+      const merged = mergeInventoryAndMasterPickerOptions(invOpts, masterOpts);
+      setEcountMaterialOptionsAll(merged);
+
+      if (invErr && masterErr) {
+        setEcountMaterialsHint(
+          "이카운트 원재료·품목마스터를 불러오지 못했습니다. 직접 입력만 사용할 수 있습니다."
         );
-        setEcountMaterialOptionsAll(opts);
-        if (opts.length === 0) {
-          setEcountMaterialsHint("원재료(이카운트) 품목이 없습니다. 직접 입력만 사용할 수 있습니다.");
-        }
+      } else if (invErr && !masterErr) {
+        setEcountMaterialsHint(
+          "재고 현황만 불러오지 못했습니다. 품목마스터 기준으로 채우기를 사용할 수 있습니다."
+        );
+      } else if (!invErr && masterErr) {
+        setEcountMaterialsHint(
+          "품목마스터를 불러오지 못했습니다. 재고에 있는 품목만 채우기에 표시됩니다."
+        );
+      } else if (merged.length === 0) {
+        setEcountMaterialsHint("원재료(이카운트) 품목이 없습니다. 직접 입력만 사용할 수 있습니다.");
       }
       setEcountMaterialsLoading(false);
     })();

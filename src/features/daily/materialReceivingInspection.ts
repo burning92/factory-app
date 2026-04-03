@@ -65,6 +65,55 @@ export function buildEcountMaterialPickerOptions(
   return opts;
 }
 
+/**
+ * 품목마스터(ecount_item_master) 행 → 채우기 옵션.
+ * 재고에 아직 없는 품목도 동일 형태로 선택할 수 있게 한다.
+ */
+export function masterRowsToPickerOptions(
+  rows: Array<{
+    item_code: string | null;
+    item_name: string | null;
+    category: string | null;
+    box_weight_g: number | null;
+    unit_weight_g: number | null;
+  }>
+): EcountMaterialPickerOption[] {
+  const opts: EcountMaterialPickerOption[] = [];
+  for (const r of rows) {
+    const code = (r.item_code ?? "").trim();
+    const name = (r.item_name ?? "").trim();
+    if (!code || !name) continue;
+    const cat = (r.category ?? "").trim();
+    opts.push({
+      itemCode: code,
+      materialName: name,
+      category: cat || null,
+      boxWeightG: Number(r.box_weight_g) || 0,
+      unitWeightG: Number(r.unit_weight_g) || 0,
+    });
+  }
+  opts.sort((a, b) => a.materialName.localeCompare(b.materialName, "ko"));
+  return opts;
+}
+
+/** 재고에서 펼친 품목을 우선하고, 마스터에만 있는 품목 코드를 이어 붙인다. */
+export function mergeInventoryAndMasterPickerOptions(
+  fromInventory: EcountMaterialPickerOption[],
+  fromMaster: EcountMaterialPickerOption[]
+): EcountMaterialPickerOption[] {
+  const byCode = new Map<string, EcountMaterialPickerOption>();
+  for (const o of fromInventory) {
+    if (o.itemCode) byCode.set(o.itemCode, o);
+  }
+  for (const o of fromMaster) {
+    if (!o.itemCode || byCode.has(o.itemCode)) continue;
+    byCode.set(o.itemCode, o);
+  }
+  return Array.from(byCode.values()).sort((a, b) =>
+    a.materialName.localeCompare(b.materialName, "ko")
+  );
+}
+
 export function filterEcountOptionsByReceivingCategory(
   all: EcountMaterialPickerOption[],
   storage: ReceivingStorageCategory
