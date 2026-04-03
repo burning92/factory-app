@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { toAuthEmailLocal } from "@/lib/authEmail";
+import { SHOW_ORGANIZATION_VIEW_SWITCHER } from "@/lib/featureFlags";
 import type { Organization, OrganizationUISettings, Profile } from "@/types/auth";
 
 const AUTH_EMAIL_SUFFIX = ".local";
@@ -319,6 +320,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, error: null }));
   }, []);
 
+  /** 스위처를 끈 동안 manager/admin 보기는 AFF(100)로 고정 */
+  useEffect(() => {
+    if (SHOW_ORGANIZATION_VIEW_SWITCHER) return;
+    const role = state.profile?.role;
+    if (role !== "manager" && role !== "admin") return;
+    if (state.viewOrganizationCode === "100" || state.viewOrganizationCode == null) return;
+    setState((prev) => ({ ...prev, viewOrganizationCode: "100" }));
+  }, [
+    SHOW_ORGANIZATION_VIEW_SWITCHER,
+    state.profile?.role,
+    state.viewOrganizationCode,
+  ]);
+
   const setMustChangePasswordDone = useCallback(async (): Promise<{ error: string | null }> => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: "로그인이 필요합니다." };
@@ -337,7 +351,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     state.profile?.role === "manager" || state.profile?.role === "admin";
 
   const setViewOrganizationCodeSafe = useCallback((code: string) => {
-    if (!canSwitchOrganization) return;
+    if (!SHOW_ORGANIZATION_VIEW_SWITCHER || !canSwitchOrganization) return;
     const trimmed = (code ?? "").trim();
     if (SWITCHABLE_ORG_CODES.includes(trimmed as (typeof SWITCHABLE_ORG_CODES)[number])) {
       setState((prev) => ({ ...prev, viewOrganizationCode: trimmed }));

@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { SHOW_ORGANIZATION_VIEW_SWITCHER } from "@/lib/featureFlags";
 
 const HARANG_PEOPLE_ICON_SRC = "/harang/people-icon.png";
 const ARMORED_LOGO_SRC = "/brand/helmet-furnace-mark.png";
@@ -300,7 +301,7 @@ export default function Header() {
       </nav>
 
       <div className="flex items-center gap-2 shrink-0">
-        {canSwitchOrganization && (
+        {canSwitchOrganization && SHOW_ORGANIZATION_VIEW_SWITCHER && (
           <div className="flex items-center gap-1" role="group" aria-label="조직 보기 전환">
             <button
               type="button"
