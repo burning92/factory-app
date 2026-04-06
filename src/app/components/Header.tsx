@@ -79,6 +79,8 @@ export default function Header() {
   const effectiveLogoUrl = viewIsHarang ? HARANG_PEOPLE_ICON_SRC : ARMORED_LOGO_SRC;
   const primaryColor = uiSettings?.primary_color?.trim() || "#06b6d4";
   const isAdmin = profile?.role === "admin";
+  const isManager = profile?.role === "manager";
+  const showExecutiveLink = (isAdmin || isManager) && !viewIsHarang;
 
 
   /** 데스크탑 상단 카테고리: 100 = 생산/원부자재/데일리/계정, 200 = 홈/계정만 */
@@ -102,14 +104,14 @@ export default function Header() {
   const showDesktopCategoryMenu = viewIsHarang
     ? pathname === "/" || pathname.startsWith("/account")
     : pathname === "/" ||
-      ["/production", "/materials", "/daily", "/account", "/inventory", "/manage"].some(
+      ["/production", "/materials", "/daily", "/account", "/inventory", "/manage", "/executive"].some(
         (prefix) => pathname === prefix || pathname.startsWith(prefix + "/")
       );
 
   const headerClassName =
     viewIsHarang
-      ? "sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-700/60 bg-space-900/95 backdrop-blur px-4 sm:px-6 print:hidden"
-      : "sticky top-0 z-40 flex h-14 items-center justify-between border-b border-white/10 bg-black/30 backdrop-blur-md px-4 sm:px-6 print:hidden";
+      ? "sticky top-0 z-50 flex h-14 items-center justify-between border-b border-slate-700/60 bg-space-900/95 backdrop-blur px-4 sm:px-6 print:hidden"
+      : "sticky top-0 z-50 flex h-14 items-center justify-between border-b border-white/10 bg-black/30 backdrop-blur-md px-4 sm:px-6 print:hidden";
 
   const cancelDesktopDropdownClose = () => {
     if (desktopDropdownCloseTimeoutRef.current != null) {
@@ -224,10 +226,10 @@ export default function Header() {
                   </button>
                   {isOpen && (
                     <div
-                      className="absolute left-1/2 -translate-x-1/2 top-full mt-0 pt-1 min-w-[200px] z-50"
+                      className="absolute left-1/2 top-full z-[200] mt-0 min-w-[200px] -translate-x-1/2 pt-1"
                       role="menu"
                     >
-                      <div className="rounded-lg border border-slate-600 bg-slate-800/95 shadow-xl py-2">
+                      <div className="rounded-lg border border-slate-600 bg-slate-900 py-2 shadow-2xl shadow-black/50 ring-1 ring-slate-700/80">
                       {key === "daily"
                         ? DESKTOP_DROPDOWN_DAILY_BLOCKS.map((block, bi) => (
                             <div key={block.section}>
@@ -286,6 +288,18 @@ export default function Header() {
                 </div>
               );
             })}
+            {showExecutiveLink && (
+              <Link
+                href="/executive"
+                className={`text-sm font-medium whitespace-nowrap transition-colors ${
+                  pathname === "/executive" || pathname.startsWith("/executive/")
+                    ? "text-cyan-300"
+                    : "text-slate-400 hover:text-slate-100"
+                }`}
+              >
+                대시보드
+              </Link>
+            )}
             <Link
               href="/account"
               className={`text-sm font-medium whitespace-nowrap transition-colors ${

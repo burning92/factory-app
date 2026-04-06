@@ -1,0 +1,1005 @@
+오케이 일단 그대로 두고. 
+2025년도 자료도 아까처럼 넘겨줄게.
+*생산
+{"kind":"production","date":"2025-12-31","item":"우주인 화덕파베이크- 베샤멜","qty":754}
+{"kind":"production","date":"2025-12-31","item":"허니고르곤졸라","qty":2401}
+{"kind":"production","date":"2025-12-30","item":"우주인 화덕파베이크 도우-토마토","qty":413}
+{"kind":"production","date":"2025-12-30","item":"마르게리따-2","qty":3006}
+{"kind":"production","date":"2025-12-29","item":"우주인 화덕파베이크- 베샤멜","qty":1463}
+{"kind":"production","date":"2025-12-29","item":"우주인피자 통통 옥수수","qty":1745}
+{"kind":"production","date":"2025-12-26","item":"우주인 화덕파베이크 도우-토마토","qty":1381}
+{"kind":"production","date":"2025-12-26","item":"허니갈릭페퍼로니","qty":1905}
+{"kind":"production","date":"2025-12-24","item":"우주인 화덕파베이크 도우-토마토","qty":577}
+{"kind":"production","date":"2025-12-24","item":"마르게리따-2","qty":2806}
+{"kind":"production","date":"2025-12-23","item":"허니갈릭페퍼로니","qty":482}
+{"kind":"production","date":"2025-12-23","item":"포노부오노 시그니처 화덕브레드","qty":4186}
+{"kind":"production","date":"2025-12-22","item":"우주인 화덕파베이크- 베샤멜","qty":472}
+{"kind":"production","date":"2025-12-22","item":"허니고르곤졸라","qty":3003}
+{"kind":"production","date":"2025-12-20","item":"포노부오노 시그니처 화덕브레드","qty":3061}
+{"kind":"production","date":"2025-12-19","item":"우주인 화덕파베이크 도우-토마토","qty":796}
+{"kind":"production","date":"2025-12-19","item":"마르게리따-2","qty":1969}
+{"kind":"production","date":"2025-12-19","item":"미니피자 마르게리따","qty":526}
+{"kind":"production","date":"2025-12-18","item":"마르게리따-2","qty":2842}
+{"kind":"production","date":"2025-12-17","item":"우주인 화덕파베이크 도우-토마토","qty":1080}
+{"kind":"production","date":"2025-12-17","item":"미니피자 페퍼로니","qty":508}
+{"kind":"production","date":"2025-12-17","item":"허니갈릭페퍼로니","qty":1433}
+{"kind":"production","date":"2025-12-16","item":"우주인 화덕파베이크- 베샤멜","qty":40}
+{"kind":"production","date":"2025-12-16","item":"미니피자 허니고르곤졸라","qty":513}
+{"kind":"production","date":"2025-12-16","item":"허니고르곤졸라","qty":2607}
+{"kind":"production","date":"2025-12-15","item":"우주인 화덕파베이크- 베샤멜","qty":389}
+{"kind":"production","date":"2025-12-15","item":"허니고르곤졸라","qty":3006}
+{"kind":"production","date":"2025-12-13","item":"포노부오노 시그니처 화덕브레드","qty":3408}
+{"kind":"production","date":"2025-12-12","item":"포노부오노 시그니처 화덕브레드","qty":4081}
+{"kind":"production","date":"2025-12-11","item":"우주인 화덕파베이크 도우-토마토","qty":356}
+{"kind":"production","date":"2025-12-11","item":"마르게리따-2","qty":3002}
+{"kind":"production","date":"2025-12-10","item":"선인 토마토 파베이크 도우","qty":1000}
+{"kind":"production","date":"2025-12-10","item":"허니갈릭페퍼로니","qty":741}
+{"kind":"production","date":"2025-12-10","item":"마르게리따-2","qty":1802}
+{"kind":"production","date":"2025-12-09","item":"포노부오노 시그니처 화덕브레드-2","qty":4138}
+{"kind":"production","date":"2025-12-09","item":"허니갈릭페퍼로니","qty":723}
+{"kind":"production","date":"2025-12-08","item":"허니갈릭페퍼로니","qty":602}
+{"kind":"production","date":"2025-12-08","item":"포노부오노 시그니처 화덕브레드-2","qty":4201}
+{"kind":"production","date":"2025-12-06","item":"마르게리따-2","qty":2002}
+{"kind":"production","date":"2025-12-05","item":"우주인 화덕파베이크- 베샤멜","qty":467}
+{"kind":"production","date":"2025-12-05","item":"우주인 화덕파베이크 도우-토마토","qty":1096}
+{"kind":"production","date":"2025-12-05","item":"발리브루 골든시그니처블렌드","qty":50}
+{"kind":"production","date":"2025-12-05","item":"우주인피자 통통 옥수수","qty":1704}
+{"kind":"production","date":"2025-12-04","item":"우주인 화덕파베이크 도우-토마토","qty":416}
+{"kind":"production","date":"2025-12-04","item":"선인 토마토 파베이크 도우","qty":1000}
+{"kind":"production","date":"2025-12-04","item":"허니갈릭페퍼로니","qty":1902}
+{"kind":"production","date":"2025-12-03","item":"우주인 화덕파베이크 도우-토마토","qty":1129}
+{"kind":"production","date":"2025-12-03","item":"머쉬룸 고트피자","qty":2009}
+{"kind":"production","date":"2025-12-02","item":"포노부오노 시그니처 화덕브레드","qty":3837}
+{"kind":"production","date":"2025-12-01","item":"포노부오노 시그니처 화덕브레드","qty":3942}
+{"kind":"production","date":"2025-11-29","item":"허니고르곤졸라","qty":2402}
+{"kind":"production","date":"2025-11-28","item":"파이브치즈","qty":1644}
+{"kind":"production","date":"2025-11-28","item":"우주인 화덕파베이크 도우-토마토","qty":633}
+{"kind":"production","date":"2025-11-28","item":"선인 토마토 파베이크 도우","qty":1000}
+{"kind":"production","date":"2025-11-27","item":"우주인 화덕파베이크 도우-토마토","qty":283}
+{"kind":"production","date":"2025-11-27","item":"미니피자 마르게리따","qty":530}
+{"kind":"production","date":"2025-11-27","item":"마르게리따-2","qty":2602}
+{"kind":"production","date":"2025-11-26","item":"허니고르곤졸라","qty":2604}
+{"kind":"production","date":"2025-11-26","item":"우주인 화덕파베이크- 베샤멜","qty":51}
+{"kind":"production","date":"2025-11-26","item":"미니피자 허니고르곤졸라","qty":543}
+{"kind":"production","date":"2025-11-25","item":"우주인 화덕파베이크 도우-토마토","qty":580}
+{"kind":"production","date":"2025-11-25","item":"미니피자 페퍼로니","qty":541}
+{"kind":"production","date":"2025-11-25","item":"선인 토마토 파베이크 도우","qty":500}
+{"kind":"production","date":"2025-11-25","item":"허니갈릭페퍼로니","qty":1603}
+{"kind":"production","date":"2025-11-24","item":"포노부오노 시그니처 화덕브레드","qty":4090}
+{"kind":"production","date":"2025-11-22","item":"포노부오노 시그니처 화덕브레드","qty":3281}
+{"kind":"production","date":"2025-11-21","item":"포노부오노 시그니처 화덕브레드","qty":4284}
+{"kind":"production","date":"2025-11-20","item":"발리브루 골든시그니처블렌드","qty":90}
+{"kind":"production","date":"2025-11-20","item":"우주인 화덕파베이크- 베샤멜","qty":396}
+{"kind":"production","date":"2025-11-20","item":"허니고르곤졸라","qty":3043}
+{"kind":"production","date":"2025-11-19","item":"우주인 화덕파베이크- 베샤멜","qty":388}
+{"kind":"production","date":"2025-11-19","item":"허니고르곤졸라","qty":3005}
+{"kind":"production","date":"2025-11-18","item":"발리브루 골든시그니처블렌드","qty":114}
+{"kind":"production","date":"2025-11-18","item":"포노부오노 시그니처 화덕브레드","qty":4141}
+{"kind":"production","date":"2025-11-17","item":"우주인 화덕파베이크 도우-토마토","qty":114}
+{"kind":"production","date":"2025-11-17","item":"선인 토마토 파베이크 도우","qty":1500}
+{"kind":"production","date":"2025-11-17","item":"시금치 베이컨 리코타","qty":1636}
+{"kind":"production","date":"2025-11-15","item":"포노부오노 시그니처 화덕브레드","qty":3211}
+{"kind":"production","date":"2025-11-14","item":"포노부오노 시그니처 화덕브레드","qty":4143}
+{"kind":"production","date":"2025-11-13","item":"발리브루 골든시그니처블렌드","qty":105}
+{"kind":"production","date":"2025-11-13","item":"우주인 화덕파베이크 도우-토마토","qty":913}
+{"kind":"production","date":"2025-11-13","item":"허니갈릭페퍼로니","qty":1902}
+{"kind":"production","date":"2025-11-12","item":"우주인 화덕파베이크 도우-토마토","qty":319}
+{"kind":"production","date":"2025-11-12","item":"마르게리따-2","qty":3102}
+{"kind":"production","date":"2025-11-11","item":"우주인 화덕파베이크- 베샤멜","qty":173}
+{"kind":"production","date":"2025-11-11","item":"허니고르곤졸라","qty":2203}
+{"kind":"production","date":"2025-11-11","item":"멜팅치즈피자","qty":1042}
+{"kind":"production","date":"2025-11-10","item":"발리브루 골든시그니처블렌드","qty":106}
+{"kind":"production","date":"2025-11-10","item":"포노부오노 시그니처 화덕브레드","qty":4023}
+{"kind":"production","date":"2025-11-07","item":"발리브루 골든시그니처블렌드","qty":107}
+{"kind":"production","date":"2025-11-07","item":"우주인 화덕파베이크- 베샤멜","qty":1121}
+{"kind":"production","date":"2025-11-07","item":"우주인피자 통통 옥수수","qty":2123}
+{"kind":"production","date":"2025-11-06","item":"우주인 화덕파베이크 도우-토마토","qty":109}
+{"kind":"production","date":"2025-11-06","item":"미니피자 마르게리따","qty":501}
+{"kind":"production","date":"2025-11-06","item":"마르게리따-2","qty":2805}
+{"kind":"production","date":"2025-11-05","item":"우주인 화덕파베이크- 베샤멜","qty":197}
+{"kind":"production","date":"2025-11-05","item":"미니피자 허니고르곤졸라","qty":502}
+{"kind":"production","date":"2025-11-05","item":"허니고르곤졸라","qty":2724}
+{"kind":"production","date":"2025-11-04","item":"미니피자 페퍼로니","qty":522}
+{"kind":"production","date":"2025-11-04","item":"우주인 화덕파베이크 도우-토마토","qty":1026}
+{"kind":"production","date":"2025-11-04","item":"허니갈릭페퍼로니","qty":321}
+{"kind":"production","date":"2025-11-04","item":"파이브치즈","qty":1002}
+{"kind":"production","date":"2025-11-03","item":"우주인 화덕파베이크 도우-토마토","qty":249}
+{"kind":"production","date":"2025-11-03","item":"선인 토마토 파베이크 도우","qty":1000}
+{"kind":"production","date":"2025-11-03","item":"허니갈릭페퍼로니","qty":1702}
+{"kind":"production","date":"2025-11-01","item":"포노부오노 시그니처 화덕브레드","qty":3201}
+{"kind":"production","date":"2025-10-31","item":"우주인 화덕파베이크 도우-토마토","qty":213}
+{"kind":"production","date":"2025-10-31","item":"선인 토마토 파베이크 도우","qty":1000}
+{"kind":"production","date":"2025-10-31","item":"허니갈릭페퍼로니","qty":1704}
+{"kind":"production","date":"2025-10-30","item":"우주인 화덕파베이크- 베샤멜","qty":269}
+{"kind":"production","date":"2025-10-30","item":"허니고르곤졸라","qty":3003}
+{"kind":"production","date":"2025-10-29","item":"우주인 화덕파베이크- 베샤멜","qty":209}
+{"kind":"production","date":"2025-10-29","item":"허니고르곤졸라","qty":2008}
+{"kind":"production","date":"2025-10-29","item":"조선호텔 고르곤졸라 피자","qty":1021}
+{"kind":"production","date":"2025-10-28","item":"포노부오노 시그니처 화덕브레드","qty":3683}
+{"kind":"production","date":"2025-10-27","item":"포노부오노 시그니처 화덕브레드","qty":3687}
+{"kind":"production","date":"2025-10-25","item":"포노부오노 시그니처 화덕브레드","qty":3266}
+{"kind":"production","date":"2025-10-24","item":"허니갈릭페퍼로니","qty":1725}
+{"kind":"production","date":"2025-10-24","item":"우주인 화덕파베이크 도우-토마토","qty":160}
+{"kind":"production","date":"2025-10-24","item":"선인 토마토 파베이크 도우","qty":1000}
+{"kind":"production","date":"2025-10-23","item":"우주인 화덕파베이크 도우-토마토","qty":385}
+{"kind":"production","date":"2025-10-23","item":"마르게리따-2","qty":3007}
+{"kind":"production","date":"2025-10-22","item":"우주인 화덕파베이크- 베샤멜","qty":457}
+{"kind":"production","date":"2025-10-22","item":"허니고르곤졸라","qty":3004}
+{"kind":"production","date":"2025-10-21","item":"우주인 화덕파베이크- 베샤멜","qty":333}
+{"kind":"production","date":"2025-10-21","item":"허니고르곤졸라","qty":1201}
+{"kind":"production","date":"2025-10-21","item":"바질페스토 마스카포네","qty":1019}
+{"kind":"production","date":"2025-10-20","item":"우주인 화덕파베이크 도우-토마토","qty":284}
+{"kind":"production","date":"2025-10-20","item":"선인 토마토 파베이크 도우","qty":1000}
+{"kind":"production","date":"2025-10-20","item":"시금치 베이컨 리코타","qty":1572}
+{"kind":"production","date":"2025-10-18","item":"마르게리따-2","qty":2244}
+{"kind":"production","date":"2025-10-17","item":"포노부오노 시그니처 화덕브레드","qty":3697}
+{"kind":"production","date":"2025-10-16","item":"포노부오노 시그니처 화덕브레드","qty":3664}
+{"kind":"production","date":"2025-10-16","item":"발리브루 골든시그니처블렌드","qty":50}
+{"kind":"production","date":"2025-10-15","item":"우주인 화덕파베이크- 베샤멜","qty":995}
+{"kind":"production","date":"2025-10-15","item":"우주인피자 통통 옥수수","qty":1082}
+{"kind":"production","date":"2025-10-15","item":"멜팅치즈피자","qty":802}
+{"kind":"production","date":"2025-10-14","item":"우주인 화덕파베이크- 베샤멜","qty":148}
+{"kind":"production","date":"2025-10-14","item":"허니고르곤졸라","qty":3003}
+{"kind":"production","date":"2025-10-13","item":"우주인 화덕파베이크 도우-토마토","qty":220}
+{"kind":"production","date":"2025-10-13","item":"선인 토마토 파베이크 도우","qty":1000}
+{"kind":"production","date":"2025-10-13","item":"핫 페퍼로니피자","qty":1201}
+{"kind":"production","date":"2025-10-13","item":"허니갈릭페퍼로니","qty":521}
+{"kind":"production","date":"2025-10-03","item":"우주인 화덕파베이크 도우-토마토","qty":624}
+{"kind":"production","date":"2025-10-03","item":"마르게리따-2","qty":2401}
+{"kind":"production","date":"2025-10-02","item":"마르게리따-2","qty":3002}
+{"kind":"production","date":"2025-10-02","item":"우주인 화덕파베이크 도우-토마토","qty":247}
+{"kind":"production","date":"2025-10-01","item":"우주인 화덕파베이크- 베샤멜","qty":143}
+{"kind":"production","date":"2025-10-01","item":"허니고르곤졸라","qty":3103}
+{"kind":"production","date":"2025-09-30","item":"우주인 화덕파베이크 도우-토마토","qty":282}
+{"kind":"production","date":"2025-09-30","item":"마르게리따-2","qty":2522}
+{"kind":"production","date":"2025-09-27","item":"마르게리따-2","qty":2003}
+{"kind":"production","date":"2025-09-26","item":"우주인 화덕파베이크 도우-토마토","qty":784}
+{"kind":"production","date":"2025-09-26","item":"허니갈릭페퍼로니","qty":1903}
+{"kind":"production","date":"2025-09-25","item":"우주인 화덕파베이크 도우-토마토","qty":995}
+{"kind":"production","date":"2025-09-25","item":"파이브치즈","qty":1662}
+{"kind":"production","date":"2025-09-24","item":"우주인 화덕파베이크- 베샤멜","qty":129}
+{"kind":"production","date":"2025-09-24","item":"허니고르곤졸라","qty":2402}
+{"kind":"production","date":"2025-09-23","item":"우주인 화덕파베이크- 베샤멜","qty":229}
+{"kind":"production","date":"2025-09-23","item":"허니고르곤졸라","qty":2401}
+{"kind":"production","date":"2025-09-22","item":"우주인 화덕파베이크- 베샤멜","qty":20}
+{"kind":"production","date":"2025-09-22","item":"미니피자 허니고르곤졸라","qty":50}
+{"kind":"production","date":"2025-09-22","item":"허니고르곤졸라","qty":2401}
+{"kind":"production","date":"2025-09-22","item":"선인 베샤멜 파베이크 도우","qty":400}
+{"kind":"production","date":"2025-09-20","item":"포노부오노 시그니처 화덕브레드","qty":3231}
+{"kind":"production","date":"2025-09-19","item":"우주인 화덕파베이크 도우-토마토","qty":385}
+{"kind":"production","date":"2025-09-19","item":"마르게리따-2","qty":2402}
+{"kind":"production","date":"2025-09-18","item":"미니피자 마르게리따","qty":50}
+{"kind":"production","date":"2025-09-18","item":"우주인 화덕파베이크 도우-토마토","qty":290}
+{"kind":"production","date":"2025-09-18","item":"마르게리따-2","qty":2552}
+{"kind":"production","date":"2025-09-17","item":"미니피자 페퍼로니","qty":50}
+{"kind":"production","date":"2025-09-17","item":"우주인 화덕파베이크 도우-토마토","qty":1085}
+{"kind":"production","date":"2025-09-17","item":"허니갈릭페퍼로니","qty":1603}
+{"kind":"production","date":"2025-09-16","item":"우주인 화덕파베이크 도우-토마토","qty":1013}
+{"kind":"production","date":"2025-09-16","item":"청양페퍼로니","qty":1704}
+{"kind":"production","date":"2025-09-15","item":"발리브루 골든시그니처블렌드","qty":100}
+{"kind":"production","date":"2025-09-15","item":"우주인 화덕파베이크- 베샤멜","qty":360}
+{"kind":"production","date":"2025-09-15","item":"허니고르곤졸라","qty":2403}
+{"kind":"production","date":"2025-09-13","item":"마르게리따-2","qty":2003}
+{"kind":"production","date":"2025-09-12","item":"우주인 화덕파베이크 도우-토마토","qty":333}
+{"kind":"production","date":"2025-09-12","item":"마르게리따-2","qty":2401}
+{"kind":"production","date":"2025-09-11","item":"우주인 화덕파베이크 도우-토마토","qty":456}
+{"kind":"production","date":"2025-09-11","item":"마르게리따-2","qty":1602}
+{"kind":"production","date":"2025-09-11","item":"파이브치즈","qty":632}
+{"kind":"production","date":"2025-09-10","item":"우주인 화덕파베이크- 베샤멜","qty":260}
+{"kind":"production","date":"2025-09-10","item":"선인 베샤멜 파베이크 도우","qty":500}
+{"kind":"production","date":"2025-09-10","item":"멜팅치즈피자","qty":2004}
+{"kind":"production","date":"2025-09-09","item":"우주인 화덕파베이크- 베샤멜","qty":112}
+{"kind":"production","date":"2025-09-09","item":"선인 베샤멜 파베이크 도우","qty":300}
+{"kind":"production","date":"2025-09-09","item":"허니고르곤졸라","qty":2407}
+{"kind":"production","date":"2025-09-08","item":"우주인 화덕파베이크- 베샤멜","qty":138}
+{"kind":"production","date":"2025-09-08","item":"선인 베샤멜 파베이크 도우","qty":800}
+{"kind":"production","date":"2025-09-08","item":"우주인피자 통통 옥수수","qty":1723}
+{"kind":"production","date":"2025-09-06","item":"허니고르곤졸라","qty":2002}
+{"kind":"production","date":"2025-09-05","item":"우주인 화덕파베이크 도우-토마토","qty":549}
+{"kind":"production","date":"2025-09-05","item":"시금치 베이컨 리코타","qty":803}
+{"kind":"production","date":"2025-09-05","item":"마르게리따-2","qty":1403}
+{"kind":"production","date":"2025-09-04","item":"우주인 화덕파베이크- 베샤멜","qty":757}
+{"kind":"production","date":"2025-09-04","item":"허니고르곤졸라","qty":2203}
+{"kind":"production","date":"2025-09-03","item":"우주인 화덕파베이크 도우-토마토","qty":1009}
+{"kind":"production","date":"2025-09-03","item":"허니갈릭페퍼로니","qty":1702}
+{"kind":"production","date":"2025-09-02","item":"우주인 화덕파베이크 도우-토마토","qty":861}
+{"kind":"production","date":"2025-09-02","item":"허니갈릭페퍼로니","qty":802}
+{"kind":"production","date":"2025-09-02","item":"파이브치즈","qty":841}
+{"kind":"production","date":"2025-09-01","item":"우주인 화덕파베이크- 베샤멜","qty":754}
+{"kind":"production","date":"2025-09-01","item":"우주인피자 통통 옥수수","qty":1704}
+{"kind":"production","date":"2025-08-30","item":"포노부오노 시그니처 화덕브레드","qty":3049}
+{"kind":"production","date":"2025-08-29","item":"우주인 화덕파베이크 도우-토마토","qty":374}
+{"kind":"production","date":"2025-08-29","item":"마르게리따-2","qty":2406}
+{"kind":"production","date":"2025-08-28","item":"우주인 화덕파베이크 도우-토마토","qty":346}
+{"kind":"production","date":"2025-08-28","item":"마르게리따-2","qty":2403}
+{"kind":"production","date":"2025-08-27","item":"우주인 화덕파베이크- 베샤멜","qty":670}
+{"kind":"production","date":"2025-08-27","item":"우주인 화덕파베이크도우-바질페스토","qty":206}
+{"kind":"production","date":"2025-08-27","item":"허니고르곤졸라","qty":2002}
+{"kind":"production","date":"2025-08-26","item":"발리브루 골든시그니처블렌드","qty":180}
+{"kind":"production","date":"2025-08-26","item":"우주인 화덕파베이크- 베샤멜","qty":417}
+{"kind":"production","date":"2025-08-26","item":"허니고르곤졸라","qty":2403}
+{"kind":"production","date":"2025-08-25","item":"발리브루 골든시그니처블렌드","qty":50}
+{"kind":"production","date":"2025-08-25","item":"우주인 화덕파베이크- 베샤멜","qty":825}
+{"kind":"production","date":"2025-08-25","item":"멜팅치즈피자","qty":1923}
+{"kind":"production","date":"2025-08-23","item":"포노부오노 시그니처 화덕브레드","qty":3069}
+{"kind":"production","date":"2025-08-22","item":"포노부오노 시그니처 화덕브레드","qty":3550}
+{"kind":"production","date":"2025-08-21","item":"선인 토마토 파베이크 도우","qty":900}
+{"kind":"production","date":"2025-08-21","item":"우주인 화덕파베이크 도우-토마토","qty":280}
+{"kind":"production","date":"2025-08-21","item":"시금치 베이컨 리코타","qty":1504}
+{"kind":"production","date":"2025-08-20","item":"포노부오노 시그니처 화덕브레드","qty":3569}
+{"kind":"production","date":"2025-08-19","item":"우주인 화덕파베이크 도우-토마토","qty":246}
+{"kind":"production","date":"2025-08-19","item":"선인 토마토 파베이크 도우","qty":800}
+{"kind":"production","date":"2025-08-19","item":"허니갈릭페퍼로니","qty":1601}
+{"kind":"production","date":"2025-08-18","item":"포노부오노 시그니처 화덕브레드","qty":3516}
+{"kind":"production","date":"2025-08-14","item":"우주인 화덕파베이크- 베샤멜","qty":218}
+{"kind":"production","date":"2025-08-14","item":"선인 베샤멜 파베이크 도우","qty":500}
+{"kind":"production","date":"2025-08-14","item":"허니고르곤졸라","qty":2061}
+{"kind":"production","date":"2025-08-13","item":"우주인 화덕파베이크 도우-토마토","qty":441}
+{"kind":"production","date":"2025-08-13","item":"선인 토마토 파베이크 도우","qty":500}
+{"kind":"production","date":"2025-08-13","item":"청양페퍼로니","qty":1604}
+{"kind":"production","date":"2025-08-12","item":"우주인 화덕파베이크- 베샤멜","qty":409}
+{"kind":"production","date":"2025-08-12","item":"허니고르곤졸라","qty":2402}
+{"kind":"production","date":"2025-08-11","item":"우주인 화덕파베이크- 베샤멜","qty":313}
+{"kind":"production","date":"2025-08-11","item":"선인 베샤멜 파베이크 도우","qty":500}
+{"kind":"production","date":"2025-08-11","item":"허니고르곤졸라","qty":722}
+{"kind":"production","date":"2025-08-11","item":"머쉬룸 베이컨피자","qty":1156}
+{"kind":"production","date":"2025-08-09","item":"마르게리따-2","qty":2001}
+{"kind":"production","date":"2025-08-08","item":"발리브루 골든시그니처블렌드","qty":105}
+{"kind":"production","date":"2025-08-08","item":"포노부오노 시그니처 화덕브레드","qty":3492}
+{"kind":"production","date":"2025-08-07","item":"우주인 화덕파베이크- 베샤멜","qty":374}
+{"kind":"production","date":"2025-08-07","item":"허니고르곤졸라","qty":2402}
+{"kind":"production","date":"2025-08-06","item":"우주인 화덕파베이크 도우-토마토","qty":602}
+{"kind":"production","date":"2025-08-06","item":"선인 토마토 파베이크 도우","qty":500}
+{"kind":"production","date":"2025-08-06","item":"파이브치즈","qty":1442}
+{"kind":"production","date":"2025-08-05","item":"우주인 화덕파베이크 도우-토마토","qty":273}
+{"kind":"production","date":"2025-08-05","item":"선인 토마토 파베이크 도우","qty":800}
+{"kind":"production","date":"2025-08-05","item":"허니갈릭페퍼로니","qty":1506}
+{"kind":"production","date":"2025-08-04","item":"우주인 화덕파베이크- 베샤멜","qty":297}
+{"kind":"production","date":"2025-08-04","item":"선인 베샤멜 파베이크 도우","qty":500}
+{"kind":"production","date":"2025-08-04","item":"허니고르곤졸라","qty":808}
+{"kind":"production","date":"2025-08-04","item":"우주인피자 통통 옥수수","qty":902}
+{"kind":"production","date":"2025-08-01","item":"마르게리따-2","qty":2403}
+{"kind":"production","date":"2025-08-01","item":"우주인 화덕파베이크 도우-토마토","qty":373}
+{"kind":"production","date":"2025-07-31","item":"우주인 화덕파베이크 도우-토마토","qty":354}
+{"kind":"production","date":"2025-07-31","item":"마르게리따-2","qty":2402}
+{"kind":"production","date":"2025-07-30","item":"우주인 화덕파베이크 도우-토마토","qty":370}
+{"kind":"production","date":"2025-07-30","item":"마르게리따-2","qty":2402}
+{"kind":"production","date":"2025-07-29","item":"우주인 화덕파베이크- 베샤멜","qty":100}
+{"kind":"production","date":"2025-07-29","item":"선인 베샤멜 파베이크 도우","qty":500}
+{"kind":"production","date":"2025-07-29","item":"허니고르곤졸라","qty":2116}
+{"kind":"production","date":"2025-07-28","item":"허니고르곤졸라","qty":1002}
+{"kind":"production","date":"2025-07-28","item":"우주인 화덕파베이크- 베샤멜","qty":138}
+{"kind":"production","date":"2025-07-28","item":"우주인 화덕파베이크도우-바질페스토","qty":107}
+{"kind":"production","date":"2025-07-28","item":"조선호텔 고르곤졸라 피자","qty":1015}
+{"kind":"production","date":"2025-07-25","item":"허니고르곤졸라","qty":302}
+{"kind":"production","date":"2025-07-24","item":"우주인 화덕파베이크- 베샤멜","qty":310}
+{"kind":"production","date":"2025-07-24","item":"허니고르곤졸라","qty":2410}
+{"kind":"production","date":"2025-07-23","item":"선인 토마토 파베이크 도우","qty":500}
+{"kind":"production","date":"2025-07-23","item":"우주인 화덕파베이크 도우-토마토","qty":638}
+{"kind":"production","date":"2025-07-23","item":"허니갈릭페퍼로니","qty":1504}
+{"kind":"production","date":"2025-07-18","item":"우주인 화덕파베이크 도우-토마토","qty":360}
+{"kind":"production","date":"2025-07-18","item":"선인 토마토 파베이크 도우","qty":500}
+{"kind":"production","date":"2025-07-18","item":"마르게리따-2","qty":2002}
+{"kind":"production","date":"2025-07-17","item":"우주인 화덕파베이크 도우-토마토","qty":394}
+{"kind":"production","date":"2025-07-17","item":"선인 토마토 파베이크 도우","qty":500}
+{"kind":"production","date":"2025-07-17","item":"마르게리따-2","qty":2004}
+{"kind":"production","date":"2025-07-16","item":"우주인 화덕파베이크- 베샤멜","qty":207}
+{"kind":"production","date":"2025-07-16","item":"선인 베샤멜 파베이크 도우","qty":500}
+{"kind":"production","date":"2025-07-16","item":"허니고르곤졸라","qty":2005}
+{"kind":"production","date":"2025-07-15","item":"크림떡_초코체리","qty":112}
+{"kind":"production","date":"2025-07-15","item":"우주인 화덕파베이크 도우-토마토","qty":361}
+{"kind":"production","date":"2025-07-15","item":"선인 토마토 파베이크 도우","qty":500}
+{"kind":"production","date":"2025-07-15","item":"발리브루 골든시그니처블렌드","qty":23}
+{"kind":"production","date":"2025-07-15","item":"로제쉬림프","qty":1609}
+{"kind":"production","date":"2025-07-14","item":"포노부오노 시그니처 화덕브레드","qty":3284}
+{"kind":"production","date":"2025-07-11","item":"포노부오노 시그니처 화덕브레드","qty":3305}
+{"kind":"production","date":"2025-07-10","item":"포노부오노 시그니처 화덕브레드","qty":3080}
+{"kind":"production","date":"2025-07-08","item":"우주인 화덕파베이크 도우-토마토","qty":180}
+{"kind":"production","date":"2025-07-08","item":"선인 토마토 파베이크 도우","qty":1000}
+{"kind":"production","date":"2025-07-08","item":"허니갈릭페퍼로니","qty":1503}
+{"kind":"production","date":"2025-07-07","item":"우주인 화덕파베이크- 베샤멜","qty":161}
+{"kind":"production","date":"2025-07-07","item":"우주인 화덕파베이크 도우-토마토","qty":384}
+{"kind":"production","date":"2025-07-07","item":"선인 베샤멜 파베이크 도우","qty":500}
+{"kind":"production","date":"2025-07-07","item":"우주인피자 통통 옥수수","qty":1503}
+{"kind":"production","date":"2025-07-04","item":"우주인 화덕파베이크- 베샤멜","qty":138}
+{"kind":"production","date":"2025-07-04","item":"허니고르곤졸라","qty":2444}
+{"kind":"production","date":"2025-07-03","item":"우주인 화덕파베이크 도우-토마토","qty":78}
+{"kind":"production","date":"2025-07-03","item":"마르게리따-2","qty":2402}
+{"kind":"production","date":"2025-07-02","item":"우주인 화덕파베이크- 베샤멜","qty":70}
+{"kind":"production","date":"2025-07-02","item":"선인 베샤멜 파베이크 도우","qty":500}
+{"kind":"production","date":"2025-07-02","item":"허니고르곤졸라","qty":1968}
+{"kind":"production","date":"2025-07-01","item":"마르게리따-2","qty":2366}
+{"kind":"production","date":"2025-06-30","item":"허니고르곤졸라","qty":2412}
+{"kind":"production","date":"2025-06-27","item":"마르게리따-2","qty":2604}
+{"kind":"production","date":"2025-06-26","item":"우주인 화덕파베이크 도우-토마토","qty":54}
+{"kind":"production","date":"2025-06-26","item":"마르게리따-2","qty":2602}
+{"kind":"production","date":"2025-06-25","item":"크림떡-바닐라크림치즈","qty":377}
+{"kind":"production","date":"2025-06-25","item":"포노부오노 시그니처 화덕브레드","qty":973}
+{"kind":"production","date":"2025-06-24","item":"포노부오노 시그니처 화덕브레드","qty":3381}
+{"kind":"production","date":"2025-06-23","item":"우주인 화덕파베이크- 베샤멜","qty":338}
+{"kind":"production","date":"2025-06-23","item":"허니고르곤졸라","qty":2065}
+{"kind":"production","date":"2025-06-20","item":"우주인 화덕파베이크 도우-토마토","qty":17}
+{"kind":"production","date":"2025-06-20","item":"선인 토마토 파베이크 도우","qty":1100}
+{"kind":"production","date":"2025-06-20","item":"허니갈릭페퍼로니","qty":1502}
+{"kind":"production","date":"2025-06-19","item":"우주인 화덕파베이크- 베샤멜","qty":40}
+{"kind":"production","date":"2025-06-19","item":"허니고르곤졸라","qty":2403}
+{"kind":"production","date":"2025-06-18","item":"포노부오노 시그니처 화덕브레드","qty":3372}
+{"kind":"production","date":"2025-06-17","item":"포노부오노 시그니처 화덕브레드","qty":3353}
+{"kind":"production","date":"2025-06-16","item":"포노부오노 시그니처 화덕브레드","qty":3413}
+{"kind":"production","date":"2025-06-13","item":"선인 베샤멜 파베이크 도우","qty":500}
+{"kind":"production","date":"2025-06-13","item":"우주인 화덕파베이크- 베샤멜","qty":74}
+{"kind":"production","date":"2025-06-13","item":"허니고르곤졸라","qty":802}
+{"kind":"production","date":"2025-06-13","item":"머쉬룸 베이컨피자","qty":1040}
+{"kind":"production","date":"2025-06-12","item":"크림떡_까페모카","qty":449}
+{"kind":"production","date":"2025-06-12","item":"크림떡_메론소다","qty":429}
+{"kind":"production","date":"2025-06-11","item":"우주인 화덕파베이크- 베샤멜","qty":168}
+{"kind":"production","date":"2025-06-11","item":"선인 베샤멜 파베이크 도우","qty":500}
+{"kind":"production","date":"2025-06-11","item":"멜팅치즈피자","qty":341}
+{"kind":"production","date":"2025-06-11","item":"우주인피자 통통 옥수수","qty":1402}
+{"kind":"production","date":"2025-06-10","item":"우주인 화덕파베이크 도우-토마토","qty":134}
+{"kind":"production","date":"2025-06-10","item":"선인 토마토 파베이크 도우","qty":300}
+{"kind":"production","date":"2025-06-10","item":"마르게리따-2","qty":1402}
+{"kind":"production","date":"2025-06-10","item":"파이브치즈","qty":702}
+{"kind":"production","date":"2025-06-09","item":"우주인 화덕파베이크 도우-토마토","qty":265}
+{"kind":"production","date":"2025-06-09","item":"선인 토마토 파베이크 도우","qty":740}
+{"kind":"production","date":"2025-06-09","item":"파이브치즈","qty":1502}
+{"kind":"production","date":"2025-06-05","item":"허니갈릭페퍼로니","qty":702}
+{"kind":"production","date":"2025-06-05","item":"우주인 화덕파베이크 도우-토마토","qty":146}
+{"kind":"production","date":"2025-06-05","item":"선인 토마토 파베이크 도우","qty":690}
+{"kind":"production","date":"2025-06-05","item":"바질페스토 마스카포네","qty":884}
+{"kind":"production","date":"2025-06-04","item":"우주인 화덕파베이크- 베샤멜","qty":408}
+{"kind":"production","date":"2025-06-04","item":"멜팅치즈피자","qty":1002}
+{"kind":"production","date":"2025-06-04","item":"조선호텔 고르곤졸라 피자","qty":1002}
+{"kind":"production","date":"2025-06-02","item":"우주인 화덕파베이크 도우-토마토","qty":278}
+{"kind":"production","date":"2025-06-02","item":"선인 토마토 파베이크 도우","qty":670}
+{"kind":"production","date":"2025-06-02","item":"허니갈릭페퍼로니","qty":1505}
+{"kind":"production","date":"2025-05-30","item":"우주인 화덕파베이크 도우-토마토","qty":60}
+{"kind":"production","date":"2025-05-30","item":"마르게리따-2","qty":2402}
+{"kind":"production","date":"2025-05-30","item":"선인 토마토 파베이크 도우","qty":500}
+{"kind":"production","date":"2025-05-29","item":"우주인 화덕파베이크- 베샤멜","qty":194}
+{"kind":"production","date":"2025-05-29","item":"허니고르곤졸라","qty":2202}
+{"kind":"production","date":"2025-05-28","item":"우주인 화덕파베이크- 베샤멜","qty":58}
+{"kind":"production","date":"2025-05-28","item":"허니고르곤졸라","qty":2206}
+{"kind":"production","date":"2025-05-27","item":"포노부오노 시그니처 화덕브레드","qty":3155}
+{"kind":"production","date":"2025-05-26","item":"포노부오노 시그니처 화덕브레드","qty":3005}
+{"kind":"production","date":"2025-05-23","item":"우주인 화덕파베이크 도우-토마토","qty":69}
+{"kind":"production","date":"2025-05-23","item":"마르게리따-2","qty":2402}
+{"kind":"production","date":"2025-05-22","item":"우주인 화덕파베이크 도우-토마토","qty":33}
+{"kind":"production","date":"2025-05-22","item":"마르게리따-2","qty":2402}
+{"kind":"production","date":"2025-05-21","item":"허니갈릭페퍼로니","qty":501}
+{"kind":"production","date":"2025-05-21","item":"우주인 화덕파베이크 도우-토마토","qty":411}
+{"kind":"production","date":"2025-05-21","item":"마르게리따-2","qty":1462}
+{"kind":"production","date":"2025-05-20","item":"허니고르곤졸라","qty":2263}
+{"kind":"production","date":"2025-05-19","item":"우주인 화덕파베이크 도우-토마토","qty":768}
+{"kind":"production","date":"2025-05-19","item":"청양페퍼로니","qty":1502}
+{"kind":"production","date":"2025-05-16","item":"크림떡_복숭아요거트","qty":460}
+{"kind":"production","date":"2025-05-16","item":"크림떡_무화과크림치즈","qty":339}
+{"kind":"production","date":"2025-05-15","item":"선인 토마토 파베이크 도우","qty":200}
+{"kind":"production","date":"2025-05-15","item":"마르게리따-2","qty":2602}
+{"kind":"production","date":"2025-05-14","item":"선인 토마토 파베이크 도우","qty":600}
+{"kind":"production","date":"2025-05-14","item":"핫 페퍼로니피자","qty":1502}
+{"kind":"production","date":"2025-05-14","item":"우주인 화덕파베이크 도우-토마토","qty":228}
+{"kind":"production","date":"2025-05-13","item":"우주인 화덕파베이크- 베샤멜","qty":54}
+{"kind":"production","date":"2025-05-13","item":"선인 베샤멜 파베이크 도우","qty":400}
+{"kind":"production","date":"2025-05-13","item":"허니고르곤졸라","qty":2045}
+{"kind":"production","date":"2025-05-12","item":"허니갈릭페퍼로니","qty":1602}
+{"kind":"production","date":"2025-05-12","item":"우주인 화덕파베이크 도우-토마토","qty":179}
+{"kind":"production","date":"2025-05-12","item":"선인 토마토 파베이크 도우","qty":610}
+{"kind":"production","date":"2025-05-08","item":"우주인 화덕파베이크- 베샤멜","qty":282}
+{"kind":"production","date":"2025-05-08","item":"선인 베샤멜 파베이크 도우","qty":600}
+{"kind":"production","date":"2025-05-08","item":"우주인피자 통통 옥수수","qty":1602}
+{"kind":"production","date":"2025-05-07","item":"우주인 화덕파베이크 도우-토마토","qty":192}
+{"kind":"production","date":"2025-05-07","item":"선인 토마토 파베이크 도우","qty":590}
+{"kind":"production","date":"2025-05-07","item":"허니갈릭페퍼로니","qty":1602}
+{"kind":"production","date":"2025-05-02","item":"선인 토마토 파베이크 도우","qty":500}
+{"kind":"production","date":"2025-05-02","item":"우주인 화덕파베이크 도우-토마토","qty":442}
+{"kind":"production","date":"2025-05-02","item":"파이브치즈","qty":1537}
+{"kind":"production","date":"2025-04-30","item":"우주인 화덕파베이크- 베샤멜","qty":179}
+{"kind":"production","date":"2025-04-30","item":"허니고르곤졸라","qty":2202}
+{"kind":"production","date":"2025-04-29","item":"우주인 화덕파베이크 도우-토마토","qty":170}
+{"kind":"production","date":"2025-04-29","item":"로제쉬림프","qty":844}
+{"kind":"production","date":"2025-04-29","item":"마르게리따-2","qty":801}
+{"kind":"production","date":"2025-04-29","item":"선인 토마토 파베이크 도우","qty":500}
+{"kind":"production","date":"2025-04-28","item":"마르게리따-2","qty":2401}
+{"kind":"production","date":"2025-04-25","item":"바질페스토 마스카포네","qty":1136}
+{"kind":"production","date":"2025-04-25","item":"선인 토마토 파베이크 도우","qty":500}
+{"kind":"production","date":"2025-04-25","item":"마르게리따-2","qty":803}
+{"kind":"production","date":"2025-04-25","item":"우주인 화덕파베이크 도우-토마토","qty":196}
+{"kind":"production","date":"2025-04-24","item":"우주인 화덕파베이크- 베샤멜","qty":63}
+{"kind":"production","date":"2025-04-24","item":"우주인 화덕파베이크도우-바질페스토","qty":365}
+{"kind":"production","date":"2025-04-24","item":"우주인화덕 파베이크도우-바질페스토","qty":400}
+{"kind":"production","date":"2025-04-24","item":"바질페스토 마스카포네","qty":1508}
+{"kind":"production","date":"2025-04-23","item":"우주인 화덕파베이크 도우-토마토","qty":383}
+{"kind":"production","date":"2025-04-23","item":"선인 토마토 파베이크 도우","qty":500}
+{"kind":"production","date":"2025-04-23","item":"허니갈릭페퍼로니","qty":1603}
+{"kind":"production","date":"2025-04-22","item":"허니고르곤졸라","qty":2403}
+{"kind":"production","date":"2025-04-22","item":"우주인 화덕파베이크- 베샤멜","qty":29}
+{"kind":"production","date":"2025-04-21","item":"우주인 화덕파베이크- 베샤멜","qty":84}
+{"kind":"production","date":"2025-04-21","item":"허니고르곤졸라","qty":2207}
+{"kind":"production","date":"2025-04-18","item":"파이브치즈","qty":1503}
+{"kind":"production","date":"2025-04-18","item":"멜팅치즈피자","qty":1}
+{"kind":"production","date":"2025-04-18","item":"로제쉬림프","qty":1}
+{"kind":"production","date":"2025-04-18","item":"우주인 화덕파베이크 도우-토마토","qty":59}
+{"kind":"production","date":"2025-04-17","item":"허니고르곤졸라","qty":2203}
+{"kind":"production","date":"2025-04-16","item":"마르게리따-2","qty":2404}
+{"kind":"production","date":"2025-04-16","item":"우주인 화덕파베이크 도우-토마토","qty":130}
+{"kind":"production","date":"2025-04-15","item":"우주인 화덕파베이크- 베샤멜","qty":175}
+{"kind":"production","date":"2025-04-15","item":"우주인 화덕파베이크 도우-토마토","qty":399}
+{"kind":"production","date":"2025-04-15","item":"파이브치즈","qty":1503}
+{"kind":"production","date":"2025-04-15","item":"우주인 화덕 파베이크도우-토마토","qty":400}
+{"kind":"production","date":"2025-04-14","item":"허니갈릭페퍼로니","qty":1602}
+{"kind":"production","date":"2025-04-14","item":"우주인 화덕파베이크 도우-토마토","qty":884}
+{"kind":"production","date":"2025-04-11","item":"허니고르곤졸라","qty":2302}
+{"kind":"production","date":"2025-04-11","item":"우주인 화덕파베이크- 베샤멜","qty":58}
+{"kind":"production","date":"2025-04-10","item":"마르게리따-2","qty":2604}
+{"kind":"production","date":"2025-04-09","item":"우주인 화덕파베이크- 베샤멜","qty":45}
+{"kind":"production","date":"2025-04-09","item":"허니고르곤졸라","qty":2404}
+{"kind":"production","date":"2025-04-08","item":"우주인 화덕파베이크 도우-토마토","qty":514}
+{"kind":"production","date":"2025-04-08","item":"우주인 화덕 파베이크도우-토마토","qty":400}
+{"kind":"production","date":"2025-04-08","item":"시금치 베이컨 리코타","qty":1502}
+{"kind":"production","date":"2025-04-07","item":"우주인 화덕파베이크- 베샤멜","qty":40}
+{"kind":"production","date":"2025-04-07","item":"허니고르곤졸라","qty":2404}
+{"kind":"production","date":"2025-04-04","item":"허니갈릭페퍼로니","qty":1603}
+{"kind":"production","date":"2025-04-04","item":"우주인 화덕파베이크 도우-토마토","qty":488}
+{"kind":"production","date":"2025-04-04","item":"우주인 화덕 파베이크도우-토마토","qty":400}
+{"kind":"production","date":"2025-04-03","item":"마르게리따-2","qty":2645}
+{"kind":"production","date":"2025-04-02","item":"우주인 화덕파베이크 도우-토마토","qty":134}
+{"kind":"production","date":"2025-04-02","item":"마르게리따-2","qty":2403}
+{"kind":"production","date":"2025-04-01","item":"우주인 화덕파베이크 도우-토마토","qty":86}
+{"kind":"production","date":"2025-04-01","item":"마르게리따-2","qty":2402}
+{"kind":"production","date":"2025-03-31","item":"우주인피자 통통 옥수수","qty":1701}
+{"kind":"production","date":"2025-03-31","item":"우주인화덕 파베이크도우-베샤멜","qty":400}
+{"kind":"production","date":"2025-03-31","item":"우주인 화덕파베이크- 베샤멜","qty":350}
+{"kind":"production","date":"2025-03-28","item":"우주인화덕 파베이크도우-베샤멜","qty":240}
+{"kind":"production","date":"2025-03-28","item":"허니고르곤졸라","qty":2210}
+{"kind":"production","date":"2025-03-28","item":"우주인 화덕파베이크- 베샤멜","qty":164}
+{"kind":"production","date":"2025-03-27","item":"우주인화덕 파베이크도우-바질페스토","qty":600}
+{"kind":"production","date":"2025-03-27","item":"바질페스토 마스카포네","qty":1408}
+{"kind":"production","date":"2025-03-27","item":"우주인 화덕파베이크- 베샤멜","qty":158}
+{"kind":"production","date":"2025-03-27","item":"우주인 화덕파베이크도우-바질페스토","qty":9}
+{"kind":"production","date":"2025-03-26","item":"마르게리따-2","qty":2405}
+{"kind":"production","date":"2025-03-26","item":"우주인 화덕파베이크 도우-토마토","qty":249}
+{"kind":"production","date":"2025-03-25","item":"허니갈릭페퍼로니","qty":1603}
+{"kind":"production","date":"2025-03-25","item":"우주인 화덕파베이크 도우-토마토","qty":743}
+{"kind":"production","date":"2025-03-24","item":"시금치 베이컨 리코타","qty":1602}
+{"kind":"production","date":"2025-03-24","item":"우주인 화덕 파베이크도우-토마토","qty":400}
+{"kind":"production","date":"2025-03-24","item":"우주인 화덕파베이크 도우-토마토","qty":40}
+{"kind":"production","date":"2025-03-21","item":"선인 베샤멜 파베이크 도우","qty":520}
+{"kind":"production","date":"2025-03-21","item":"멜팅치즈피자","qty":1804}
+{"kind":"production","date":"2025-03-21","item":"우주인 화덕파베이크- 베샤멜","qty":147}
+{"kind":"production","date":"2025-03-19","item":"허니갈릭페퍼로니","qty":1602}
+{"kind":"production","date":"2025-03-19","item":"선인 토마토 파베이크 도우","qty":350}
+{"kind":"production","date":"2025-03-19","item":"우주인 화덕파베이크 도우-토마토","qty":541}
+{"kind":"production","date":"2025-03-18","item":"조선호텔 고르곤졸라 피자","qty":1003}
+{"kind":"production","date":"2025-03-18","item":"우주인화덕 파베이크도우-베샤멜","qty":200}
+{"kind":"production","date":"2025-03-18","item":"우주인 화덕파베이크- 베샤멜","qty":92}
+{"kind":"production","date":"2025-03-18","item":"허니고르곤졸라","qty":1262}
+{"kind":"production","date":"2025-03-17","item":"마르게리따-2","qty":321}
+{"kind":"production","date":"2025-03-17","item":"파이브치즈","qty":1501}
+{"kind":"production","date":"2025-03-17","item":"우주인 화덕파베이크 도우-토마토","qty":131}
+{"kind":"production","date":"2025-03-17","item":"선인 토마토 파베이크 도우","qty":450}
+{"kind":"production","date":"2025-03-14","item":"머쉬룸 고트피자","qty":480}
+{"kind":"production","date":"2025-03-14","item":"마르게리따-2","qty":2102}
+{"kind":"production","date":"2025-03-14","item":"우주인 화덕파베이크 도우-토마토","qty":232}
+{"kind":"production","date":"2025-03-13","item":"머쉬룸 고트피자","qty":1201}
+{"kind":"production","date":"2025-03-13","item":"우주인 화덕파베이크- 베샤멜","qty":92}
+{"kind":"production","date":"2025-03-13","item":"선인 베샤멜 파베이크 도우","qty":400}
+{"kind":"production","date":"2025-03-13","item":"우주인 화덕파베이크- 베샤멜","qty":570}
+{"kind":"production","date":"2025-03-12","item":"멜팅치즈피자","qty":901}
+{"kind":"production","date":"2025-03-12","item":"우주인 화덕파베이크- 베샤멜","qty":227}
+{"kind":"production","date":"2025-03-12","item":"선인 베샤멜 파베이크 도우","qty":580}
+{"kind":"production","date":"2025-03-12","item":"허니고르곤졸라","qty":1005}
+{"kind":"production","date":"2025-03-11","item":"시금치 베이컨 리코타","qty":133}
+{"kind":"production","date":"2025-03-11","item":"청양페퍼로니","qty":1600}
+{"kind":"production","date":"2025-03-11","item":"우주인 화덕파베이크 도우-토마토","qty":73}
+{"kind":"production","date":"2025-03-11","item":"선인 토마토 파베이크 도우","qty":1000}
+{"kind":"production","date":"2025-03-10","item":"시금치 베이컨 리코타","qty":1241}
+{"kind":"production","date":"2025-03-10","item":"우주인 화덕파베이크 도우-토마토","qty":649}
+{"kind":"production","date":"2025-03-10","item":"선인 토마토 파베이크 도우","qty":700}
+{"kind":"production","date":"2025-03-07","item":"마르게리따-2","qty":1002}
+{"kind":"production","date":"2025-03-07","item":"허니갈릭페퍼로니","qty":760}
+{"kind":"production","date":"2025-03-07","item":"우주인 화덕파베이크 도우-토마토","qty":200}
+{"kind":"production","date":"2025-03-07","item":"우주인 화덕 파베이크도우-토마토","qty":520}
+{"kind":"production","date":"2025-03-06","item":"허니고르곤졸라","qty":1803}
+{"kind":"production","date":"2025-03-06","item":"마르게리따-2","qty":481}
+{"kind":"production","date":"2025-03-06","item":"우주인 화덕파베이크- 베샤멜","qty":111}
+{"kind":"production","date":"2025-03-06","item":"우주인화덕 파베이크도우-바질페스토","qty":424}
+{"kind":"production","date":"2025-03-05","item":"마르게리따-2","qty":1022}
+{"kind":"production","date":"2025-03-05","item":"허니갈릭페퍼로니","qty":882}
+{"kind":"production","date":"2025-03-05","item":"우주인 화덕파베이크 도우-토마토","qty":566}
+{"kind":"production","date":"2025-03-04","item":"허니고르곤졸라","qty":2410}
+{"kind":"production","date":"2025-03-04","item":"우주인 화덕파베이크- 베샤멜","qty":193}
+{"kind":"production","date":"2025-02-28","item":"우주인피자 통통 옥수수","qty":1703}
+{"kind":"production","date":"2025-02-28","item":"우주인화덕 파베이크도우-베샤멜","qty":400}
+{"kind":"production","date":"2025-02-28","item":"우주인 화덕파베이크- 베샤멜","qty":315}
+{"kind":"production","date":"2025-02-27","item":"마르게리따-2","qty":2401}
+{"kind":"production","date":"2025-02-27","item":"우주인 화덕파베이크 도우-토마토","qty":120}
+{"kind":"production","date":"2025-02-26","item":"시금치 베이컨 리코타","qty":615}
+{"kind":"production","date":"2025-02-26","item":"선인 토마토 파베이크 도우","qty":500}
+{"kind":"production","date":"2025-02-26","item":"우주인 화덕파베이크 도우-토마토","qty":161}
+{"kind":"production","date":"2025-02-26","item":"마르게리따","qty":1102}
+{"kind":"production","date":"2025-02-25","item":"선인 토마토 파베이크 도우","qty":500}
+{"kind":"production","date":"2025-02-25","item":"시금치 베이컨 리코타","qty":262}
+{"kind":"production","date":"2025-02-25","item":"우주인 화덕파베이크 도우-토마토","qty":20}
+{"kind":"production","date":"2025-02-25","item":"파이브치즈","qty":1261}
+{"kind":"production","date":"2025-02-24","item":"우주인 화덕 파베이크도우-토마토","qty":200}
+{"kind":"production","date":"2025-02-24","item":"허니갈릭페퍼로니","qty":1601}
+{"kind":"production","date":"2025-02-24","item":"우주인 화덕파베이크 도우-토마토","qty":147}
+{"kind":"production","date":"2025-02-20","item":"발리브루 골든시그니처블렌드","qty":30}
+{"kind":"production","date":"2025-02-20","item":"발리브루 골든시그니처블렌드","qty":240}
+{"kind":"production","date":"2025-02-19","item":"시금치 베이컨 리코타","qty":101}
+{"kind":"production","date":"2025-02-19","item":"허니갈릭페퍼로니","qty":901}
+{"kind":"production","date":"2025-02-19","item":"마르게리따","qty":601}
+{"kind":"production","date":"2025-02-19","item":"파이브치즈","qty":401}
+{"kind":"production","date":"2025-02-11","item":"선인 토마토 파베이크 도우","qty":830}
+{"kind":"production","date":"2025-02-11","item":"청양페퍼로니","qty":1502}
+{"kind":"production","date":"2025-02-11","item":"우주인 화덕파베이크 도우-토마토","qty":132}
+{"kind":"production","date":"2025-02-10","item":"마르게리따","qty":2402}
+{"kind":"production","date":"2025-02-10","item":"우주인 화덕파베이크 도우-토마토","qty":265}
+{"kind":"production","date":"2025-02-07","item":"포노부오노 시그니처 화덕브레드","qty":2967}
+{"kind":"production","date":"2025-02-06","item":"포노부오노 시그니처 화덕브레드","qty":3137}
+{"kind":"production","date":"2025-02-05","item":"마르게리따","qty":2383}
+{"kind":"production","date":"2025-02-05","item":"우주인 화덕파베이크 도우-토마토","qty":170}
+{"kind":"production","date":"2025-02-04","item":"선인 토마토 파베이크 도우","qty":1200}
+{"kind":"production","date":"2025-02-04","item":"우주인 화덕파베이크 도우-토마토","qty":71}
+{"kind":"production","date":"2025-02-04","item":"허니갈릭페퍼로니","qty":1201}
+{"kind":"production","date":"2025-02-03","item":"허니갈릭페퍼로니","qty":1201}
+{"kind":"production","date":"2025-02-03","item":"우주인 화덕파베이크 도우-토마토","qty":108}
+{"kind":"production","date":"2025-02-03","item":"선인 토마토 파베이크 도우","qty":1100}
+{"kind":"production","date":"2025-01-31","item":"우주인 화덕파베이크- 베샤멜","qty":12}
+{"kind":"production","date":"2025-01-31","item":"허니고르곤졸라","qty":2742}
+{"kind":"production","date":"2025-01-22","item":"마르게리따","qty":2371}
+{"kind":"production","date":"2025-01-21","item":"우주인피자 통통 옥수수","qty":1103}
+{"kind":"production","date":"2025-01-21","item":"선인 토마토 파베이크 도우","qty":670}
+{"kind":"production","date":"2025-01-21","item":"마르게리따","qty":721}
+{"kind":"production","date":"2025-01-21","item":"우주인 화덕파베이크- 베샤멜","qty":93}
+{"kind":"production","date":"2025-01-21","item":"우주인 화덕파베이크 도우-토마토","qty":127}
+{"kind":"production","date":"2025-01-20","item":"허니갈릭페퍼로니","qty":1302}
+{"kind":"production","date":"2025-01-20","item":"우주인 화덕파베이크 도우-토마토","qty":72}
+{"kind":"production","date":"2025-01-20","item":"선인 토마토 파베이크 도우","qty":1130}
+{"kind":"production","date":"2025-01-17","item":"마르게리따","qty":1803}
+{"kind":"production","date":"2025-01-17","item":"우주인 화덕파베이크 도우-토마토","qty":14}
+{"kind":"production","date":"2025-01-17","item":"선인 토마토 파베이크 도우","qty":380}
+{"kind":"production","date":"2025-01-17","item":"바질페스토 마스카포네","qty":297}
+{"kind":"production","date":"2025-01-17","item":"우주인 화덕파베이크도우-바질페스토","qty":13}
+{"kind":"production","date":"2025-01-16","item":"허니고르곤졸라","qty":2403}
+{"kind":"production","date":"2025-01-16","item":"우주인 화덕파베이크- 베샤멜","qty":360}
+{"kind":"production","date":"2025-01-15","item":"허니고르곤졸라","qty":2408}
+{"kind":"production","date":"2025-01-15","item":"우주인 화덕파베이크- 베샤멜","qty":253}
+{"kind":"production","date":"2025-01-14","item":"우주인 화덕파베이크 도우-토마토","qty":10}
+{"kind":"production","date":"2025-01-14","item":"마르게리따","qty":2323}
+{"kind":"production","date":"2025-01-13","item":"조선호텔 고르곤졸라 피자","qty":1001}
+{"kind":"production","date":"2025-01-13","item":"우주인피자 통통 옥수수","qty":641}
+{"kind":"production","date":"2025-01-13","item":"우주인 화덕파베이크- 베샤멜","qty":96}
+{"kind":"production","date":"2025-01-13","item":"선인 베샤멜 파베이크 도우","qty":500}
+{"kind":"production","date":"2025-01-08","item":"선인 토마토 파베이크 도우","qty":370}
+{"kind":"production","date":"2025-01-08","item":"마르게리따","qty":2142}
+{"kind":"production","date":"2025-01-08","item":"파이브치즈","qty":221}
+{"kind":"production","date":"2025-01-08","item":"우주인 화덕파베이크 도우-토마토","qty":7}
+{"kind":"production","date":"2025-01-07","item":"허니갈릭페퍼로니","qty":1502}
+{"kind":"production","date":"2025-01-07","item":"우주인 화덕파베이크 도우-토마토","qty":615}
+{"kind":"production","date":"2025-01-02","item":"허니고르곤졸라","qty":2081}
+{"kind":"production","date":"2025-01-02","item":"허니갈릭페퍼로니","qty":142}
+{"kind":"production","date":"2025-01-02","item":"우주인화덕 파베이크도우-베샤멜","qty":200}
+*파베이크폐기
+{"kind":"waste","date":"2025-12-31","item":"파베이크 폐기량","qty":33}
+{"kind":"waste","date":"2025-12-30","item":"파베이크 폐기량","qty":98}
+{"kind":"waste","date":"2025-12-29","item":"파베이크 폐기량","qty":123}
+{"kind":"waste","date":"2025-12-26","item":"파베이크 폐기량","qty":99}
+{"kind":"waste","date":"2025-12-24","item":"파베이크 폐기량","qty":136}
+{"kind":"waste","date":"2025-12-22","item":"파베이크 폐기량","qty":84}
+{"kind":"waste","date":"2025-12-19","item":"파베이크 폐기량","qty":24}
+{"kind":"waste","date":"2025-12-18","item":"파베이크 폐기량","qty":24}
+{"kind":"waste","date":"2025-12-17","item":"파베이크 폐기량","qty":66}
+{"kind":"waste","date":"2025-12-16","item":"파베이크 폐기량","qty":40}
+{"kind":"waste","date":"2025-12-15","item":"파베이크 폐기량","qty":81}
+{"kind":"waste","date":"2025-12-11","item":"파베이크 폐기량","qty":54}
+{"kind":"waste","date":"2025-12-10","item":"파베이크 폐기량","qty":76}
+{"kind":"waste","date":"2025-12-05","item":"파베이크 폐기량","qty":48}
+{"kind":"waste","date":"2025-12-04","item":"파베이크 폐기량","qty":64}
+{"kind":"waste","date":"2025-12-03","item":"파베이크 폐기량","qty":88}
+{"kind":"waste","date":"2025-11-28","item":"파베이크 폐기량","qty":110}
+{"kind":"waste","date":"2025-11-27","item":"파베이크 폐기량","qty":135}
+{"kind":"waste","date":"2025-11-26","item":"파베이크 폐기량","qty":88}
+{"kind":"waste","date":"2025-11-25","item":"파베이크 폐기량","qty":108}
+{"kind":"waste","date":"2025-11-20","item":"파베이크 폐기량","qty":100}
+{"kind":"waste","date":"2025-11-19","item":"파베이크 폐기량","qty":72}
+{"kind":"waste","date":"2025-11-17","item":"파베이크 폐기량","qty":103}
+{"kind":"waste","date":"2025-11-13","item":"파베이크 폐기량","qty":169}
+{"kind":"waste","date":"2025-11-12","item":"파베이크 폐기량","qty":59}
+{"kind":"waste","date":"2025-11-11","item":"파베이크 폐기량","qty":77}
+{"kind":"waste","date":"2025-11-07","item":"파베이크 폐기량","qty":104}
+{"kind":"waste","date":"2025-11-06","item":"파베이크 폐기량","qty":100}
+{"kind":"waste","date":"2025-11-05","item":"파베이크 폐기량","qty":96}
+{"kind":"waste","date":"2025-11-04","item":"파베이크 폐기량","qty":90}
+{"kind":"waste","date":"2025-11-03","item":"파베이크 폐기량","qty":62}
+{"kind":"waste","date":"2025-10-31","item":"파베이크 폐기량","qty":33}
+{"kind":"waste","date":"2025-10-30","item":"파베이크 폐기량","qty":106}
+{"kind":"waste","date":"2025-10-29","item":"파베이크 폐기량","qty":39}
+{"kind":"waste","date":"2025-10-24","item":"파베이크 폐기량","qty":44}
+{"kind":"waste","date":"2025-10-23","item":"파베이크 폐기량","qty":76}
+{"kind":"waste","date":"2025-10-22","item":"파베이크 폐기량","qty":79}
+{"kind":"waste","date":"2025-10-21","item":"파베이크 폐기량","qty":18}
+{"kind":"waste","date":"2025-10-20","item":"파베이크 폐기량","qty":41}
+{"kind":"waste","date":"2025-10-15","item":"파베이크 폐기량","qty":57}
+{"kind":"waste","date":"2025-10-14","item":"파베이크 폐기량","qty":64}
+{"kind":"waste","date":"2025-10-13","item":"파베이크 폐기량","qty":41}
+{"kind":"waste","date":"2025-10-03","item":"파베이크 폐기량","qty":29}
+{"kind":"waste","date":"2025-10-02","item":"파베이크 폐기량","qty":47}
+{"kind":"waste","date":"2025-10-01","item":"파베이크 폐기량","qty":35}
+{"kind":"waste","date":"2025-09-30","item":"파베이크 폐기량","qty":60}
+{"kind":"waste","date":"2025-09-26","item":"파베이크 폐기량","qty":60}
+{"kind":"waste","date":"2025-09-25","item":"파베이크 폐기량","qty":91}
+{"kind":"waste","date":"2025-09-24","item":"파베이크 폐기량","qty":54}
+{"kind":"waste","date":"2025-09-23","item":"파베이크 폐기량","qty":31}
+{"kind":"waste","date":"2025-09-22","item":"파베이크 폐기량","qty":54}
+{"kind":"waste","date":"2025-09-19","item":"파베이크 폐기량","qty":97}
+{"kind":"waste","date":"2025-09-18","item":"파베이크 폐기량","qty":32}
+{"kind":"waste","date":"2025-09-17","item":"파베이크 폐기량","qty":20}
+{"kind":"waste","date":"2025-09-16","item":"파베이크 폐기량","qty":29}
+{"kind":"waste","date":"2025-09-15","item":"파베이크 폐기량","qty":23}
+{"kind":"waste","date":"2025-09-12","item":"파베이크 폐기량","qty":48}
+{"kind":"waste","date":"2025-09-11","item":"파베이크 폐기량","qty":72}
+{"kind":"waste","date":"2025-09-10","item":"파베이크 폐기량","qty":46}
+{"kind":"waste","date":"2025-09-09","item":"파베이크 폐기량","qty":54}
+{"kind":"waste","date":"2025-09-08","item":"파베이크 폐기량","qty":31}
+{"kind":"waste","date":"2025-09-05","item":"파베이크 폐기량","qty":70}
+{"kind":"waste","date":"2025-09-04","item":"파베이크 폐기량","qty":26}
+{"kind":"waste","date":"2025-09-03","item":"파베이크 폐기량","qty":30}
+{"kind":"waste","date":"2025-09-02","item":"파베이크 폐기량","qty":26}
+{"kind":"waste","date":"2025-09-01","item":"파베이크 폐기량","qty":24}
+{"kind":"waste","date":"2025-08-29","item":"파베이크 폐기량","qty":40}
+{"kind":"waste","date":"2025-08-28","item":"파베이크 폐기량","qty":34}
+{"kind":"waste","date":"2025-08-27","item":"파베이크 폐기량","qty":45}
+{"kind":"waste","date":"2025-08-26","item":"파베이크 폐기량","qty":19}
+{"kind":"waste","date":"2025-08-25","item":"파베이크 폐기량","qty":16}
+{"kind":"waste","date":"2025-08-21","item":"파베이크 폐기량","qty":57}
+{"kind":"waste","date":"2025-08-19","item":"파베이크 폐기량","qty":30}
+{"kind":"waste","date":"2025-08-14","item":"파베이크 폐기량","qty":37}
+{"kind":"waste","date":"2025-08-13","item":"파베이크 폐기량","qty":37}
+{"kind":"waste","date":"2025-08-12","item":"파베이크 폐기량","qty":37}
+{"kind":"waste","date":"2025-08-11","item":"파베이크 폐기량","qty":45}
+{"kind":"waste","date":"2025-08-07","item":"파베이크 폐기량","qty":29}
+{"kind":"waste","date":"2025-08-06","item":"파베이크 폐기량","qty":103}
+{"kind":"waste","date":"2025-08-05","item":"파베이크 폐기량","qty":72}
+{"kind":"waste","date":"2025-08-04","item":"파베이크 폐기량","qty":61}
+{"kind":"waste","date":"2025-08-01","item":"파베이크 폐기량","qty":51}
+{"kind":"waste","date":"2025-07-31","item":"파베이크 폐기량","qty":50}
+{"kind":"waste","date":"2025-07-30","item":"파베이크 폐기량","qty":60}
+{"kind":"waste","date":"2025-07-29","item":"파베이크 폐기량","qty":60}
+{"kind":"waste","date":"2025-07-28","item":"파베이크 폐기량","qty":39}
+{"kind":"waste","date":"2025-07-24","item":"파베이크 폐기량","qty":61}
+{"kind":"waste","date":"2025-07-23","item":"파베이크 폐기량","qty":68}
+{"kind":"waste","date":"2025-07-18","item":"파베이크 폐기량","qty":70}
+{"kind":"waste","date":"2025-07-17","item":"파베이크 폐기량","qty":40}
+{"kind":"waste","date":"2025-07-16","item":"파베이크 폐기량","qty":42}
+{"kind":"waste","date":"2025-07-15","item":"파베이크 폐기량","qty":112}
+{"kind":"waste","date":"2025-07-08","item":"파베이크 폐기량","qty":81}
+{"kind":"waste","date":"2025-07-07","item":"파베이크 폐기량","qty":100}
+{"kind":"waste","date":"2025-07-04","item":"파베이크 폐기량","qty":84}
+{"kind":"waste","date":"2025-07-03","item":"파베이크 폐기량","qty":65}
+{"kind":"waste","date":"2025-07-02","item":"파베이크 폐기량","qty":114}
+{"kind":"waste","date":"2025-07-01","item":"파베이크 폐기량","qty":82}
+{"kind":"waste","date":"2025-06-30","item":"파베이크 폐기량","qty":121}
+{"kind":"waste","date":"2025-06-27","item":"파베이크 폐기량","qty":116}
+{"kind":"waste","date":"2025-06-26","item":"파베이크 폐기량","qty":62}
+{"kind":"waste","date":"2025-06-23","item":"파베이크 폐기량","qty":102}
+{"kind":"waste","date":"2025-06-20","item":"파베이크 폐기량","qty":94}
+{"kind":"waste","date":"2025-06-19","item":"파베이크 폐기량","qty":118}
+{"kind":"waste","date":"2025-06-13","item":"파베이크 폐기량","qty":146}
+{"kind":"waste","date":"2025-06-11","item":"파베이크 폐기량","qty":122}
+{"kind":"waste","date":"2025-06-10","item":"파베이크 폐기량","qty":91}
+{"kind":"waste","date":"2025-06-09","item":"파베이크 폐기량","qty":217}
+{"kind":"waste","date":"2025-06-09","item":"파베이크 폐기량","qty":117}
+{"kind":"waste","date":"2025-06-05","item":"파베이크 폐기량","qty":135}
+{"kind":"waste","date":"2025-06-04","item":"파베이크 폐기량","qty":119}
+{"kind":"waste","date":"2025-06-02","item":"파베이크 폐기량","qty":107}
+{"kind":"waste","date":"2025-05-30","item":"파베이크 폐기량","qty":204}
+{"kind":"waste","date":"2025-05-29","item":"파베이크 폐기량","qty":86}
+{"kind":"waste","date":"2025-05-28","item":"파베이크 폐기량","qty":64}
+{"kind":"waste","date":"2025-05-23","item":"파베이크 폐기량","qty":103}
+{"kind":"waste","date":"2025-05-22","item":"파베이크 폐기량","qty":93}
+{"kind":"waste","date":"2025-05-22","item":"파베이크 폐기량","qty":0}
+{"kind":"waste","date":"2025-05-21","item":"파베이크 폐기량","qty":159}
+{"kind":"waste","date":"2025-05-20","item":"파베이크 폐기량","qty":223}
+{"kind":"waste","date":"2025-05-19","item":"파베이크 폐기량","qty":194}
+{"kind":"waste","date":"2025-05-15","item":"파베이크 폐기량","qty":101}
+{"kind":"waste","date":"2025-05-14","item":"파베이크 폐기량","qty":145}
+{"kind":"waste","date":"2025-05-13","item":"파베이크 폐기량","qty":103}
+{"kind":"waste","date":"2025-05-13","item":"파베이크 폐기량","qty":52}
+{"kind":"waste","date":"2025-05-08","item":"파베이크 폐기량","qty":45}
+{"kind":"waste","date":"2025-05-07","item":"파베이크 폐기량","qty":83}
+{"kind":"waste","date":"2025-05-02","item":"파베이크 폐기량","qty":75}
+{"kind":"waste","date":"2025-04-30","item":"파베이크 폐기량","qty":62}
+{"kind":"waste","date":"2025-04-29","item":"파베이크 폐기량","qty":40}
+{"kind":"waste","date":"2025-04-29","item":"파베이크 폐기량","qty":44}
+{"kind":"waste","date":"2025-04-28","item":"파베이크 폐기량","qty":146}
+{"kind":"waste","date":"2025-04-23","item":"파베이크 폐기량","qty":88}
+{"kind":"waste","date":"2025-04-22","item":"파베이크 폐기량","qty":64}
+{"kind":"waste","date":"2025-04-21","item":"파베이크 폐기량","qty":89}
+{"kind":"waste","date":"2025-04-18","item":"파베이크 폐기량","qty":76}
+{"kind":"waste","date":"2025-04-17","item":"파베이크 폐기량","qty":165}
+{"kind":"waste","date":"2025-04-16","item":"파베이크 폐기량","qty":88}
+{"kind":"waste","date":"2025-04-15","item":"파베이크 폐기량","qty":85}
+{"kind":"waste","date":"2025-04-14","item":"파베이크 폐기량","qty":75}
+{"kind":"waste","date":"2025-04-11","item":"파베이크 폐기량","qty":89}
+{"kind":"waste","date":"2025-04-10","item":"파베이크 폐기량","qty":118}
+{"kind":"waste","date":"2025-04-09","item":"파베이크 폐기량","qty":132}
+{"kind":"waste","date":"2025-04-08","item":"파베이크 폐기량","qty":97}
+{"kind":"waste","date":"2025-04-07","item":"파베이크 폐기량","qty":131}
+{"kind":"waste","date":"2025-04-04","item":"파베이크 폐기량","qty":48}
+{"kind":"waste","date":"2025-04-03","item":"파베이크 폐기량","qty":67}
+{"kind":"waste","date":"2025-04-02","item":"파베이크 폐기량","qty":72}
+{"kind":"waste","date":"2025-04-01","item":"파베이크 폐기량","qty":89}
+{"kind":"waste","date":"2025-03-31","item":"파베이크 폐기량","qty":58}
+{"kind":"waste","date":"2025-03-28","item":"파베이크 폐기량","qty":55}
+{"kind":"waste","date":"2025-03-26","item":"파베이크 폐기량","qty":87}
+{"kind":"waste","date":"2025-03-25","item":"파베이크 폐기량","qty":37}
+{"kind":"waste","date":"2025-03-24","item":"파베이크 폐기량","qty":46}
+{"kind":"waste","date":"2025-03-21","item":"파베이크 폐기량","qty":75}
+{"kind":"waste","date":"2025-03-19","item":"파베이크 폐기량","qty":97}
+{"kind":"waste","date":"2025-03-18","item":"파베이크 폐기량","qty":49}
+{"kind":"waste","date":"2025-03-17","item":"파베이크 폐기량","qty":49}
+{"kind":"waste","date":"2025-03-14","item":"파베이크 폐기량","qty":32}
+{"kind":"waste","date":"2025-03-13","item":"파베이크 폐기량","qty":60}
+{"kind":"waste","date":"2025-03-12","item":"파베이크 폐기량","qty":74}
+{"kind":"waste","date":"2025-03-11","item":"파베이크 폐기량","qty":0}
+{"kind":"waste","date":"2025-03-11","item":"파베이크 폐기량","qty":110}
+{"kind":"waste","date":"2025-03-10","item":"파베이크 폐기량","qty":36}
+{"kind":"waste","date":"2025-03-07","item":"파베이크 폐기량","qty":45}
+{"kind":"waste","date":"2025-03-06","item":"파베이크 폐기량","qty":134}
+{"kind":"waste","date":"2025-03-05","item":"파베이크 폐기량","qty":123}
+{"kind":"waste","date":"2025-03-04","item":"파베이크 폐기량","qty":91}
+{"kind":"waste","date":"2025-02-28","item":"파베이크 폐기량","qty":24}
+{"kind":"waste","date":"2025-02-27","item":"파베이크 폐기량","qty":65}
+{"kind":"waste","date":"2025-02-26","item":"파베이크 폐기량","qty":55}
+{"kind":"waste","date":"2025-02-25","item":"파베이크 폐기량","qty":79}
+{"kind":"waste","date":"2025-02-24","item":"파베이크 폐기량","qty":131}
+{"kind":"waste","date":"2025-02-13","item":"파베이크 폐기량","qty":0}
+{"kind":"waste","date":"2025-02-11","item":"파베이크 폐기량","qty":272}
+{"kind":"waste","date":"2025-02-10","item":"파베이크 폐기량","qty":114}
+{"kind":"waste","date":"2025-02-05","item":"파베이크 폐기량","qty":70}
+{"kind":"waste","date":"2025-02-04","item":"파베이크 폐기량","qty":353}
+{"kind":"waste","date":"2025-02-03","item":"파베이크 폐기량","qty":78}
+{"kind":"waste","date":"2025-01-31","item":"파베이크 폐기량","qty":50}
+{"kind":"waste","date":"2025-01-21","item":"파베이크 폐기량","qty":20}
+{"kind":"waste","date":"2025-01-21","item":"파베이크 폐기량","qty":26}
+{"kind":"waste","date":"2025-01-20","item":"파베이크 폐기량","qty":60}
+{"kind":"waste","date":"2025-01-17","item":"파베이크 폐기량","qty":34}
+{"kind":"waste","date":"2025-01-16","item":"파베이크 폐기량","qty":97}
+{"kind":"waste","date":"2025-01-15","item":"파베이크 폐기량","qty":22}
+{"kind":"waste","date":"2025-01-14","item":"파베이크 폐기량","qty":41}
+{"kind":"waste","date":"2025-01-13","item":"파베이크 폐기량","qty":69}
+{"kind":"waste","date":"2025-01-08","item":"파베이크 폐기량","qty":43}
+{"kind":"waste","date":"2025-01-07","item":"파베이크 폐기량","qty":39}
+*도우폐기
+{"kind":"waste","date":"2025-12-31","waste_scope":"dough","item":"도우 폐기량","qty":18}
+{"kind":"waste","date":"2025-12-30","waste_scope":"dough","item":"도우 폐기량","qty":27}
+{"kind":"waste","date":"2025-12-29","waste_scope":"dough","item":"도우 폐기량","qty":13}
+{"kind":"waste","date":"2025-12-26","waste_scope":"dough","item":"도우 폐기량","qty":16}
+{"kind":"waste","date":"2025-12-24","waste_scope":"dough","item":"도우 폐기량","qty":8}
+{"kind":"waste","date":"2025-12-23","waste_scope":"dough","item":"도우 폐기량","qty":192}
+{"kind":"waste","date":"2025-12-22","waste_scope":"dough","item":"도우 폐기량","qty":8}
+{"kind":"waste","date":"2025-12-20","waste_scope":"dough","item":"도우 폐기량","qty":329}
+{"kind":"waste","date":"2025-12-19","waste_scope":"dough","item":"도우 폐기량","qty":0}
+{"kind":"waste","date":"2025-12-18","waste_scope":"dough","item":"도우 폐기량","qty":380}
+{"kind":"waste","date":"2025-12-17","waste_scope":"dough","item":"도우 폐기량","qty":12}
+{"kind":"waste","date":"2025-12-16","waste_scope":"dough","item":"도우 폐기량","qty":12}
+{"kind":"waste","date":"2025-12-15","waste_scope":"dough","item":"도우 폐기량","qty":10}
+{"kind":"waste","date":"2025-12-13","waste_scope":"dough","item":"도우 폐기량","qty":82}
+{"kind":"waste","date":"2025-12-12","waste_scope":"dough","item":"도우 폐기량","qty":223}
+{"kind":"waste","date":"2025-12-11","waste_scope":"dough","item":"도우 폐기량","qty":14}
+{"kind":"waste","date":"2025-12-10","waste_scope":"dough","item":"도우 폐기량","qty":18}
+{"kind":"waste","date":"2025-12-10","waste_scope":"dough","item":"도우 폐기량","qty":96}
+{"kind":"waste","date":"2025-12-08","waste_scope":"dough","item":"도우 폐기량","qty":109}
+{"kind":"waste","date":"2025-12-05","waste_scope":"dough","item":"도우 폐기량","qty":11}
+{"kind":"waste","date":"2025-12-04","waste_scope":"dough","item":"도우 폐기량","qty":11}
+{"kind":"waste","date":"2025-12-03","waste_scope":"dough","item":"도우 폐기량","qty":11}
+{"kind":"waste","date":"2025-12-02","waste_scope":"dough","item":"도우 폐기량","qty":113}
+{"kind":"waste","date":"2025-12-01","waste_scope":"dough","item":"도우 폐기량","qty":138}
+{"kind":"waste","date":"2025-11-28","waste_scope":"dough","item":"도우 폐기량","qty":24}
+{"kind":"waste","date":"2025-11-27","waste_scope":"dough","item":"도우 폐기량","qty":8}
+{"kind":"waste","date":"2025-11-26","waste_scope":"dough","item":"도우 폐기량","qty":11}
+{"kind":"waste","date":"2025-11-25","waste_scope":"dough","item":"도우 폐기량","qty":10}
+{"kind":"waste","date":"2025-11-24","waste_scope":"dough","item":"도우 폐기량","qty":260}
+{"kind":"waste","date":"2025-11-22","waste_scope":"dough","item":"도우 폐기량","qty":119}
+{"kind":"waste","date":"2025-11-21","waste_scope":"dough","item":"도우 폐기량","qty":106}
+{"kind":"waste","date":"2025-11-20","waste_scope":"dough","item":"도우 폐기량","qty":25}
+{"kind":"waste","date":"2025-11-19","waste_scope":"dough","item":"도우 폐기량","qty":15}
+{"kind":"waste","date":"2025-11-18","waste_scope":"dough","item":"도우 폐기량","qty":129}
+{"kind":"waste","date":"2025-11-17","waste_scope":"dough","item":"도우 폐기량","qty":22}
+{"kind":"waste","date":"2025-11-15","waste_scope":"dough","item":"도우 폐기량","qty":143}
+{"kind":"waste","date":"2025-11-14","waste_scope":"dough","item":"도우 폐기량","qty":118}
+{"kind":"waste","date":"2025-11-13","waste_scope":"dough","item":"도우 폐기량","qty":20}
+{"kind":"waste","date":"2025-11-12","waste_scope":"dough","item":"도우 폐기량","qty":12}
+{"kind":"waste","date":"2025-11-11","waste_scope":"dough","item":"도우 폐기량","qty":9}
+{"kind":"waste","date":"2025-11-10","waste_scope":"dough","item":"도우 폐기량","qty":161}
+{"kind":"waste","date":"2025-11-07","waste_scope":"dough","item":"도우 폐기량","qty":33}
+{"kind":"waste","date":"2025-11-06","waste_scope":"dough","item":"도우 폐기량","qty":16}
+{"kind":"waste","date":"2025-11-05","waste_scope":"dough","item":"도우 폐기량","qty":15}
+{"kind":"waste","date":"2025-11-04","waste_scope":"dough","item":"도우 폐기량","qty":18}
+{"kind":"waste","date":"2025-11-03","waste_scope":"dough","item":"도우 폐기량","qty":16}
+{"kind":"waste","date":"2025-11-01","waste_scope":"dough","item":"도우 폐기량","qty":135}
+{"kind":"waste","date":"2025-10-31","waste_scope":"dough","item":"도우 폐기량","qty":15}
+{"kind":"waste","date":"2025-10-30","waste_scope":"dough","item":"도우 폐기량","qty":23}
+{"kind":"waste","date":"2025-10-29","waste_scope":"dough","item":"도우 폐기량","qty":40}
+{"kind":"waste","date":"2025-10-28","waste_scope":"dough","item":"도우 폐기량","qty":31}
+{"kind":"waste","date":"2025-10-27","waste_scope":"dough","item":"도우 폐기량","qty":65}
+{"kind":"waste","date":"2025-10-25","waste_scope":"dough","item":"도우 폐기량","qty":62}
+{"kind":"waste","date":"2025-10-24","waste_scope":"dough","item":"도우 폐기량","qty":15}
+{"kind":"waste","date":"2025-10-23","waste_scope":"dough","item":"도우 폐기량","qty":32}
+{"kind":"waste","date":"2025-10-22","waste_scope":"dough","item":"도우 폐기량","qty":9}
+{"kind":"waste","date":"2025-10-21","waste_scope":"dough","item":"도우 폐기량","qty":21}
+{"kind":"waste","date":"2025-10-20","waste_scope":"dough","item":"도우 폐기량","qty":31}
+{"kind":"waste","date":"2025-10-17","waste_scope":"dough","item":"도우 폐기량","qty":87}
+{"kind":"waste","date":"2025-10-16","waste_scope":"dough","item":"도우 폐기량","qty":104}
+{"kind":"waste","date":"2025-10-15","waste_scope":"dough","item":"도우 폐기량","qty":20}
+{"kind":"waste","date":"2025-10-14","waste_scope":"dough","item":"도우 폐기량","qty":17}
+{"kind":"waste","date":"2025-10-13","waste_scope":"dough","item":"도우 폐기량","qty":16}
+{"kind":"waste","date":"2025-10-03","waste_scope":"dough","item":"도우 폐기량","qty":15}
+{"kind":"waste","date":"2025-10-02","waste_scope":"dough","item":"도우 폐기량","qty":10}
+{"kind":"waste","date":"2025-10-01","waste_scope":"dough","item":"도우 폐기량","qty":23}
+{"kind":"waste","date":"2025-09-30","waste_scope":"dough","item":"도우 폐기량","qty":15}
+{"kind":"waste","date":"2025-09-26","waste_scope":"dough","item":"도우 폐기량","qty":37}
+{"kind":"waste","date":"2025-09-25","waste_scope":"dough","item":"도우 폐기량","qty":36}
+{"kind":"waste","date":"2025-09-24","waste_scope":"dough","item":"도우 폐기량","qty":23}
+{"kind":"waste","date":"2025-09-23","waste_scope":"dough","item":"도우 폐기량","qty":17}
+{"kind":"waste","date":"2025-09-22","waste_scope":"dough","item":"도우 폐기량","qty":16}
+{"kind":"waste","date":"2025-09-20","waste_scope":"dough","item":"도우 폐기량","qty":81}
+{"kind":"waste","date":"2025-09-19","waste_scope":"dough","item":"도우 폐기량","qty":22}
+{"kind":"waste","date":"2025-09-18","waste_scope":"dough","item":"도우 폐기량","qty":5}
+{"kind":"waste","date":"2025-09-17","waste_scope":"dough","item":"도우 폐기량","qty":12}
+{"kind":"waste","date":"2025-09-16","waste_scope":"dough","item":"도우 폐기량","qty":14}
+{"kind":"waste","date":"2025-09-15","waste_scope":"dough","item":"도우 폐기량","qty":18}
+{"kind":"waste","date":"2025-09-12","waste_scope":"dough","item":"도우 폐기량","qty":21}
+{"kind":"waste","date":"2025-09-11","waste_scope":"dough","item":"도우 폐기량","qty":16}
+{"kind":"waste","date":"2025-09-10","waste_scope":"dough","item":"도우 폐기량","qty":28}
+{"kind":"waste","date":"2025-09-09","waste_scope":"dough","item":"도우 폐기량","qty":11}
+{"kind":"waste","date":"2025-09-08","waste_scope":"dough","item":"도우 폐기량","qty":28}
+{"kind":"waste","date":"2025-09-05","waste_scope":"dough","item":"도우 폐기량","qty":61}
+{"kind":"waste","date":"2025-09-04","waste_scope":"dough","item":"도우 폐기량","qty":6}
+{"kind":"waste","date":"2025-09-03","waste_scope":"dough","item":"도우 폐기량","qty":3}
+{"kind":"waste","date":"2025-09-02","waste_scope":"dough","item":"도우 폐기량","qty":6}
+{"kind":"waste","date":"2025-09-01","waste_scope":"dough","item":"도우 폐기량","qty":6}
+{"kind":"waste","date":"2025-08-30","waste_scope":"dough","item":"도우 폐기량","qty":119}
+{"kind":"waste","date":"2025-08-29","waste_scope":"dough","item":"도우 폐기량","qty":28}
+{"kind":"waste","date":"2025-08-28","waste_scope":"dough","item":"도우 폐기량","qty":11}
+{"kind":"waste","date":"2025-08-27","waste_scope":"dough","item":"도우 폐기량","qty":42}
+{"kind":"waste","date":"2025-08-26","waste_scope":"dough","item":"도우 폐기량","qty":33}
+{"kind":"waste","date":"2025-08-25","waste_scope":"dough","item":"도우 폐기량","qty":12}
+{"kind":"waste","date":"2025-08-23","waste_scope":"dough","item":"도우 폐기량","qty":99}
+{"kind":"waste","date":"2025-08-22","waste_scope":"dough","item":"도우 폐기량","qty":106}
+{"kind":"waste","date":"2025-08-21","waste_scope":"dough","item":"도우 폐기량","qty":19}
+{"kind":"waste","date":"2025-08-20","waste_scope":"dough","item":"도우 폐기량","qty":95}
+{"kind":"waste","date":"2025-08-19","waste_scope":"dough","item":"도우 폐기량","qty":19}
+{"kind":"waste","date":"2025-08-18","waste_scope":"dough","item":"도우 폐기량","qty":137}
+{"kind":"waste","date":"2025-08-14","waste_scope":"dough","item":"도우 폐기량","qty":24}
+{"kind":"waste","date":"2025-08-13","waste_scope":"dough","item":"도우 폐기량","qty":15}
+{"kind":"waste","date":"2025-08-12","waste_scope":"dough","item":"도우 폐기량","qty":31}
+{"kind":"waste","date":"2025-08-11","waste_scope":"dough","item":"도우 폐기량","qty":32}
+{"kind":"waste","date":"2025-08-08","waste_scope":"dough","item":"도우 폐기량","qty":147}
+{"kind":"waste","date":"2025-08-07","waste_scope":"dough","item":"도우 폐기량","qty":84}
+{"kind":"waste","date":"2025-08-06","waste_scope":"dough","item":"도우 폐기량","qty":57}
+{"kind":"waste","date":"2025-08-05","waste_scope":"dough","item":"도우 폐기량","qty":53}
+{"kind":"waste","date":"2025-08-04","waste_scope":"dough","item":"도우 폐기량","qty":24}
+{"kind":"waste","date":"2025-08-01","waste_scope":"dough","item":"도우 폐기량","qty":29}
+{"kind":"waste","date":"2025-07-31","waste_scope":"dough","item":"도우 폐기량","qty":41}
+{"kind":"waste","date":"2025-07-30","waste_scope":"dough","item":"도우 폐기량","qty":25}
+{"kind":"waste","date":"2025-07-29","waste_scope":"dough","item":"도우 폐기량","qty":18}
+{"kind":"waste","date":"2025-07-28","waste_scope":"dough","item":"도우 폐기량","qty":18}
+{"kind":"waste","date":"2025-07-25","waste_scope":"dough","item":"도우 폐기량","qty":2632}
+{"kind":"waste","date":"2025-07-24","waste_scope":"dough","item":"도우 폐기량","qty":49}
+{"kind":"waste","date":"2025-07-23","waste_scope":"dough","item":"도우 폐기량","qty":34}
+{"kind":"waste","date":"2025-07-18","waste_scope":"dough","item":"도우 폐기량","qty":49}
+{"kind":"waste","date":"2025-07-17","waste_scope":"dough","item":"도우 폐기량","qty":31}
+{"kind":"waste","date":"2025-07-16","waste_scope":"dough","item":"도우 폐기량","qty":24}
+{"kind":"waste","date":"2025-07-15","waste_scope":"dough","item":"도우 폐기량","qty":42}
+{"kind":"waste","date":"2025-07-14","waste_scope":"dough","item":"도우 폐기량","qty":115}
+{"kind":"waste","date":"2025-07-11","waste_scope":"dough","item":"도우 폐기량","qty":111}
+{"kind":"waste","date":"2025-07-10","waste_scope":"dough","item":"도우 폐기량","qty":336}
+{"kind":"waste","date":"2025-07-08","waste_scope":"dough","item":"도우 폐기량","qty":90}
+{"kind":"waste","date":"2025-07-07","waste_scope":"dough","item":"도우 폐기량","qty":138}
+{"kind":"waste","date":"2025-07-04","waste_scope":"dough","item":"도우 폐기량","qty":59}
+{"kind":"waste","date":"2025-07-03","waste_scope":"dough","item":"도우 폐기량","qty":23}
+{"kind":"waste","date":"2025-07-02","waste_scope":"dough","item":"도우 폐기량","qty":28}
+{"kind":"waste","date":"2025-07-01","waste_scope":"dough","item":"도우 폐기량","qty":21}
+{"kind":"waste","date":"2025-06-30","waste_scope":"dough","item":"도우 폐기량","qty":21}
+{"kind":"waste","date":"2025-06-27","waste_scope":"dough","item":"도우 폐기량","qty":19}
+{"kind":"waste","date":"2025-06-26","waste_scope":"dough","item":"도우 폐기량","qty":19}
+{"kind":"waste","date":"2025-06-25","waste_scope":"dough","item":"도우 폐기량","qty":6}
+{"kind":"waste","date":"2025-06-24","waste_scope":"dough","item":"도우 폐기량","qty":81}
+{"kind":"waste","date":"2025-06-23","waste_scope":"dough","item":"도우 폐기량","qty":15}
+{"kind":"waste","date":"2025-06-20","waste_scope":"dough","item":"도우 폐기량","qty":15}
+{"kind":"waste","date":"2025-06-19","waste_scope":"dough","item":"도우 폐기량","qty":15}
+{"kind":"waste","date":"2025-06-18","waste_scope":"dough","item":"도우 폐기량","qty":68}
+{"kind":"waste","date":"2025-06-17","waste_scope":"dough","item":"도우 폐기량","qty":71}
+{"kind":"waste","date":"2025-06-16","waste_scope":"dough","item":"도우 폐기량","qty":35}
+{"kind":"waste","date":"2025-06-13","waste_scope":"dough","item":"도우 폐기량","qty":13}
+{"kind":"waste","date":"2025-06-11","waste_scope":"dough","item":"도우 폐기량","qty":11}
+{"kind":"waste","date":"2025-06-10","waste_scope":"dough","item":"도우 폐기량","qty":20}
+{"kind":"waste","date":"2025-06-09","waste_scope":"dough","item":"도우 폐기량","qty":0}
+{"kind":"waste","date":"2025-06-05","waste_scope":"dough","item":"도우 폐기량","qty":27}
+{"kind":"waste","date":"2025-06-04","waste_scope":"dough","item":"도우 폐기량","qty":19}
+{"kind":"waste","date":"2025-06-02","waste_scope":"dough","item":"도우 폐기량","qty":24}
+{"kind":"waste","date":"2025-05-30","waste_scope":"dough","item":"도우 폐기량","qty":20}
+{"kind":"waste","date":"2025-05-29","waste_scope":"dough","item":"도우 폐기량","qty":32}
+{"kind":"waste","date":"2025-05-28","waste_scope":"dough","item":"도우 폐기량","qty":46}
+{"kind":"waste","date":"2025-05-27","waste_scope":"dough","item":"도우 폐기량","qty":107}
+{"kind":"waste","date":"2025-05-26","waste_scope":"dough","item":"도우 폐기량","qty":275}
+{"kind":"waste","date":"2025-05-23","waste_scope":"dough","item":"도우 폐기량","qty":10}
+{"kind":"waste","date":"2025-05-22","waste_scope":"dough","item":"도우 폐기량","qty":11}
+{"kind":"waste","date":"2025-05-21","waste_scope":"dough","item":"도우 폐기량","qty":40}
+{"kind":"waste","date":"2025-05-20","waste_scope":"dough","item":"도우 폐기량","qty":4}
+{"kind":"waste","date":"2025-05-19","waste_scope":"dough","item":"도우 폐기량","qty":9}
+{"kind":"waste","date":"2025-05-15","waste_scope":"dough","item":"도우 폐기량","qty":15}
+{"kind":"waste","date":"2025-05-14","waste_scope":"dough","item":"도우 폐기량","qty":10}
+{"kind":"waste","date":"2025-05-13","waste_scope":"dough","item":"도우 폐기량","qty":0}
+{"kind":"waste","date":"2025-05-13","waste_scope":"dough","item":"도우 폐기량","qty":0}
+{"kind":"waste","date":"2025-05-08","waste_scope":"dough","item":"도우 폐기량","qty":8}
+{"kind":"waste","date":"2025-05-07","waste_scope":"dough","item":"도우 폐기량","qty":9}
+{"kind":"waste","date":"2025-05-02","waste_scope":"dough","item":"도우 폐기량","qty":7}
+{"kind":"waste","date":"2025-04-30","waste_scope":"dough","item":"도우 폐기량","qty":20}
+{"kind":"waste","date":"2025-04-29","waste_scope":"dough","item":"도우 폐기량","qty":16}
+{"kind":"waste","date":"2025-04-28","waste_scope":"dough","item":"도우 폐기량","qty":40}
+{"kind":"waste","date":"2025-04-25","waste_scope":"dough","item":"도우 폐기량","qty":163}
+{"kind":"waste","date":"2025-04-24","waste_scope":"dough","item":"도우 폐기량","qty":110}
+{"kind":"waste","date":"2025-04-23","waste_scope":"dough","item":"도우 폐기량","qty":24}
+{"kind":"waste","date":"2025-04-22","waste_scope":"dough","item":"도우 폐기량","qty":16}
+{"kind":"waste","date":"2025-04-21","waste_scope":"dough","item":"도우 폐기량","qty":45}
+{"kind":"waste","date":"2025-04-18","waste_scope":"dough","item":"도우 폐기량","qty":15}
+{"kind":"waste","date":"2025-04-17","waste_scope":"dough","item":"도우 폐기량","qty":45}
+{"kind":"waste","date":"2025-04-16","waste_scope":"dough","item":"도우 폐기량","qty":44}
+{"kind":"waste","date":"2025-04-15","waste_scope":"dough","item":"도우 폐기량","qty":17}
+{"kind":"waste","date":"2025-04-14","waste_scope":"dough","item":"도우 폐기량","qty":13}
+{"kind":"waste","date":"2025-04-11","waste_scope":"dough","item":"도우 폐기량","qty":18}
+{"kind":"waste","date":"2025-04-10","waste_scope":"dough","item":"도우 폐기량","qty":32}
+{"kind":"waste","date":"2025-04-09","waste_scope":"dough","item":"도우 폐기량","qty":13}
+{"kind":"waste","date":"2025-04-08","waste_scope":"dough","item":"도우 폐기량","qty":22}
+{"kind":"waste","date":"2025-04-07","waste_scope":"dough","item":"도우 폐기량","qty":21}
+{"kind":"waste","date":"2025-04-04","waste_scope":"dough","item":"도우 폐기량","qty":15}
+{"kind":"waste","date":"2025-04-03","waste_scope":"dough","item":"도우 폐기량","qty":22}
+{"kind":"waste","date":"2025-04-02","waste_scope":"dough","item":"도우 폐기량","qty":11}
+{"kind":"waste","date":"2025-04-01","waste_scope":"dough","item":"도우 폐기량","qty":12}
+{"kind":"waste","date":"2025-03-31","waste_scope":"dough","item":"도우 폐기량","qty":10}
+{"kind":"waste","date":"2025-03-28","waste_scope":"dough","item":"도우 폐기량","qty":35}
+{"kind":"waste","date":"2025-03-27","waste_scope":"dough","item":"도우 폐기량","qty":49}
+{"kind":"waste","date":"2025-03-26","waste_scope":"dough","item":"도우 폐기량","qty":38}
+{"kind":"waste","date":"2025-03-25","waste_scope":"dough","item":"도우 폐기량","qty":12}
+{"kind":"waste","date":"2025-03-24","waste_scope":"dough","item":"도우 폐기량","qty":14}
+{"kind":"waste","date":"2025-03-21","waste_scope":"dough","item":"도우 폐기량","qty":9}
+{"kind":"waste","date":"2025-03-19","waste_scope":"dough","item":"도우 폐기량","qty":22}
+{"kind":"waste","date":"2025-03-18","waste_scope":"dough","item":"도우 폐기량","qty":14}
+{"kind":"waste","date":"2025-03-17","waste_scope":"dough","item":"도우 폐기량","qty":11}
+{"kind":"waste","date":"2025-03-14","waste_scope":"dough","item":"도우 폐기량","qty":10}
+{"kind":"waste","date":"2025-03-13","waste_scope":"dough","item":"도우 폐기량","qty":151}
+{"kind":"waste","date":"2025-03-12","waste_scope":"dough","item":"도우 폐기량","qty":8}
+{"kind":"waste","date":"2025-03-11","waste_scope":"dough","item":"도우 폐기량","qty":14}
+{"kind":"waste","date":"2025-03-10","waste_scope":"dough","item":"도우 폐기량","qty":6}
+{"kind":"waste","date":"2025-03-07","waste_scope":"dough","item":"도우 폐기량","qty":21}
+{"kind":"waste","date":"2025-03-06","waste_scope":"dough","item":"도우 폐기량","qty":28}
+{"kind":"waste","date":"2025-03-05","waste_scope":"dough","item":"도우 폐기량","qty":5}
+{"kind":"waste","date":"2025-03-04","waste_scope":"dough","item":"도우 폐기량","qty":16}
+{"kind":"waste","date":"2025-02-28","waste_scope":"dough","item":"도우 폐기량","qty":12}
+{"kind":"waste","date":"2025-02-27","waste_scope":"dough","item":"도우 폐기량","qty":26}
+{"kind":"waste","date":"2025-02-26","waste_scope":"dough","item":"도우 폐기량","qty":10}
+{"kind":"waste","date":"2025-02-25","waste_scope":"dough","item":"도우 폐기량","qty":9}
+{"kind":"waste","date":"2025-02-24","waste_scope":"dough","item":"도우 폐기량","qty":19}
+{"kind":"waste","date":"2025-02-11","waste_scope":"dough","item":"도우 폐기량","qty":198}
+{"kind":"waste","date":"2025-02-10","waste_scope":"dough","item":"도우 폐기량","qty":27}
+{"kind":"waste","date":"2025-02-07","waste_scope":"dough","item":"도우 폐기량","qty":353}
+{"kind":"waste","date":"2025-02-06","waste_scope":"dough","item":"도우 폐기량","qty":139}
+{"kind":"waste","date":"2025-02-05","waste_scope":"dough","item":"도우 폐기량","qty":23}
+{"kind":"waste","date":"2025-02-04","waste_scope":"dough","item":"도우 폐기량","qty":59}
+{"kind":"waste","date":"2025-02-03","waste_scope":"dough","item":"도우 폐기량","qty":57}
+{"kind":"waste","date":"2025-01-31","waste_scope":"dough","item":"도우 폐기량","qty":12}
+{"kind":"waste","date":"2025-01-22","waste_scope":"dough","item":"도우 폐기량","qty":2582}
+{"kind":"waste","date":"2025-01-21","waste_scope":"dough","item":"도우 폐기량","qty":24}
+{"kind":"waste","date":"2025-01-20","waste_scope":"dough","item":"도우 폐기량","qty":38}
+{"kind":"waste","date":"2025-01-17","waste_scope":"dough","item":"도우 폐기량","qty":19}
+{"kind":"waste","date":"2025-01-16","waste_scope":"dough","item":"도우 폐기량","qty":22}
+{"kind":"waste","date":"2025-01-15","waste_scope":"dough","item":"도우 폐기량","qty":18}
+{"kind":"waste","date":"2025-01-14","waste_scope":"dough","item":"도우 폐기량","qty":4}
+{"kind":"waste","date":"2025-01-13","waste_scope":"dough","item":"도우 폐기량","qty":13}
+{"kind":"waste","date":"2025-01-08","waste_scope":"dough","item":"도우 폐기량","qty":3}
+{"kind":"waste","date":"2025-01-07","waste_scope":"dough","item":"도우 폐기량","qty":12}
+{"kind":"waste","date":"2025-01-02","waste_scope":"dough","item":"도우 폐기량","qty":1977}

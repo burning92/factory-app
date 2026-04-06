@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { KeyRound, LogOut, User } from "lucide-react";
+import { KeyRound, LayoutDashboard, LogOut, User } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 const LINK_ITEMS = [
   { href: "/account/change-password", label: "비밀번호 변경", Icon: KeyRound },
@@ -11,11 +12,27 @@ const LINK_ITEMS = [
 const COMING_ITEMS = [{ label: "개인정보 변경", Icon: User }] as const;
 
 export default function AccountHubPage() {
+  const { profile, viewOrganizationCode } = useAuth();
+  const showExecutive =
+    (profile?.role === "admin" || profile?.role === "manager") &&
+    viewOrganizationCode !== "200";
+
   return (
     <div className="min-h-[calc(100vh-3.5rem)] md:min-h-0 p-4 md:p-6 max-w-2xl mx-auto">
       <h1 className="text-lg font-semibold text-slate-100 mb-1">계정</h1>
       <p className="text-slate-500 text-sm mb-4">비밀번호·로그아웃·개인정보</p>
       <ul className="flex flex-col gap-2">
+        {showExecutive && (
+          <li>
+            <Link
+              href="/executive"
+              className="flex items-center gap-3 w-full p-4 rounded-xl border border-cyan-500/25 bg-cyan-950/20 hover:bg-cyan-900/25 text-slate-100 transition-colors"
+            >
+              <LayoutDashboard className="w-5 h-5 shrink-0 text-cyan-400/90" strokeWidth={1.8} />
+              <span className="font-medium">대시보드</span>
+            </Link>
+          </li>
+        )}
         {LINK_ITEMS.map(({ href, label, Icon }) => (
           <li key={href}>
             <Link

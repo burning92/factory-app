@@ -18,7 +18,8 @@ function isHarangBlockedPath(pathname: string): boolean {
     pathname.startsWith("/history/") ||
     pathname.startsWith("/inventory") ||
     pathname.startsWith("/materials") ||
-    pathname.startsWith("/journal")
+    pathname.startsWith("/journal") ||
+    pathname.startsWith("/executive")
   );
 }
 
@@ -89,13 +90,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     router.replace("/");
     return null;
   }
+  const isExecutivePage = pathname.startsWith("/executive");
+  if (
+    isExecutivePage &&
+    profile?.role !== "admin" &&
+    profile?.role !== "manager"
+  ) {
+    router.replace("/");
+    return null;
+  }
 
   const showTabBar = true;
 
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      <main className="flex-1 w-full bg-space-900 pb-16 md:pb-0 print:pb-0">{children}</main>
+      <main className="relative z-0 flex-1 w-full bg-space-900 pb-16 md:pb-0 print:pb-0">
+        {children}
+      </main>
       {showTabBar && <MobileTabBar />}
     </div>
   );
