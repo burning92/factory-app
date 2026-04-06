@@ -304,13 +304,13 @@ export function mergeBundleDaysWithManualImportsForTable(
 ): { rows: WasteDetailMockDayRow[]; filledManualDates: string[] } {
   const bundleByDate = new Map(bundleDays.map((d) => [d.date, d]));
   const allDates = new Set<string>();
-  for (const d of bundleByDate.keys()) allDates.add(d);
+  for (const day of bundleDays) allDates.add(day.date);
   for (const d of Object.keys(manual.doughProductionByDate)) allDates.add(d);
   for (const d of Object.keys(manual.doughWasteByDate)) allDates.add(d);
   for (const d of Object.keys(manual.parbakeWasteByDate)) allDates.add(d);
 
   const filledManualDates: string[] = [];
-  const rows = [...allDates]
+  const rows = Array.from(allDates)
     .sort()
     .map((date) => {
       const b = bundleByDate.get(date);
