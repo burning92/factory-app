@@ -161,6 +161,21 @@ export default function DailyManufacturingEquipmentViewPage() {
       </div>
       <h1 className="text-lg font-semibold text-slate-100 mb-1">제조설비 점검표 — 상세</h1>
 
+      <div className="flex flex-wrap gap-2 mb-4">
+        <Link
+          href="/daily/manufacturing-equipment/incident/new"
+          className="inline-flex items-center rounded-lg border border-amber-600/40 bg-amber-950/25 px-3 py-2 text-sm font-medium text-amber-200 hover:bg-amber-950/40"
+        >
+          설비 이상 등록
+        </Link>
+        <Link
+          href="/daily/manufacturing-equipment/incidents"
+          className="inline-flex items-center rounded-lg border border-cyan-500/35 bg-cyan-950/20 px-3 py-2 text-sm font-medium text-cyan-200 hover:bg-cyan-950/35"
+        >
+          설비 이상 이력
+        </Link>
+      </div>
+
       {header.status === "approved" && (
         <div className="mb-4 px-4 py-3 rounded-lg bg-emerald-900/20 border border-emerald-700/50 text-emerald-200 text-sm font-medium">
           승인 완료

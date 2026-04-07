@@ -111,6 +111,12 @@ export default function DailyManufacturingEquipmentListPage() {
             설비 이상 등록
           </Link>
           <Link
+            href="/daily/manufacturing-equipment/incidents"
+            className="shrink-0 inline-flex items-center justify-center px-4 py-2.5 rounded-lg border border-cyan-500/35 bg-cyan-950/20 text-cyan-200 font-medium text-sm hover:bg-cyan-950/35"
+          >
+            설비 이상 이력
+          </Link>
+          <Link
             href="/daily/manufacturing-equipment/new"
             className="shrink-0 inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-sm"
           >

@@ -221,3 +221,248 @@ export async function loadRecentIncidentsForEquipment(
   if (error || !data) return [];
   return data as EquipmentIncidentRow[];
 }
+
+/** 목록 필터 */
+export type EquipmentIncidentListFilters = {
+  equipment: "all" | EquipmentIncidentEquipment;
+  incidentType: "all" | EquipmentIncidentType;
+  actionStatus: "all" | EquipmentActionStatus;
+  productionImpact: "all" | "yes" | "no";
+};
+
+export function sourceTypeLabel(source: EquipmentIncidentSource): string {
+  return source === "manual" ? "직접 등록" : "점검표 연동";
+}
+
+export function productionImpactLabel(has: boolean): string {
+  return has ? "생산영향 있음" : "생산영향 없음";
+}
+
+export async function listEquipmentIncidents(
+  supabase: SupabaseClient,
+  organizationCode: string,
+  filters: EquipmentIncidentListFilters
+): Promise<EquipmentIncidentRow[]> {
+  let q = supabase
+    .from("equipment_incidents")
+    .select("*")
+    .eq("organization_code", organizationCode)
+    .order("occurred_at", { ascending: false });
+
+  if (filters.equipment !== "all") {
+    q = q.eq("equipment_name", filters.equipment);
+  }
+  if (filters.incidentType !== "all") {
+    q = q.eq("incident_type", filters.incidentType);
+  }
+  if (filters.actionStatus !== "all") {
+    q = q.eq("action_status", filters.actionStatus);
+  }
+  if (filters.productionImpact === "yes") {
+    q = q.eq("has_production_impact", true);
+  } else if (filters.productionImpact === "no") {
+    q = q.eq("has_production_impact", false);
+  }
+
+  const { data, error } = await q;
+  if (error) {
+    console.warn("listEquipmentIncidents:", error.message);
+    return [];
+  }
+  return (data ?? []) as EquipmentIncidentRow[];
+}
+
+export async function getEquipmentIncidentById(
+  supabase: SupabaseClient,
+  id: string,
+  organizationCode: string
+): Promise<{ row: EquipmentIncidentRow | null; error: Error | null }> {
+  const { data, error } = await supabase
+    .from("equipment_incidents")
+    .select("*")
+    .eq("id", id)
+    .eq("organization_code", organizationCode)
+    .maybeSingle();
+
+  if (error) return { row: null, error: new Error(error.message) };
+  return { row: (data as EquipmentIncidentRow) ?? null, error: null };
+}
+
+/** 점검표 연동 건에서 API/서버가 허용하는 수정 필드만 */
+export type EquipmentIncidentLinkedPatch = {
+  has_production_impact: boolean;
+  action_status: EquipmentActionStatus;
+  resumed_at: string | null;
+  notes: string | null;
+};
+
+/** 직접 등록 건 전체 수정 페이로드 */
+export type EquipmentIncidentManualPatch = {
+  equipment_name: EquipmentIncidentEquipment;
+  equipment_custom_name: string | null;
+  occurred_at: string;
+  incident_type: EquipmentIncidentType;
+  symptom_type: EquipmentSymptomType;
+  symptom_other: string | null;
+  detail: string;
+  has_production_impact: boolean;
+  action_status: EquipmentActionStatus;
+  resumed_at: string | null;
+  notes: string | null;
+};
+
+export function parseEquipmentIncidentManualPatch(
+  body: Record<string, unknown>
+): { patch: EquipmentIncidentManualPatch | null; error: string | null } {
+  const equipment_name = body.equipment_name;
+  const incident_type = body.incident_type;
+  const symptom_type = body.symptom_type;
+  const detail = body.detail;
+  if (
+    equipment_name !== "화덕" &&
+    equipment_name !== "호이스트" &&
+    equipment_name !== "기타"
+  ) {
+    return { patch: null, error: "설비명이 올바르지 않습니다." };
+  }
+  if (incident_type !== "이상" && incident_type !== "고장" && incident_type !== "가동중지") {
+    return { patch: null, error: "구분이 올바르지 않습니다." };
+  }
+  if (
+    symptom_type !== "소음" &&
+    symptom_type !== "작동불량" &&
+    symptom_type !== "체인 이상" &&
+    symptom_type !== "버튼 불량" &&
+    symptom_type !== "기타"
+  ) {
+    return { patch: null, error: "증상 유형이 올바르지 않습니다." };
+  }
+  if (typeof detail !== "string" || !String(detail).trim()) {
+    return { patch: null, error: "상세내용이 필요합니다." };
+  }
+  const action_status = body.action_status;
+  if (
+    action_status !== "확인중" &&
+    action_status !== "수리요청" &&
+    action_status !== "수리중" &&
+    action_status !== "조치완료"
+  ) {
+    return { patch: null, error: "조치상태가 올바르지 않습니다." };
+  }
+  const has_pi = body.has_production_impact;
+  if (typeof has_pi !== "boolean") {
+    return { patch: null, error: "생산영향 여부가 필요합니다." };
+  }
+  const occurredRaw = body.occurred_at;
+  if (typeof occurredRaw !== "string" || !occurredRaw) {
+    return { patch: null, error: "발생일시가 필요합니다." };
+  }
+  const occurred_at = new Date(occurredRaw).toISOString();
+  let resumed_at: string | null = null;
+  if (body.resumed_at != null && body.resumed_at !== "") {
+    if (typeof body.resumed_at !== "string") return { patch: null, error: "재가동일시 형식 오류" };
+    resumed_at = new Date(body.resumed_at).toISOString();
+  }
+  const ec =
+    equipment_name === "기타"
+      ? typeof body.equipment_custom_name === "string"
+        ? body.equipment_custom_name.trim() || null
+        : null
+      : null;
+  if (equipment_name === "기타" && !ec) {
+    return { patch: null, error: "기타 설비명을 입력해 주세요." };
+  }
+  const so =
+    symptom_type === "기타"
+      ? typeof body.symptom_other === "string"
+        ? body.symptom_other.trim() || null
+        : null
+      : null;
+  if (symptom_type === "기타" && !so) {
+    return { patch: null, error: "기타 증상을 입력해 주세요." };
+  }
+  const notes =
+    body.notes == null || body.notes === ""
+      ? null
+      : typeof body.notes === "string"
+        ? body.notes.trim() || null
+        : null;
+
+  return {
+    patch: {
+      equipment_name,
+      equipment_custom_name: ec,
+      occurred_at,
+      incident_type,
+      symptom_type,
+      symptom_other: so,
+      detail: String(detail).trim(),
+      has_production_impact: has_pi,
+      action_status,
+      resumed_at,
+      notes,
+    },
+    error: null,
+  };
+}
+
+export function parseEquipmentIncidentLinkedPatch(
+  body: Record<string, unknown>
+): { patch: EquipmentIncidentLinkedPatch | null; error: string | null } {
+  const action_status = body.action_status;
+  if (
+    action_status !== "확인중" &&
+    action_status !== "수리요청" &&
+    action_status !== "수리중" &&
+    action_status !== "조치완료"
+  ) {
+    return { patch: null, error: "조치상태가 올바르지 않습니다." };
+  }
+  const has_pi = body.has_production_impact;
+  if (typeof has_pi !== "boolean") {
+    return { patch: null, error: "생산영향 여부가 필요합니다." };
+  }
+  let resumed_at: string | null = null;
+  if (body.resumed_at != null && body.resumed_at !== "") {
+    if (typeof body.resumed_at !== "string") return { patch: null, error: "재가동일시 형식 오류" };
+    resumed_at = new Date(body.resumed_at).toISOString();
+  }
+  const notes =
+    body.notes == null || body.notes === ""
+      ? null
+      : typeof body.notes === "string"
+        ? body.notes.trim() || null
+        : null;
+
+  return {
+    patch: {
+      has_production_impact: has_pi,
+      action_status,
+      resumed_at,
+      notes,
+    },
+    error: null,
+  };
+}
+
+/** linked 건 페이로드에 금지 필드가 섞였는지 검사 */
+export function assertNoForbiddenKeysForLinkedPatch(body: Record<string, unknown>): string | null {
+  const forbidden = [
+    "equipment_name",
+    "equipment_custom_name",
+    "occurred_at",
+    "incident_type",
+    "symptom_type",
+    "symptom_other",
+    "detail",
+    "source_type",
+    "linked_inspection_id",
+    "linked_inspection_item_id",
+  ];
+  for (const k of forbidden) {
+    if (k in body && body[k] !== undefined) {
+      return `점검표 연동 건은 ${k} 를 변경할 수 없습니다.`;
+    }
+  }
+  return null;
+}

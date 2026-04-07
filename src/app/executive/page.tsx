@@ -1130,6 +1130,12 @@ export default function ExecutiveDashboardPage() {
             >
               설비 이상 등록
             </Link>
+            <Link
+              href="/daily/manufacturing-equipment/incidents"
+              className="whitespace-nowrap rounded-lg border border-cyan-500/35 bg-cyan-950/20 px-3 py-2 text-center text-sm font-medium text-cyan-200 hover:bg-cyan-950/35"
+            >
+              설비 이상 이력
+            </Link>
             <Link href="/executive/equipment" className={dashCardDetailLink}>
               상세보기 →
             </Link>

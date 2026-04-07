@@ -72,7 +72,7 @@ export function EquipmentIncidentForm() {
     try {
       const occurredIso = new Date(occurredAt).toISOString();
       const resumedIso = resumedAt.trim() ? new Date(resumedAt).toISOString() : null;
-      const { error } = await insertEquipmentIncident(supabase, {
+      const { id: newId, error } = await insertEquipmentIncident(supabase, {
         organization_code: orgCode,
         equipment_name: equipment,
         equipment_custom_name: equipment === "기타" ? equipmentOther.trim() : null,
@@ -91,7 +91,11 @@ export function EquipmentIncidentForm() {
       });
       if (error) throw error;
       setToast({ message: "등록되었습니다." });
-      setTimeout(() => router.push("/daily/manufacturing-equipment"), 800);
+      if (newId) {
+        setTimeout(() => router.push(`/daily/manufacturing-equipment/incidents/${newId}`), 500);
+      } else {
+        setTimeout(() => router.push("/daily/manufacturing-equipment/incidents"), 800);
+      }
     } catch (e) {
       setToast({ message: e instanceof Error ? e.message : String(e), error: true });
     } finally {
@@ -129,7 +133,11 @@ export function EquipmentIncidentForm() {
           제조설비 점검표
         </Link>
         <span className="text-slate-600">/</span>
-        <span className="text-slate-200 font-medium">설비 이상 등록</span>
+        <Link href="/daily/manufacturing-equipment/incidents" className="text-slate-400 hover:text-slate-200">
+          설비 이상 이력
+        </Link>
+        <span className="text-slate-600">/</span>
+        <span className="text-slate-200 font-medium">등록</span>
       </div>
 
       <h1 className="text-lg font-semibold text-slate-100 mb-1">설비 이상 등록</h1>

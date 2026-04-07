@@ -73,12 +73,20 @@ export default function ExecutiveEquipmentDetailPage() {
           <h1 className="text-lg font-semibold text-slate-100 mb-1">제조설비 점검 상세</h1>
           <p className="text-slate-500 text-sm">최근 7일 · 승인된 일지 중 부적합(X) 항목과 주요 설비 이상 이력</p>
         </div>
-        <Link
-          href="/daily/manufacturing-equipment/incident/new"
-          className="shrink-0 rounded-lg border border-amber-600/40 bg-amber-950/30 px-3 py-2 text-sm font-medium text-amber-200 hover:bg-amber-950/50"
-        >
-          설비 이상 등록
-        </Link>
+        <div className="flex flex-wrap gap-2 justify-end">
+          <Link
+            href="/daily/manufacturing-equipment/incident/new"
+            className="shrink-0 rounded-lg border border-amber-600/40 bg-amber-950/30 px-3 py-2 text-sm font-medium text-amber-200 hover:bg-amber-950/50"
+          >
+            설비 이상 등록
+          </Link>
+          <Link
+            href="/daily/manufacturing-equipment/incidents"
+            className="shrink-0 rounded-lg border border-cyan-500/35 bg-cyan-950/25 px-3 py-2 text-sm font-medium text-cyan-200 hover:bg-cyan-950/40"
+          >
+            설비 이상 이력
+          </Link>
+        </div>
       </div>
 
       {majorStats && lastInspection && (
