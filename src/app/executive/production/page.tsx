@@ -41,7 +41,7 @@ function numericCellClass(n: number, opts?: { totalCol?: boolean }): string {
 export default function ExecutiveProductionDetailPage() {
   const router = useRouter();
   const { profile, loading: authLoading } = useAuth();
-  const canView = profile?.role === "admin" || profile?.role === "manager";
+  const canView = !!profile;
 
   const materials = useMasterStore((s) => s.materials);
   const bomList = useMasterStore((s) => s.bomList);

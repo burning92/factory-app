@@ -12,10 +12,8 @@ const LINK_ITEMS = [
 const COMING_ITEMS = [{ label: "개인정보 변경", Icon: User }] as const;
 
 export default function AccountHubPage() {
-  const { profile, viewOrganizationCode } = useAuth();
-  const showExecutive =
-    (profile?.role === "admin" || profile?.role === "manager") &&
-    viewOrganizationCode !== "200";
+  const { viewOrganizationCode } = useAuth();
+  const showExecutive = viewOrganizationCode !== "200";
 
   return (
     <div className="min-h-[calc(100vh-3.5rem)] md:min-h-0 p-4 md:p-6 max-w-2xl mx-auto">

@@ -79,8 +79,8 @@ export default function Header() {
   const effectiveLogoUrl = viewIsHarang ? HARANG_PEOPLE_ICON_SRC : ARMORED_LOGO_SRC;
   const primaryColor = uiSettings?.primary_color?.trim() || "#06b6d4";
   const isAdmin = profile?.role === "admin";
-  const isManager = profile?.role === "manager";
-  const showExecutiveLink = (isAdmin || isManager) && !viewIsHarang;
+  /** 임원 대시보드: 로그인 사용자 전원(100 조직 보기 시) */
+  const showExecutiveLink = !viewIsHarang;
 
 
   /** 데스크탑 상단 카테고리: 100 = 생산/원부자재/데일리/계정, 200 = 홈/계정만 */

@@ -9,7 +9,8 @@ import { DashboardBackLink } from "../DashboardBackLink";
 export default function ExecutiveEcountImportPage() {
   const router = useRouter();
   const { profile, loading: authLoading } = useAuth();
-  const canView = profile?.role === "admin" || profile?.role === "manager";
+  const canView = !!profile;
+  const canPaste = profile?.role === "admin" || profile?.role === "manager";
 
   const [paste, setPaste] = useState("");
   const [dateFrom, setDateFrom] = useState("2024-01-02");
@@ -27,6 +28,10 @@ export default function ExecutiveEcountImportPage() {
     e.preventDefault();
     setMessage(null);
     setError(null);
+    if (!canPaste) {
+      setError("이카운트 붙여넣기 저장은 관리자·매니저만 사용할 수 있습니다.");
+      return;
+    }
     if (!paste.trim()) {
       setError("붙여넣기 내용이 비어 있습니다.");
       return;
@@ -77,6 +82,12 @@ export default function ExecutiveEcountImportPage() {
         프로젝트 폴더에 파일을 넣을 필요는 없습니다. 엑셀에서 이카운트 자료 영역을 복사한 뒤 아래에
         붙여 넣으면 됩니다. 파일 이름도 따로 정할 필요 없습니다.
       </p>
+      {!canPaste && (
+        <p className="text-sm text-amber-200/90 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 mb-4">
+          이 화면의 <strong className="font-semibold">저장</strong>은 관리자·매니저만 사용할 수 있습니다. 일반
+          계정은 안내만 확인해 주세요.
+        </p>
+      )}
       <ul className="text-xs text-slate-600 space-y-1 mb-6 list-disc pl-5">
         <li>
           엑셀에서 <strong className="text-slate-500">열 전체를 선택해 복사</strong>하면 칸 사이가 탭으로
@@ -105,7 +116,8 @@ export default function ExecutiveEcountImportPage() {
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
               placeholder="YYYY-MM-DD 비우면 제한 없음"
-              className="w-full px-3 py-2 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100"
+              disabled={!canPaste}
+              className="w-full px-3 py-2 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100 disabled:cursor-not-allowed"
             />
           </div>
           <div>
@@ -115,7 +127,8 @@ export default function ExecutiveEcountImportPage() {
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
               placeholder="YYYY-MM-DD 비우면 제한 없음"
-              className="w-full px-3 py-2 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100"
+              disabled={!canPaste}
+              className="w-full px-3 py-2 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100 disabled:cursor-not-allowed"
             />
           </div>
         </div>
@@ -125,7 +138,8 @@ export default function ExecutiveEcountImportPage() {
             value={paste}
             onChange={(e) => setPaste(e.target.value)}
             rows={16}
-            className="w-full px-3 py-2 text-sm font-mono bg-space-900 border border-slate-600 rounded-lg text-slate-100 placeholder:text-slate-600"
+            disabled={!canPaste}
+            className="w-full px-3 py-2 text-sm font-mono bg-space-900 border border-slate-600 rounded-lg text-slate-100 placeholder:text-slate-600 disabled:cursor-not-allowed"
             placeholder="엑셀에서 복사한 내용을 여기에 붙여 넣으세요…"
             spellCheck={false}
           />
@@ -142,7 +156,7 @@ export default function ExecutiveEcountImportPage() {
         )}
         <button
           type="submit"
-          disabled={busy}
+          disabled={busy || !canPaste}
           className="px-4 py-2 rounded-lg bg-cyan-500 text-space-900 font-medium text-sm disabled:opacity-50"
         >
           {busy ? "저장 중…" : "서버에 저장"}

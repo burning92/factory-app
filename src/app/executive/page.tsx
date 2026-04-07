@@ -297,7 +297,7 @@ export default function ExecutiveDashboardPage() {
   const router = useRouter();
   const { profile, viewOrganizationCode, loading: authLoading } = useAuth();
   const orgCode = viewOrganizationCode ?? "100";
-  const canView = profile?.role === "admin" || profile?.role === "manager";
+  const canView = !!profile;
 
   const materials = useMasterStore((s) => s.materials);
   const bomList = useMasterStore((s) => s.bomList);
@@ -460,14 +460,6 @@ export default function ExecutiveDashboardPage() {
     return (
       <div className="min-h-[calc(100dvh-3.5rem)] flex items-center justify-center p-6">
         <p className="text-slate-500 text-sm">로딩 중…</p>
-      </div>
-    );
-  }
-
-  if (!canView) {
-    return (
-      <div className="min-h-[calc(100dvh-3.5rem)] flex items-center justify-center p-6">
-        <p className="text-slate-500 text-sm">이동 중…</p>
       </div>
     );
   }

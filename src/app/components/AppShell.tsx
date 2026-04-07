@@ -90,16 +90,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     router.replace("/");
     return null;
   }
-  const isExecutivePage = pathname.startsWith("/executive");
-  if (
-    isExecutivePage &&
-    profile?.role !== "admin" &&
-    profile?.role !== "manager"
-  ) {
-    router.replace("/");
-    return null;
-  }
-
   const showTabBar = true;
 
   return (

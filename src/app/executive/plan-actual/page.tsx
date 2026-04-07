@@ -49,7 +49,7 @@ function diffCellClass(sum: number, opts?: { header?: boolean }): string {
 export default function ExecutivePlanActualDetailPage() {
   const router = useRouter();
   const { profile, loading: authLoading } = useAuth();
-  const canView = profile?.role === "admin" || profile?.role === "manager";
+  const canView = !!profile;
 
   const { y, m } = useMemo(() => {
     const d = new Date();

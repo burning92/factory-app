@@ -20,7 +20,7 @@ export default function ExecutiveEquipmentDetailPage() {
   const router = useRouter();
   const { profile, viewOrganizationCode, loading: authLoading } = useAuth();
   const orgCode = viewOrganizationCode ?? "100";
-  const canView = profile?.role === "admin" || profile?.role === "manager";
+  const canView = !!profile;
 
   const [issues, setIssues] = useState<EquipmentIssueRow[]>([]);
   const [majorStats, setMajorStats] = useState<{

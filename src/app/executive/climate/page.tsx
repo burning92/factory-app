@@ -12,7 +12,7 @@ export default function ExecutiveClimateDetailPage() {
   const router = useRouter();
   const { profile, viewOrganizationCode, loading: authLoading } = useAuth();
   const orgCode = viewOrganizationCode ?? "100";
-  const canView = profile?.role === "admin" || profile?.role === "manager";
+  const canView = !!profile;
 
   const [data, setData] = useState<ClimateSummary | null>(null);
 
