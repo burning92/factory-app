@@ -262,7 +262,7 @@ export function bundleDayToWasteDetailRow(d: DayProductionMetrics): WasteDetailM
 
 /**
  * 2차 마감 스냅샷 일자 중 반죽·파베생산·폐기가 모두 0인 행은 표시용으로만 mock을 채움.
- * 상단 가중 요약(rollupYtdWaste)은 항상 원본 bundle.days 기준 — 변경하지 않음.
+ * (수동 JSONL 병합은 mergeBundleDaysWithManualImportsForTable + rollupWasteMockFromDayRows 사용.)
  */
 export function mergeBundleDaysWithWasteMockForTable(
   bundleDays: DayProductionMetrics[],

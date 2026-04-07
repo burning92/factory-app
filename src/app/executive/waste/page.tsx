@@ -7,9 +7,9 @@ import { supabase } from "@/lib/supabase";
 import { useMasterStore } from "@/store/useMasterStore";
 import { bomRowsToRefs, materialsToMeta } from "@/features/dashboard/bomMaterialAdapters";
 import { loadProductionBundle } from "@/features/dashboard/loadProductionBundle";
-import { rollupYtdWaste } from "@/features/dashboard/aggregateProductionFromSnapshots";
 import {
   mergeBundleDaysWithManualImportsForTable,
+  rollupWasteMockFromDayRows,
   type ManualWasteImportSeries,
   type WasteDetailMockDayRow,
 } from "@/features/dashboard/wasteDetailMockData";
@@ -50,11 +50,14 @@ export default function ExecutiveWasteDetailPage() {
     parbakeWasteByDate: {},
   });
 
-  const w = useMemo(() => (bundle?.days?.length ? rollupYtdWaste(bundle.days) : null), [bundle?.days]);
-
   const { rows: tableRows, filledManualDates } = useMemo(() => {
     return mergeBundleDaysWithManualImportsForTable(bundle?.days ?? [], manualSeries);
   }, [bundle?.days, manualSeries]);
+
+  const w = useMemo(() => {
+    if (tableRows.length === 0) return null;
+    return rollupWasteMockFromDayRows(tableRows);
+  }, [tableRows]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -129,8 +132,8 @@ export default function ExecutiveWasteDetailPage() {
 
       {filledManualDates.length > 0 && (
         <p className="text-xs text-slate-600 mb-4 rounded-md border border-slate-700/50 bg-slate-900/40 px-3 py-2">
-          반죽·폐기 수치가 비어 있는 일자({filledManualDates.length}일)는 수동 JSONL(도우생산/폐기)로 표를
-          보강했습니다. 상단 가중 요약은 2차 마감 스냅샷 원본만 반영합니다.
+          반죽·폐기 수치가 비어 있거나 번들에 없는 일자({filledManualDates.length}일)는 수동 JSONL(도우생산·폐기)로
+          보강했습니다. 상단 가중 요약·하단 표는 동일하게 스냅샷(및 이카운트 등 번들)과 수동 값을 합친 결과입니다.
         </p>
       )}
 
