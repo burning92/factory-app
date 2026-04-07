@@ -55,6 +55,26 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, [user, profile, uiSettings?.default_landing_path, pathname, router]);
 
+  /** 설비 이상 등록: worker URL 직접 접근 차단 */
+  useEffect(() => {
+    if (loading || !profile) return;
+    if (
+      pathname === "/daily/manufacturing-equipment/incident/new" &&
+      profile.role === "worker"
+    ) {
+      router.replace("/daily/manufacturing-equipment?incident=restricted");
+    }
+  }, [loading, profile, pathname, router]);
+
+  /** 설비 이상 이력 수정 페이지 비활성화 — 상세로 이동 */
+  useEffect(() => {
+    if (loading || !profile) return;
+    const m = pathname.match(/^\/daily\/manufacturing-equipment\/incidents\/([^/]+)\/edit$/);
+    if (m?.[1]) {
+      router.replace(`/daily/manufacturing-equipment/incidents/${m[1]}?edit=disabled`);
+    }
+  }, [loading, profile, pathname, router]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-space-900">
@@ -90,26 +110,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     router.replace("/");
     return null;
   }
-
-  /** 설비 이상 등록: worker URL 직접 접근 차단 */
-  useEffect(() => {
-    if (loading || !profile) return;
-    if (
-      pathname === "/daily/manufacturing-equipment/incident/new" &&
-      profile.role === "worker"
-    ) {
-      router.replace("/daily/manufacturing-equipment?incident=restricted");
-    }
-  }, [loading, profile, pathname, router]);
-
-  /** 설비 이상 이력 수정 페이지 비활성화 — 상세로 이동 */
-  useEffect(() => {
-    if (loading || !profile) return;
-    const m = pathname.match(/^\/daily\/manufacturing-equipment\/incidents\/([^/]+)\/edit$/);
-    if (m?.[1]) {
-      router.replace(`/daily/manufacturing-equipment/incidents/${m[1]}?edit=disabled`);
-    }
-  }, [loading, profile, pathname, router]);
 
   const showTabBar = true;
 
