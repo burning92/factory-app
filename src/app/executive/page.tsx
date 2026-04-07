@@ -1093,7 +1093,7 @@ export default function ExecutiveDashboardPage() {
 
             {equipment?.majorStats && (
               <div>
-                <p className="text-[11px] font-semibold tracking-wide text-slate-500 mb-2">주요 설비 이력</p>
+                <p className="text-xs font-semibold tracking-wide text-slate-400 mb-2.5">주요 설비 이력</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {(["화덕", "호이스트"] as const).map((name) => {
                     const s = equipment.majorStats![name];
@@ -1119,21 +1119,28 @@ export default function ExecutiveDashboardPage() {
                     return (
                       <div
                         key={name}
-                        className={`rounded-xl border px-4 py-3.5 ${borderClass}`}
+                        className={`rounded-xl border px-4 py-4 ${borderClass} flex flex-col gap-0`}
                       >
-                        <p className="text-sm font-semibold text-slate-200 mb-1">{name}</p>
-                        <p className={`text-3xl font-extrabold tabular-nums leading-none tracking-tight ${numClass}`}>
+                        <div className="flex items-start justify-between gap-2 min-h-[1.75rem]">
+                          <h3 className="text-base font-semibold leading-snug text-slate-100 md:text-[1.0625rem] tracking-tight">
+                            {name}
+                          </h3>
+                          {hi && (
+                            <span className="shrink-0 rounded border border-amber-500/35 bg-amber-950/35 px-2 py-0.5 text-[10px] font-semibold text-amber-100/95 leading-tight text-right max-w-[9rem]">
+                              생산영향·고장/가동중지 주의
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-3 text-sm font-medium text-slate-300">무고장 경과일 :</p>
+                        <p
+                          className={`mt-1 text-4xl font-extrabold tabular-nums leading-none tracking-tight md:text-5xl ${numClass}`}
+                        >
                           {days != null ? `${days}일` : "—"}
                         </p>
-                        <p className="mt-1 text-xs font-medium text-slate-500">무고장 경과</p>
-                        <p className="mt-1.5 text-[11px] text-slate-500">
-                          마지막 이상 <span className="text-slate-400 tabular-nums">{lastStr}</span>
+                        <p className="mt-3 text-sm leading-snug text-slate-300">
+                          <span className="font-medium text-slate-400">마지막 고장/중지 </span>
+                          <span className="font-semibold tabular-nums text-slate-100">{lastStr}</span>
                         </p>
-                        {hi && (
-                          <p className="mt-2 text-[10px] font-medium text-amber-200/90 rounded border border-amber-500/30 bg-amber-950/30 px-2 py-0.5 inline-block">
-                            생산영향·고장/가동중지 주의
-                          </p>
-                        )}
                       </div>
                     );
                   })}
