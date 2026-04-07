@@ -13,7 +13,11 @@ import {
   rollupWasteMockFromDayRows,
   computeWasteYoySamePeriod,
   formatDeltaPctPoint,
-  wasteYoYDeltaToneClass,
+  wasteYoYCompareBadgeClass,
+  wasteYoYCompareStatusFromDelta,
+  wasteYoYCompareStatusLabel,
+  wasteYoYDeltaPlainPhrase,
+  wasteYoYSecondLineMeta,
   type ManualWasteImportSeries,
   type WasteYoySamePeriodResult,
   type WasteRollupFromDayRows,
@@ -310,6 +314,15 @@ export default function ExecutiveDashboardPage() {
     const d = new Date();
     return { y: d.getFullYear(), m: d.getMonth() + 1 };
   }, []);
+
+  const wasteYoyCompareUi = useMemo(() => {
+    if (!wasteYoy?.periodEndDate) return null;
+    const status = wasteYoYCompareStatusFromDelta(wasteYoy.deltaPctPoint);
+    const primaryPhrase = wasteYoYDeltaPlainPhrase(wasteYoy.deltaPctPoint);
+    const secondLine = wasteYoYSecondLineMeta(wasteYoy.prevSamePeriodRate, wasteYoy.currentRate);
+    if (!status && !primaryPhrase && !secondLine) return null;
+    return { status, primaryPhrase, secondLine };
+  }, [wasteYoy]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -891,17 +904,29 @@ export default function ExecutiveDashboardPage() {
                   {pct(w?.overallDiscardRatePct ?? null)}
                 </span>
               </div>
-              {wasteYoy?.periodEndDate && (
-                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-xs tabular-nums text-slate-500">
-                  <span>
-                    전년 동기{" "}
-                    <span className="text-slate-400">
-                      {wasteYoy.prevSamePeriodRate != null ? pct(wasteYoy.prevSamePeriodRate) : "—"}
-                    </span>
-                  </span>
-                  <span className={wasteYoYDeltaToneClass(wasteYoy.deltaPctPoint)}>
-                    {wasteYoy.deltaPctPoint != null ? formatDeltaPctPoint(wasteYoy.deltaPctPoint) : "—"}
-                  </span>
+              {wasteYoyCompareUi && (
+                <div className="mt-1.5 space-y-1">
+                  {(wasteYoyCompareUi.status || wasteYoyCompareUi.primaryPhrase) && (
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      {wasteYoyCompareUi.status && wasteYoyCompareUi.status !== "about_same" ? (
+                        <span
+                          className={`inline-flex shrink-0 rounded-md border px-2 py-0.5 text-[11px] font-semibold tabular-nums leading-tight ${wasteYoYCompareBadgeClass(wasteYoyCompareUi.status)}`}
+                        >
+                          {wasteYoYCompareStatusLabel(wasteYoyCompareUi.status)}
+                        </span>
+                      ) : null}
+                      {wasteYoyCompareUi.primaryPhrase ? (
+                        <span className="min-w-0 text-xs tabular-nums text-slate-400">
+                          {wasteYoyCompareUi.primaryPhrase}
+                        </span>
+                      ) : null}
+                    </div>
+                  )}
+                  {wasteYoyCompareUi.secondLine ? (
+                    <p className="text-[11px] leading-snug tabular-nums text-slate-600">
+                      {wasteYoyCompareUi.secondLine}
+                    </p>
+                  ) : null}
                 </div>
               )}
               <div className="h-2 w-full overflow-hidden rounded-full bg-slate-700/45">

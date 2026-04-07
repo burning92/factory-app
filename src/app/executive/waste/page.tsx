@@ -11,8 +11,11 @@ import {
   mergeBundleDaysWithManualImportsForTable,
   rollupWasteMockFromDayRows,
   computeWasteYoySamePeriod,
-  formatDeltaPctPoint,
-  wasteYoYDeltaToneClass,
+  wasteYoYCompareBadgeClass,
+  wasteYoYCompareStatusFromDelta,
+  wasteYoYCompareStatusLabel,
+  wasteYoYDeltaPlainPhrase,
+  wasteYoYSecondLineMeta,
   type ManualWasteImportSeries,
   type WasteDetailMockDayRow,
 } from "@/features/dashboard/wasteDetailMockData";
@@ -97,6 +100,16 @@ export default function ExecutiveWasteDetailPage() {
   }, [tableRows]);
 
   const yoy = useMemo(() => computeWasteYoySamePeriod(tableRows, prevTableRows, year), [tableRows, prevTableRows, year]);
+  const yoyCompareUi = useMemo(() => {
+    if (!yoy.periodEndDate) return null;
+    const baseSecond = wasteYoYSecondLineMeta(yoy.prevSamePeriodRate, yoy.currentRate);
+    const secondLine = baseSecond ? `${baseSecond} · ~${yoy.periodEndDate} 동기` : `~${yoy.periodEndDate} 동기`;
+    return {
+      status: wasteYoYCompareStatusFromDelta(yoy.deltaPctPoint),
+      primaryPhrase: wasteYoYDeltaPlainPhrase(yoy.deltaPctPoint),
+      secondLine,
+    };
+  }, [yoy]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -228,18 +241,23 @@ export default function ExecutiveWasteDetailPage() {
             <div className="sm:col-span-3 rounded-md border border-slate-700/30 bg-slate-900/25 px-4 py-3">
               <dt className="text-xs font-medium text-slate-500">전체 (도우~파베)</dt>
               <dd className="mt-1 text-3xl font-bold tabular-nums text-cyan-200/90">{pct2(w.overallDiscardRatePct)}</dd>
-              {yoy.periodEndDate && (
-                <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs tabular-nums text-slate-500">
-                  <span>
-                    전년 동기{" "}
-                    <span className="text-slate-400">
-                      {yoy.prevSamePeriodRate != null ? pct2(yoy.prevSamePeriodRate) : "—"}
-                    </span>
-                  </span>
-                  <span className={wasteYoYDeltaToneClass(yoy.deltaPctPoint)}>
-                    {yoy.deltaPctPoint != null ? formatDeltaPctPoint(yoy.deltaPctPoint) : "—"}
-                  </span>
-                  <span className="text-slate-600">(~{yoy.periodEndDate} 기준 동기)</span>
+              {yoyCompareUi && (
+                <div className="mt-2 space-y-1">
+                  {(yoyCompareUi.status || yoyCompareUi.primaryPhrase) && (
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      {yoyCompareUi.status && yoyCompareUi.status !== "about_same" ? (
+                        <span
+                          className={`inline-flex shrink-0 rounded-md border px-2 py-0.5 text-[11px] font-semibold tabular-nums leading-tight ${wasteYoYCompareBadgeClass(yoyCompareUi.status)}`}
+                        >
+                          {wasteYoYCompareStatusLabel(yoyCompareUi.status)}
+                        </span>
+                      ) : null}
+                      {yoyCompareUi.primaryPhrase ? (
+                        <span className="min-w-0 text-xs tabular-nums text-slate-400">{yoyCompareUi.primaryPhrase}</span>
+                      ) : null}
+                    </div>
+                  )}
+                  <p className="text-[11px] leading-snug tabular-nums text-slate-600">{yoyCompareUi.secondLine}</p>
                 </div>
               )}
             </div>

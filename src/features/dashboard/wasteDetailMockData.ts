@@ -491,3 +491,98 @@ export function wasteYoYDeltaToneClass(delta: number | null): string {
   if (delta > 0.005) return "text-amber-400/85";
   return "text-slate-500";
 }
+
+/** 전년 동기 폐기율 대비 상대 변화(%). (전년−올해)/전년×100 — 양수면 폐기율이 그만큼 낮아짐(개선). */
+export function wasteYoYRelativeDropVersusPrevPct(
+  prevSamePeriodRate: number | null,
+  currentRate: number | null
+): number | null {
+  if (
+    prevSamePeriodRate == null ||
+    currentRate == null ||
+    !Number.isFinite(prevSamePeriodRate) ||
+    !Number.isFinite(currentRate) ||
+    prevSamePeriodRate <= 0
+  ) {
+    return null;
+  }
+  return ((prevSamePeriodRate - currentRate) / prevSamePeriodRate) * 100;
+}
+
+export type WasteYoYCompareStatus =
+  | "greatly_improved"
+  | "improved"
+  | "about_same"
+  | "worsened"
+  | "much_worse"
+  | null;
+
+/** deltaPctPoint = 올해−전년 동기. 음수면 폐기율 개선. */
+export function wasteYoYCompareStatusFromDelta(deltaPctPoint: number | null): WasteYoYCompareStatus {
+  if (deltaPctPoint == null || !Number.isFinite(deltaPctPoint)) return null;
+  if (deltaPctPoint <= -2) return "greatly_improved";
+  if (deltaPctPoint < -0.05) return "improved";
+  if (deltaPctPoint <= 0.05) return "about_same";
+  if (deltaPctPoint < 2) return "worsened";
+  return "much_worse";
+}
+
+export function wasteYoYCompareStatusLabel(s: WasteYoYCompareStatus): string {
+  switch (s) {
+    case "greatly_improved":
+      return "크게 개선";
+    case "improved":
+      return "개선";
+    case "about_same":
+      return "비슷";
+    case "worsened":
+      return "악화";
+    case "much_worse":
+      return "크게 악화";
+    default:
+      return "";
+  }
+}
+
+/** 배지용: 테마 내 연한 보더·배경 */
+export function wasteYoYCompareBadgeClass(s: WasteYoYCompareStatus): string {
+  switch (s) {
+    case "greatly_improved":
+      return "border-emerald-500/35 bg-emerald-500/10 text-emerald-300/90";
+    case "improved":
+      return "border-emerald-500/25 bg-emerald-500/5 text-emerald-400/85";
+    case "about_same":
+      return "border-slate-600/40 bg-slate-800/55 text-slate-400";
+    case "worsened":
+      return "border-amber-500/30 bg-amber-500/10 text-amber-400/85";
+    case "much_worse":
+      return "border-amber-500/40 bg-amber-500/15 text-amber-300/90";
+    default:
+      return "border-slate-600/40 bg-slate-800/50 text-slate-500";
+  }
+}
+
+/** 1줄: %p 방향을 풀어 쓴 문구 */
+export function wasteYoYDeltaPlainPhrase(deltaPctPoint: number | null, digits = 2): string | null {
+  if (deltaPctPoint == null || !Number.isFinite(deltaPctPoint)) return null;
+  const abs = Math.abs(deltaPctPoint);
+  if (deltaPctPoint < -0.005) return `전년 동기 대비 ${abs.toFixed(digits)}%p 개선`;
+  if (deltaPctPoint > 0.005) return `전년 동기 대비 ${abs.toFixed(digits)}%p 상승`;
+  return "전년 동기 대비 비슷한 수준";
+}
+
+/** 2줄: 상대 감소/증가 + 전년 동기 기준값(문장 안에 포함) */
+export function wasteYoYSecondLineMeta(
+  prevSamePeriodRate: number | null,
+  currentRate: number | null,
+  prevPctDigits = 2
+): string | null {
+  if (prevSamePeriodRate == null || !Number.isFinite(prevSamePeriodRate)) return null;
+  const prevStr = `${prevSamePeriodRate.toFixed(prevPctDigits)}%`;
+  const rel = wasteYoYRelativeDropVersusPrevPct(prevSamePeriodRate, currentRate);
+  if (rel == null || !Number.isFinite(rel)) return `전년 동기 ${prevStr}`;
+  if (Math.abs(rel) < 0.05) return `전년 동기 ${prevStr}`;
+  if (rel > 0.05) return `전년 대비 ${rel.toFixed(1)}% 감소 · 전년 동기 ${prevStr}`;
+  const rise = -rel;
+  return `전년 대비 ${rise.toFixed(1)}% 증가 · 전년 동기 ${prevStr}`;
+}
