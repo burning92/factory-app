@@ -174,25 +174,28 @@ export default function ExecutiveWasteDetailPage() {
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-lg font-semibold text-slate-100">폐기율 상세</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            일별 폐기율을 연도 누적으로 가중 평균한 값입니다.
+          <p className="mt-1 text-[15px] font-medium leading-relaxed text-slate-400">
+            도우와 파베이크 공정의 폐기율을 연도 누적으로 집계한 값입니다.
             <button
               type="button"
               onClick={() => setShowCriteria((v) => !v)}
-              className="ml-2 text-xs text-slate-500 underline decoration-slate-600 underline-offset-2 hover:text-slate-400"
+              className="ml-2 text-[13px] font-medium text-slate-400 underline decoration-slate-600 underline-offset-2 hover:text-slate-300"
             >
-              {showCriteria ? "집계 기준 접기" : "집계 기준 보기"}
+              {showCriteria ? "설명 접기" : "설명 보기"}
             </button>
           </p>
           {showCriteria && (
-            <div className="mt-2 rounded-md border border-slate-700/40 bg-slate-900/35 px-3 py-2.5 text-xs leading-relaxed text-slate-500">
-              Σ폐기÷Σ분모로 일별 비율 후 합산합니다. 파베이크 분모는 해당 연도에 수동 파베 생산 집계가 있으면 그
-              수치를 쓰고, 없으면 스냅샷의 도우 사용량(수동 도우만 있을 때는 반죽량)을 씁니다. 상단 요약·표는
-              스냅샷·이카운트 번들과 수동 JSONL을 합친 결과입니다.
+            <div className="mt-2 space-y-2 rounded-md border border-slate-700/40 bg-slate-900/35 px-3 py-2.5 text-[13px] leading-relaxed text-slate-400">
+              <p>폐기율은 생산수량 대비 폐기수량 비율을 기준으로 계산했습니다.</p>
+              <p>
+                파베이크는 해당 연도에 확보된 생산실적을 우선 반영하고, 실적이 없는 경우에는 공정 기록을 기준으로
+                계산했습니다.
+              </p>
+              <p>상단 요약과 표는 시스템 기록과 보완 입력 데이터를 함께 반영한 결과입니다.</p>
               {filledManualDates.length > 0 && (
-                <span className="mt-2 block text-slate-600">
-                  반죽·폐기가 비었거나 번들에 없는 일자 {filledManualDates.length}일은 수동 JSONL로 보강했습니다.
-                </span>
+                <p className="text-slate-500">
+                  기록이 누락된 {filledManualDates.length}일은 별도 생산기록으로 보완했습니다.
+                </p>
               )}
             </div>
           )}
@@ -215,18 +218,18 @@ export default function ExecutiveWasteDetailPage() {
           </select>
           <div className="flex flex-wrap justify-end gap-1.5">
             {filledManualDates.length > 0 && (
-              <span className="rounded border border-slate-600/35 bg-slate-800/40 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
-                수동 보강 포함
+              <span className="rounded border border-slate-600/35 bg-slate-800/40 px-2 py-0.5 text-[11px] font-medium tracking-wide text-slate-400">
+                누락 데이터 보완
               </span>
             )}
             {ecountLines > 0 && (
-              <span className="rounded border border-slate-600/35 bg-slate-800/40 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
-                이카운트 생산 반영
+              <span className="rounded border border-slate-600/35 bg-slate-800/40 px-2 py-0.5 text-[11px] font-medium tracking-wide text-slate-400">
+                생산실적 반영
               </span>
             )}
             {hasSnapshotActivity && (
-              <span className="rounded border border-slate-600/35 bg-slate-800/40 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
-                실입력 포함
+              <span className="rounded border border-slate-600/35 bg-slate-800/40 px-2 py-0.5 text-[11px] font-medium tracking-wide text-slate-400">
+                현장 입력 반영
               </span>
             )}
           </div>
@@ -271,8 +274,8 @@ export default function ExecutiveWasteDetailPage() {
             </div>
             <div className="sm:col-span-3 border-t border-slate-700/35 pt-3">
               <p className="text-[11px] leading-relaxed text-slate-600">
-                Σ 반죽 {w.sumDoughMix.toLocaleString("ko-KR")} · Σ 도우폐기 {w.sumDoughWaste.toLocaleString("ko-KR")} · Σ
-                파베폐기 {w.sumParbakeWaste.toLocaleString("ko-KR")} · Σ 파베생산{" "}
+                반죽 합계 {w.sumDoughMix.toLocaleString("ko-KR")} · 도우 폐기 합계 {w.sumDoughWaste.toLocaleString("ko-KR")}{" "}
+                · 파베 폐기 합계 {w.sumParbakeWaste.toLocaleString("ko-KR")} · 파베 생산 합계{" "}
                 {w.sumSameDayParbakeProduction.toLocaleString("ko-KR")}
               </p>
             </div>

@@ -10,7 +10,8 @@ import {
   majorCategoryForPlanActualProduct,
 } from "@/features/dashboard/planVsActual";
 import { DashboardBackLink } from "../DashboardBackLink";
-import { executiveTooltipHostRowClass, executiveTooltipPanelClass } from "../executiveTooltipStyles";
+import { ExecutivePortalTooltip } from "../ExecutivePortalTooltip";
+import { executiveTooltipHostRowClass } from "../executiveTooltipStyles";
 import type { PlanActualProductRow } from "@/features/dashboard/planVsActual";
 
 type PlanCategoryKey = "pizza" | "bread" | "parbake";
@@ -57,7 +58,6 @@ export default function ExecutivePlanActualDetailPage() {
   const [month, setMonth] = useState(m);
 
   const [rows, setRows] = useState<PlanActualProductRow[]>([]);
-  const [planFromProcessedSheet, setPlanFromProcessedSheet] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
 
@@ -74,7 +74,6 @@ export default function ExecutivePlanActualDetailPage() {
         const data = await loadPlanActualByProductForMonth(supabase, y, month);
         if (!c) {
           setRows(data.rows);
-          setPlanFromProcessedSheet(data.planFromProcessedSheet);
           setErr(null);
         }
       } catch (e) {
@@ -112,23 +111,19 @@ export default function ExecutivePlanActualDetailPage() {
       <DashboardBackLink />
       <div className={`mb-3 flex flex-wrap items-center gap-2 ${executiveTooltipHostRowClass}`}>
         <h1 className="text-lg font-semibold text-slate-100">계획 대비 실적 상세</h1>
-        <span className="group relative inline-flex">
-          <button
-            type="button"
-            className="rounded p-0.5 text-cyan-500/80 hover:text-cyan-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
-            aria-label="계획 대비 실적 집계 기준 안내"
-          >
-            <Info className="w-4 h-4" strokeWidth={2} aria-hidden />
-          </button>
-          <span
-            role="tooltip"
-            className={`${executiveTooltipPanelClass} left-0 w-[min(22rem,calc(100vw-2rem))]`}
-          >
-            {y}년 {month}월 · 계획 ={" "}
-            {planFromProcessedSheet ? "생산계획가공 시트 합계" : "생산계획 시트 합계"}, 실적 = 2차 마감
-            스냅샷 완제품 합계(품목명 매칭). 표는 피자·브레드·파베이크 대분류로 묶어 소계를 보여 줍니다.
-          </span>
-        </span>
+        <ExecutivePortalTooltip
+          trigger={
+            <button
+              type="button"
+              className="rounded p-0.5 text-cyan-500/80 hover:text-cyan-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
+              aria-label="계획 대비 실적 안내"
+            >
+              <Info className="w-4 h-4" strokeWidth={2} aria-hidden />
+            </button>
+          }
+        >
+          이번 달 계획 대비 생산실적입니다. 월별 추이와 품목군별 달성률을 함께 보여줍니다.
+        </ExecutivePortalTooltip>
       </div>
       <div className="mb-4">
         <label className="text-xs text-slate-500 mr-2">월 선택</label>
@@ -144,8 +139,8 @@ export default function ExecutivePlanActualDetailPage() {
           ))}
         </select>
       </div>
-      <p className="text-xs text-slate-600 mb-6">
-        2차 마감 합계와 일 수치가 다를 수 있습니다. 품목명 표기를 맞추면 근접합니다.
+      <p className="text-sm text-slate-400 mb-6 font-medium leading-relaxed">
+        계획 수량과 실적은 품목명·집계 방식에 따라 일별 합계와 차이가 날 수 있습니다.
       </p>
 
       {err && <p className="text-amber-200 text-sm mb-4">{err}</p>}

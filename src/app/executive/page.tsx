@@ -33,7 +33,8 @@ import {
   formatMonthlyOperatingDays,
 } from "@/features/dashboard/manpowerUtilization";
 import { AlertTriangle, CheckCircle2, Droplets, Info, LayoutDashboard, Thermometer } from "lucide-react";
-import { executiveTooltipHostRowClass, executiveTooltipPanelClass } from "./executiveTooltipStyles";
+import { ExecutivePortalTooltip } from "./ExecutivePortalTooltip";
+import { executiveTooltipHostRowClass } from "./executiveTooltipStyles";
 import type { ProductionBundle } from "@/features/dashboard/loadProductionBundle";
 import type { PlanActualDashboardMetrics } from "@/features/dashboard/planVsActual";
 import type { ClimateDashboardWindows } from "@/features/dashboard/climateAndEquipment";
@@ -128,8 +129,8 @@ function PlanActualYtdAchievementMiniBars({
 
   return (
     <div className="w-full min-w-0 overflow-visible pt-1" aria-label={`${year}년 월별 달성 추이 미리보기`}>
-      <p className="mb-2 text-left text-xs font-semibold text-gray-500">올해 월별 달성 추이</p>
-      <div className="relative z-[65] flex h-[4.75rem] items-end justify-between gap-1 overflow-visible sm:gap-1.5">
+      <p className="mb-2 text-left text-[13px] font-semibold text-slate-400">올해 월별 달성 추이</p>
+      <div className="relative flex h-[4.75rem] items-end justify-between gap-1 overflow-visible sm:gap-1.5">
         {months.map((m, i) => {
           const v = values[i]!;
           const hPct = Math.max(8, (v / maxVal) * 100);
@@ -165,14 +166,35 @@ function PlanActualYtdAchievementMiniBars({
               ? "text-emerald-200"
               : "text-[#72E3E3]";
           return (
-            <div
+            <ExecutivePortalTooltip
               key={`${year}-${m}`}
-              className="group relative z-[70] flex min-w-0 flex-1 cursor-default flex-col items-center gap-1 px-0.5"
+              size="compact"
+              gap={6}
+              trigger={
+                <div className="flex min-w-0 flex-1 cursor-default flex-col items-center gap-1 px-0.5">
+                  <div className="flex h-14 w-full items-end justify-center">
+                    <div
+                      className={`relative w-[min(100%,1.35rem)] rounded-sm transition-[height] duration-500 ease-out sm:w-5 ${barTone}`}
+                      style={{ height: `${hPct}%` }}
+                    >
+                      {exceptional ? (
+                        <span
+                          className="pointer-events-none absolute -top-0.5 left-1/2 h-1 w-[78%] -translate-x-1/2 rounded-full bg-gradient-to-r from-transparent via-amber-100/95 to-transparent shadow-[0_0_12px_rgba(254,243,199,0.9)]"
+                          aria-hidden
+                        />
+                      ) : beatTarget ? (
+                        <span
+                          className="pointer-events-none absolute -top-0.5 left-1/2 h-1 w-[72%] -translate-x-1/2 rounded-full bg-gradient-to-r from-transparent via-emerald-200/95 to-transparent shadow-[0_0_10px_rgba(167,243,208,0.75)]"
+                          aria-hidden
+                        />
+                      ) : null}
+                    </div>
+                  </div>
+                  <span className="text-[11px] tabular-nums text-slate-400 sm:text-xs">{m}월</span>
+                </div>
+              }
             >
-              <span
-                role="tooltip"
-                className={`pointer-events-none absolute bottom-full left-1/2 z-[110] mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md border border-slate-600/90 bg-slate-900/98 px-2.5 py-1.5 text-xs font-semibold tabular-nums opacity-0 shadow-lg shadow-black/60 ring-1 ring-black/40 transition-opacity duration-150 group-hover:opacity-100 ${tooltipToneClass}`}
-              >
+              <span className={tooltipToneClass}>
                 {year}년 {m}월 · {tipLabel}
                 {exceptional ? (
                   <span className="ml-1.5 font-normal text-amber-300/95">110% 이상</span>
@@ -180,26 +202,7 @@ function PlanActualYtdAchievementMiniBars({
                   <span className="ml-1.5 font-normal text-emerald-400/90">목표 달성</span>
                 ) : null}
               </span>
-              <div className="flex h-14 w-full items-end justify-center">
-                <div
-                  className={`relative w-[min(100%,1.35rem)] rounded-sm transition-[height] duration-500 ease-out sm:w-5 ${barTone}`}
-                  style={{ height: `${hPct}%` }}
-                >
-                  {exceptional ? (
-                    <span
-                      className="pointer-events-none absolute -top-0.5 left-1/2 h-1 w-[78%] -translate-x-1/2 rounded-full bg-gradient-to-r from-transparent via-amber-100/95 to-transparent shadow-[0_0_12px_rgba(254,243,199,0.9)]"
-                      aria-hidden
-                    />
-                  ) : beatTarget ? (
-                    <span
-                      className="pointer-events-none absolute -top-0.5 left-1/2 h-1 w-[72%] -translate-x-1/2 rounded-full bg-gradient-to-r from-transparent via-emerald-200/95 to-transparent shadow-[0_0_10px_rgba(167,243,208,0.75)]"
-                      aria-hidden
-                    />
-                  ) : null}
-                </div>
-              </div>
-              <span className="text-[10px] tabular-nums text-gray-500 sm:text-xs">{m}월</span>
-            </div>
+            </ExecutivePortalTooltip>
           );
         })}
       </div>
@@ -260,14 +263,14 @@ function PlanActualCategoryMiniDonut({
           </span>
         </div>
       </div>
-      <p className="mt-2 text-center text-xs font-medium text-gray-400">{label}</p>
+      <p className="mt-2 text-center text-[13px] font-medium text-slate-400">{label}</p>
     </div>
   );
 }
 
 /** 데스크톱 넓은 대시보드용 공통 카드 셸 */
 const dashCard =
-  "rounded-xl border border-slate-700/60 bg-slate-800/50 p-5 md:p-6 lg:p-7 flex flex-col min-h-0 shadow-sm shadow-black/10";
+  "overflow-visible rounded-xl border border-slate-700/60 bg-slate-800/50 p-5 md:p-6 lg:p-7 flex flex-col min-h-0 shadow-sm shadow-black/10";
 /** 카드 헤더 타이틀 */
 const dashTitle = "text-base font-bold text-white tracking-tight";
 /** 대장 지표: 생산량 총합, 종합 달성률, 이번 달 투입률 */
@@ -276,10 +279,14 @@ const dashHero = "text-4xl font-extrabold tracking-tight tabular-nums";
 const dashSubHero = "text-3xl font-bold tabular-nums";
 /** 서브 지표 숫자 */
 const dashSubMetric = "text-base font-semibold tabular-nums";
-/** 보조 설명·날짜·부가 문구 */
-const dashMuted = "text-sm text-gray-400";
+/** 보조 설명·라벨 — 한 단계 밝게(가독성) */
+const dashMuted = "text-[15px] font-medium text-slate-300";
+/** 보조 메타(한 줄 설명) */
+const dashMutedMeta = "text-[13px] font-medium text-slate-400";
 /** 작은 라벨(섹션 머리글 등) */
-const dashLabelXs = "text-xs font-semibold uppercase tracking-wide text-gray-400";
+const dashLabelXs = "text-xs font-semibold tracking-wide text-slate-400";
+/** 보조 링크(상세보기 옆 등) */
+const dashAuxLink = "text-[15px] font-medium text-slate-400 transition-colors hover:text-slate-200";
 
 export default function ExecutiveDashboardPage() {
   const planActualMiniDonutGradId = useId().replace(/:/g, "");
@@ -526,8 +533,8 @@ export default function ExecutiveDashboardPage() {
         <h1 className="text-2xl md:text-3xl lg:text-4xl font-semibold text-slate-100 tracking-tight">
           대시보드
         </h1>
-        <p className="text-slate-500 text-sm md:text-base mt-2 md:mt-3 max-w-4xl leading-relaxed">
-          {year}년 생산량은 2차 마감 + 이카운트 보정(선택) · 온습도·설비는 최근 7일
+        <p className="text-slate-400 text-sm md:text-base mt-2 md:mt-3 max-w-4xl leading-relaxed font-medium">
+          {year}년 생산·계획·폐기·환경 지표를 한 화면에서 확인합니다. 온·습도와 설비는 최근 7일 기준입니다.
         </p>
       </header>
 
@@ -544,41 +551,29 @@ export default function ExecutiveDashboardPage() {
           <div className={`flex items-center justify-between gap-2 mb-1 ${executiveTooltipHostRowClass}`}>
             <div className="flex items-center gap-1.5 min-w-0">
               <h2 className={dashTitle}>생산량 (올해 누적)</h2>
-              <span className="group relative inline-flex shrink-0">
-                <button
-                  type="button"
-                  className="rounded p-0.5 text-cyan-500/80 hover:text-cyan-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
-                  aria-label="생산량 집계 기준 안내"
-                >
-                  <Info className="w-3.5 h-3.5" strokeWidth={2} aria-hidden />
-                </button>
-                <span
-                  role="tooltip"
-                  className={`${executiveTooltipPanelClass} left-1/2 w-[min(18rem,calc(100vw-2rem))] -translate-x-1/2 md:left-0 md:translate-x-0`}
-                >
-                  <span className="block">
-                    2차 마감 스냅샷 기준(일별 표는 상세 페이지). 이카운트 생산입고는 2차 마감 없는 일자만
-                    합산.
-                  </span>
-                  <span className="mt-1.5 block text-slate-400">
-                    {bundle?.ecountMerge ? (
-                      <>
-                        이카운트 생산입고 {bundle.ecountMerge.linesCounted.toLocaleString("ko-KR")}행 반영 · 2차
-                        마감 일 {bundle.ecountMerge.skippedBecauseSecondClosed.toLocaleString("ko-KR")}행 제외
-                        {bundle.ecountMerge.error ? ` · ${bundle.ecountMerge.error}` : ""}
-                      </>
-                    ) : (
-                      <>이카운트는 붙여넣기·동기화 후 누적에 반영됩니다.</>
-                    )}
-                  </span>
+              <ExecutivePortalTooltip
+                trigger={
+                  <button
+                    type="button"
+                    className="rounded p-0.5 text-cyan-500/80 hover:text-cyan-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
+                    aria-label="생산량 집계 안내"
+                  >
+                    <Info className="w-3.5 h-3.5" strokeWidth={2} aria-hidden />
+                  </button>
+                }
+              >
+                <span className="block">
+                  올해 누적 생산량입니다. 일별 생산기록을 기준으로 집계했으며, 일부 누락 구간은 생산실적 자료를
+                  반영했습니다.
                 </span>
-              </span>
+                <span className="mt-2 block text-slate-300">상세 페이지에서 일자별 기준을 확인할 수 있습니다.</span>
+              </ExecutivePortalTooltip>
             </div>
             <div className="flex flex-col items-end gap-1 shrink-0 text-right">
-              <Link href="/executive/production" className="text-sm font-medium text-cyan-400 hover:text-cyan-300">
+              <Link href="/executive/production" className="text-[15px] font-semibold text-cyan-400 hover:text-cyan-300">
                 상세보기 →
               </Link>
-              <Link href="/executive/ecount-import" className={`${dashMuted} hover:text-gray-300`}>
+              <Link href="/executive/ecount-import" className={dashAuxLink}>
                 이카운트 붙여넣기
               </Link>
             </div>
@@ -636,14 +631,14 @@ export default function ExecutiveDashboardPage() {
             )}
           </div>
 
-          <ul className={`mt-4 space-y-2 border-t border-slate-700/50 pt-3 ${dashMuted}`}>
+          <ul className={`mt-4 space-y-2 border-t border-slate-700/50 pt-3 ${dashMutedMeta}`}>
             <li className="flex justify-between gap-2">
               <span>파베이크 우주인(보관용)</span>
-              <span className={`${dashSubMetric} text-gray-400`}>{y ? num(y.astronautParbake) : "—"}</span>
+              <span className={`${dashSubMetric} text-slate-300`}>{y ? num(y.astronautParbake) : "—"}</span>
             </li>
             <li className="flex justify-between gap-2">
               <span>파베이크 판매용</span>
-              <span className={`${dashSubMetric} text-gray-400`}>{y ? num(y.saleParbake) : "—"}</span>
+              <span className={`${dashSubMetric} text-slate-300`}>{y ? num(y.saleParbake) : "—"}</span>
             </li>
           </ul>
         </section>
@@ -652,27 +647,23 @@ export default function ExecutiveDashboardPage() {
           <div className={`flex items-center justify-between gap-3 ${executiveTooltipHostRowClass}`}>
             <div className="flex items-center gap-1.5 min-w-0">
               <h2 className={dashTitle}>계획 대비 실적</h2>
-              <span className="group relative inline-flex shrink-0">
-                <button
-                  type="button"
-                  className="rounded p-0.5 text-cyan-500/80 hover:text-cyan-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
-                  aria-label="계획 대비 실적 집계 기준 안내"
-                >
-                  <Info className="w-3.5 h-3.5" strokeWidth={2} aria-hidden />
-                </button>
-                <span
-                  role="tooltip"
-                  className={`${executiveTooltipPanelClass} left-1/2 w-[min(20rem,calc(100vw-2rem))] -translate-x-1/2 md:left-0 md:translate-x-0`}
-                >
-                  {planDashboard ? `${planDashboard.year}년 ${planDashboard.month}월` : "—"} ·{" "}
-                  {planDashboard?.planFromProcessedSheet ? "생산계획가공 시트" : "생산계획 시트"} vs 2차 마감 완제품
-                  합계(품목별 합산과 동일 소스). 대분류는 피자·브레드·파베이크로 묶어 표시합니다.
-                </span>
-              </span>
+              <ExecutivePortalTooltip
+                trigger={
+                  <button
+                    type="button"
+                    className="rounded p-0.5 text-cyan-500/80 hover:text-cyan-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
+                    aria-label="계획 대비 실적 안내"
+                  >
+                    <Info className="w-3.5 h-3.5" strokeWidth={2} aria-hidden />
+                  </button>
+                }
+              >
+                이번 달 계획 대비 생산실적입니다. 월별 추이와 품목군별 달성률을 함께 보여줍니다.
+              </ExecutivePortalTooltip>
             </div>
             <Link
               href="/executive/plan-actual"
-              className="shrink-0 text-sm font-medium text-cyan-400 hover:text-cyan-300"
+              className="shrink-0 text-[15px] font-semibold text-cyan-400 hover:text-cyan-300"
             >
               상세보기 →
             </Link>
@@ -683,7 +674,7 @@ export default function ExecutiveDashboardPage() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className={dashLabelXs}>종합 달성률</p>
-                  <span className="rounded-md border border-cyan-500/45 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-cyan-300 shadow-[0_0_12px_rgba(34,211,238,0.12)]">
+                  <span className="rounded-md border border-cyan-500/45 bg-cyan-500/10 px-2 py-0.5 text-[11px] font-bold tracking-wide text-cyan-300 shadow-[0_0_12px_rgba(34,211,238,0.12)]">
                     이번 달 · {planDashboard?.month ?? calendarMonth.m}월
                   </span>
                 </div>
@@ -692,19 +683,19 @@ export default function ExecutiveDashboardPage() {
                 >
                   {pct(planDashboard?.achievementPct ?? null)}
                 </p>
-                <div className={`mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1 ${dashMuted}`}>
+                <div className={`mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1 ${dashMutedMeta}`}>
                   <span>
                     목표:{" "}
-                    <span className="tabular-nums font-semibold text-slate-300">
+                    <span className="tabular-nums font-semibold text-slate-200">
                       {planDashboard ? num(planDashboard.planTotal) : "—"}
                     </span>
                   </span>
-                  <span className="hidden text-slate-600 sm:inline" aria-hidden>
+                  <span className="hidden text-slate-500 sm:inline" aria-hidden>
                     |
                   </span>
                   <span>
                     현재:{" "}
-                    <span className="tabular-nums font-semibold text-slate-300">
+                    <span className="tabular-nums font-semibold text-slate-200">
                       {planDashboard ? num(planDashboard.actualTotal) : "—"}
                     </span>
                   </span>
@@ -750,30 +741,27 @@ export default function ExecutiveDashboardPage() {
           <div className={`flex items-start justify-between gap-4 ${executiveTooltipHostRowClass}`}>
             <div className="flex min-w-0 items-center gap-1.5">
               <h2 className={dashTitle}>인력 가동 현황</h2>
-              <span className="group relative inline-flex shrink-0">
-                <button
-                  type="button"
-                  className="rounded p-0.5 text-slate-500 hover:text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40"
-                  aria-label="인력 가동·투입률 집계 기준 안내"
-                >
-                  <Info className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                </button>
-                <span
-                  role="tooltip"
-                  className={`${executiveTooltipPanelClass} left-1/2 w-[min(20rem,calc(100vw-2rem))] -translate-x-1/2 md:left-0 md:translate-x-0`}
-                >
-                  생산계획가공 시트 기준 · 총원 {DEFAULT_DASHBOARD_BASELINE_HEADCOUNT}명 대비 투입 인원 비율입니다.
-                  같은 생산일에 여러 행이 있으면 투입 인원은 하루당 최댓값만 반영합니다.
-                </span>
-              </span>
+              <ExecutivePortalTooltip
+                trigger={
+                  <button
+                    type="button"
+                    className="rounded p-0.5 text-slate-400 hover:text-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40"
+                    aria-label="인력 가동 안내"
+                  >
+                    <Info className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                  </button>
+                }
+              >
+                이번 달 평균 투입 인원을 총원과 비교한 수치입니다. 생산성은 1인당 하루 평균 생산량입니다.
+              </ExecutivePortalTooltip>
             </div>
             {manpowerProductivityUnitsPerPersonDay != null && (
               <p
-                className="shrink-0 text-right text-[11px] leading-snug text-slate-500 tabular-nums"
+                className="shrink-0 text-right text-[13px] leading-snug text-slate-400 tabular-nums font-medium"
                 title="이번 달 완제품 합계·가동일·평균 투입 인원 기준"
               >
                 생산성{" "}
-                <span className="text-slate-400">
+                <span className="text-slate-300">
                   {Math.round(manpowerProductivityUnitsPerPersonDay).toLocaleString("ko-KR")}개/인·일
                 </span>
               </p>
@@ -794,18 +782,18 @@ export default function ExecutiveDashboardPage() {
                     : null;
                 return (
                   <>
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    <p className="text-[11px] font-semibold tracking-wide text-slate-400">
                       이번 달 평균 투입률
                     </p>
                     <p className={`mt-2 ${dashHero} text-cyan-200/95`}>{pct(monthU)}</p>
                     {deltaUtilVsYtd != null && ytdU != null ? (
-                      <p className="mt-2 text-xs leading-relaxed text-slate-500 tabular-nums">
-                        올해 평균 <span className="text-slate-400">{pct(ytdU)}</span> 대비{" "}
-                        <span className="text-slate-400">{formatDeltaPctPoint(deltaUtilVsYtd)}</span>
+                      <p className="mt-2 text-[13px] leading-relaxed text-slate-400 tabular-nums font-medium">
+                        올해 평균 <span className="text-slate-300">{pct(ytdU)}</span> 대비{" "}
+                        <span className="text-slate-300">{formatDeltaPctPoint(deltaUtilVsYtd)}</span>
                       </p>
                     ) : ytdU != null ? (
-                      <p className="mt-2 text-xs text-slate-500">
-                        올해 평균 <span className="tabular-nums text-slate-400">{pct(ytdU)}</span>
+                      <p className="mt-2 text-[13px] text-slate-400 font-medium">
+                        올해 평균 <span className="tabular-nums text-slate-300">{pct(ytdU)}</span>
                       </p>
                     ) : null}
                     <div className="mt-5 h-3 w-full overflow-hidden rounded-full bg-slate-700/45">
@@ -815,34 +803,32 @@ export default function ExecutiveDashboardPage() {
                       />
                     </div>
 
-                    <div className="mt-8 border-t border-slate-700/35 pt-5 text-xs leading-relaxed text-slate-500">
+                    <div className="mt-8 border-t border-slate-700/35 pt-5 text-[13px] leading-relaxed text-slate-400 font-medium">
                       <p className="tabular-nums">
                         평균 투입 인원 {manpower.avgDailyManpower?.toFixed(1) ?? "—"}명 · 총원{" "}
                         {manpower.baselineHeadcount}명
                       </p>
-                      <p className="mt-2 flex flex-wrap items-center gap-x-1 tabular-nums text-slate-500">
+                      <p className="mt-2 flex flex-wrap items-center gap-x-1 tabular-nums text-slate-400">
                         <span>
                           가동일 이번 달 {manpower.daysWithManpower}일 · 올해 {manpower.ytdOperatingDays}일
                         </span>
                         {manpower.monthlyOperatingDays.length > 0 && (
-                          <span className="group relative inline-flex items-center">
-                            <button
-                              type="button"
-                              className="ml-0.5 rounded p-0.5 text-slate-600 hover:text-slate-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/35"
-                              aria-label="월별 가동일 상세"
-                            >
-                              <Info className="h-3 w-3" strokeWidth={2} aria-hidden />
-                            </button>
-                            <span
-                              role="tooltip"
-                              className={`${executiveTooltipPanelClass} right-0 left-auto w-[min(18rem,calc(100vw-2rem))] md:left-auto md:right-0 md:translate-x-0`}
-                            >
-                              <span className="font-medium text-slate-100">월별 가동일</span>
-                              <span className="mt-1.5 block text-slate-400">
-                                {formatMonthlyOperatingDays(manpower.monthlyOperatingDays)}
-                              </span>
+                          <ExecutivePortalTooltip
+                            trigger={
+                              <button
+                                type="button"
+                                className="ml-0.5 rounded p-0.5 text-slate-500 hover:text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/35"
+                                aria-label="월별 가동일 상세"
+                              >
+                                <Info className="h-3 w-3" strokeWidth={2} aria-hidden />
+                              </button>
+                            }
+                          >
+                            <span className="font-medium text-slate-100">월별 가동일</span>
+                            <span className="mt-1.5 block text-slate-300">
+                              {formatMonthlyOperatingDays(manpower.monthlyOperatingDays)}
                             </span>
-                          </span>
+                          </ExecutivePortalTooltip>
                         )}
                       </p>
                     </div>
@@ -851,8 +837,8 @@ export default function ExecutiveDashboardPage() {
               })()}
             </div>
           ) : (
-            <p className={`mt-6 flex-1 ${dashMuted}`}>
-              생산계획가공 데이터가 없습니다. 시트에서 동기화 API로 행을 넣으면 이 카드가 채워집니다.
+            <p className={`mt-6 flex-1 ${dashMutedMeta}`}>
+              생산계획 데이터가 없습니다. 계획이 등록되면 이 카드가 채워집니다.
             </p>
           )}
         </section>
@@ -861,31 +847,29 @@ export default function ExecutiveDashboardPage() {
           <div className={`flex items-center justify-between gap-3 ${executiveTooltipHostRowClass}`}>
             <div className="flex items-center gap-1.5 min-w-0">
               <h2 className={dashTitle}>폐기율 (올해 가중)</h2>
-              <span className="group relative inline-flex shrink-0">
-                <button
-                  type="button"
-                  className="rounded p-0.5 text-cyan-500/80 hover:text-cyan-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
-                  aria-label="폐기율 집계 기준 안내"
-                >
-                  <Info className="w-3.5 h-3.5" strokeWidth={2} aria-hidden />
-                </button>
-                <span
-                  role="tooltip"
-                  className={`${executiveTooltipPanelClass} left-1/2 w-[min(20rem,calc(100vw-2rem))] -translate-x-1/2 md:left-0 md:translate-x-0`}
-                >
-                  <span className="block">
-                    도우·파베이크 폐기는 생산일지 계산과 동일합니다. 파베 분모는 수동 파베 생산 집계가 있으면 그
-                    수치, 없으면 도우 사용량(또는 반죽량)입니다. 수동 JSONL이 있으면 표와 같은 병합값으로 집계합니다.
-                  </span>
-                  <span className="mt-2 block text-slate-400">
-                    집계 일수 {w?.closedDayCount ?? 0}일 · Σ도우반죽 {w ? num(w.sumDoughMix) : "—"}
-                  </span>
+              <ExecutivePortalTooltip
+                trigger={
+                  <button
+                    type="button"
+                    className="rounded p-0.5 text-cyan-500/80 hover:text-cyan-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
+                    aria-label="폐기율 안내"
+                  >
+                    <Info className="w-3.5 h-3.5" strokeWidth={2} aria-hidden />
+                  </button>
+                }
+              >
+                <span className="block">
+                  도우와 파베이크 공정의 폐기율을 올해 누적으로 집계한 값입니다. 전년 같은 기간과 비교해 개선 여부를
+                  확인할 수 있습니다.
                 </span>
-              </span>
+                <span className="mt-2 block text-slate-300">
+                  생산수량 대비 폐기수량 기준으로 계산했으며, 누락된 기록은 별도 생산기록으로 보완했습니다.
+                </span>
+              </ExecutivePortalTooltip>
             </div>
             <Link
               href="/executive/waste"
-              className="shrink-0 text-xs font-medium text-slate-500 transition-colors hover:text-slate-300"
+              className={`shrink-0 ${dashAuxLink}`}
             >
               상세보기
             </Link>
@@ -894,9 +878,9 @@ export default function ExecutiveDashboardPage() {
           <ul className="mt-4 flex-1 space-y-4 text-slate-300">
             <li className="space-y-2">
               <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                <div className="min-w-0 text-sm text-slate-400">
-                  <span className="font-medium text-slate-200">전체 폐기율</span>
-                  <span className="mt-0.5 block text-[11px] font-normal text-slate-600">목표: 4% 미만</span>
+                <div className="min-w-0 text-sm text-slate-300">
+                  <span className="font-medium text-slate-100">전체 폐기율</span>
+                  <span className="mt-0.5 block text-[12px] font-medium text-slate-400">목표: 4% 미만</span>
                 </div>
                 <span
                   className={`shrink-0 ${dashHero} ${wasteRateToneClass(w?.overallDiscardRatePct ?? null)}`}
@@ -916,14 +900,14 @@ export default function ExecutiveDashboardPage() {
                         </span>
                       ) : null}
                       {wasteYoyCompareUi.primaryPhrase ? (
-                        <span className="min-w-0 text-xs tabular-nums text-slate-400">
+                        <span className="min-w-0 text-[13px] tabular-nums font-medium text-slate-300">
                           {wasteYoyCompareUi.primaryPhrase}
                         </span>
                       ) : null}
                     </div>
                   )}
                   {wasteYoyCompareUi.secondLine ? (
-                    <p className="text-[11px] leading-snug tabular-nums text-slate-600">
+                    <p className="text-[12px] leading-snug tabular-nums font-medium text-slate-500">
                       {wasteYoyCompareUi.secondLine}
                     </p>
                   ) : null}
@@ -975,24 +959,21 @@ export default function ExecutiveDashboardPage() {
           <div className={`mb-1 flex items-center justify-between gap-3 ${executiveTooltipHostRowClass}`}>
             <div className="flex min-w-0 items-center gap-1.5">
               <h2 className={dashTitle}>온·습도 (최근 7일)</h2>
-              <span className="group relative inline-flex shrink-0">
-                <button
-                  type="button"
-                  className="rounded p-0.5 text-cyan-500/80 hover:text-cyan-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
-                  aria-label="온·습도 집계 기준 안내"
-                >
-                  <Info className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                </button>
-                <span
-                  role="tooltip"
-                  className={`${executiveTooltipPanelClass} left-1/2 w-[min(20rem,calc(100vw-2rem))] -translate-x-1/2 md:left-0 md:translate-x-0`}
-                >
-                  승인된 영업장 온습도 일지 기준 · 구역별 측정값을 합산한 최근 7일 평균입니다. 증감은 바로 이전
-                  7일 구간 평균과 비교합니다.
-                </span>
-              </span>
+              <ExecutivePortalTooltip
+                trigger={
+                  <button
+                    type="button"
+                    className="rounded p-0.5 text-cyan-500/80 hover:text-cyan-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
+                    aria-label="온·습도 안내"
+                  >
+                    <Info className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                  </button>
+                }
+              >
+                최근 7일 온·습도 점검 결과의 평균값입니다. 증감은 바로 이전 7일과 비교한 값입니다.
+              </ExecutivePortalTooltip>
             </div>
-            <Link href="/executive/climate" className="shrink-0 text-sm font-medium text-cyan-400 hover:text-cyan-300">
+            <Link href="/executive/climate" className="shrink-0 text-[15px] font-semibold text-cyan-400 hover:text-cyan-300">
               상세보기 →
             </Link>
           </div>
@@ -1011,9 +992,9 @@ export default function ExecutiveDashboardPage() {
                       : "—"}
                   </p>
                   {climateDashboardCard.tempTrend && (
-                    <p className={`mt-2 tabular-nums ${dashMuted}`}>
+                    <p className={`mt-2 tabular-nums text-[13px] font-medium text-slate-400`}>
                       {climateDashboardCard.tempTrend}
-                      <span className="ml-1 font-normal text-gray-600">· 직전 7일</span>
+                      <span className="ml-1 font-normal text-slate-500">· 직전 7일</span>
                     </p>
                   )}
                 </div>
@@ -1030,9 +1011,9 @@ export default function ExecutiveDashboardPage() {
                       : "—"}
                   </p>
                   {climateDashboardCard.humTrend && (
-                    <p className={`mt-2 tabular-nums ${dashMuted}`}>
+                    <p className={`mt-2 tabular-nums text-[13px] font-medium text-slate-400`}>
                       {climateDashboardCard.humTrend}
-                      <span className="ml-1 font-normal text-gray-600">· 직전 7일</span>
+                      <span className="ml-1 font-normal text-slate-500">· 직전 7일</span>
                     </p>
                   )}
                 </div>
@@ -1056,7 +1037,7 @@ export default function ExecutiveDashboardPage() {
               </div>
             </div>
           ) : (
-            <p className={`mt-4 flex-1 ${dashMuted}`}>최근 7일 승인 일지가 없습니다.</p>
+            <p className={`mt-4 flex-1 ${dashMutedMeta}`}>최근 7일 점검 기록이 없습니다.</p>
           )}
         </section>
         </div>
@@ -1069,21 +1050,19 @@ export default function ExecutiveDashboardPage() {
                 <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.65)]" />
               </span>
               <h2 className={dashTitle}>제조설비 점검</h2>
-              <span className="group relative inline-flex shrink-0">
-                <button
-                  type="button"
-                  className="rounded p-0.5 text-slate-500 hover:text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40"
-                  aria-label="제조설비 점검 집계 기준 안내"
-                >
-                  <Info className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                </button>
-                <span
-                  role="tooltip"
-                  className={`${executiveTooltipPanelClass} left-0 w-[min(19rem,calc(100vw-2rem))]`}
-                >
-                  승인된 제조설비 점검 일지 기준으로 최근 7일 구간의 부적합(X) 응답만 집계합니다.
-                </span>
-              </span>
+              <ExecutivePortalTooltip
+                trigger={
+                  <button
+                    type="button"
+                    className="rounded p-0.5 text-slate-400 hover:text-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40"
+                    aria-label="제조설비 점검 안내"
+                  >
+                    <Info className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                  </button>
+                }
+              >
+                최근 7일 설비 점검 결과입니다. 부적합 항목이 없으면 ‘점검 이상 무’로 표시됩니다.
+              </ExecutivePortalTooltip>
             </div>
 
             {equipment == null && <p className={`font-medium ${dashMuted}`}>불러오는 중…</p>}
@@ -1126,9 +1105,6 @@ export default function ExecutiveDashboardPage() {
         </section>
       </div>
 
-      <p className="text-slate-600 text-xs mt-8 leading-relaxed">
-        제품 분류 키워드는 코드 설정(`src/features/dashboard/productCategoryRules.ts`)에서 관리합니다.
-      </p>
     </div>
   );
 }

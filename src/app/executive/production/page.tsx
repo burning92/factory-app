@@ -14,7 +14,8 @@ import {
   type YtdProductionRollup,
 } from "@/features/dashboard/aggregateProductionFromSnapshots";
 import { DashboardBackLink } from "../DashboardBackLink";
-import { executiveTooltipHostRowClass, executiveTooltipPanelClass } from "../executiveTooltipStyles";
+import { ExecutivePortalTooltip } from "../ExecutivePortalTooltip";
+import { executiveTooltipHostRowClass } from "../executiveTooltipStyles";
 import type { ProductionBundle } from "@/features/dashboard/loadProductionBundle";
 
 function totalFinishedFromRollup(r: YtdProductionRollup): number {
@@ -119,35 +120,32 @@ export default function ExecutiveProductionDetailPage() {
       <DashboardBackLink />
       <div className={`mb-4 flex flex-wrap items-center gap-2 ${executiveTooltipHostRowClass}`}>
         <h1 className="text-lg font-semibold text-slate-100">생산량 상세</h1>
-        <span className="group relative inline-flex">
-          <button
-            type="button"
-            className="rounded p-0.5 text-cyan-500/80 hover:text-cyan-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
-            aria-label="생산량 집계 기준 안내"
-          >
-            <Info className="h-4 w-4" strokeWidth={2} aria-hidden />
-          </button>
-          <span
-            role="tooltip"
-            className={`${executiveTooltipPanelClass} left-0 w-[min(24rem,calc(100vw-2rem))]`}
-          >
-            <span className="font-medium text-slate-200">{year}년 표시 수치</span>는 2차 마감 스냅샷과 이카운트
-            생산입고 보정(동기화 시)을 합산합니다.
-            <br />
-            <br />
-            일별 표는 2차 마감이 있는 날은 앱 스냅샷, 그 외는 이카운트 생산입고(같은 열 구분)입니다. 2차 마감
-            일의 이카운트 행은 중복 방지로 표에 넣지 않으며, 올해 누적만 스냅샷과 합산됩니다.
+        <ExecutivePortalTooltip
+          trigger={
+            <button
+              type="button"
+              className="rounded p-0.5 text-cyan-500/80 hover:text-cyan-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
+              aria-label="생산량 집계 안내"
+            >
+              <Info className="h-4 w-4" strokeWidth={2} aria-hidden />
+            </button>
+          }
+        >
+          <span className="block">
+            올해 누적 생산량입니다. 일별 생산기록을 기준으로 집계했으며, 일부 누락 구간은 생산실적 자료를
+            반영했습니다.
           </span>
-        </span>
+          <span className="mt-2 block text-slate-300">이 페이지에서 일자별 기준을 확인할 수 있습니다.</span>
+        </ExecutivePortalTooltip>
       </div>
 
       {err && <p className="mb-4 text-sm text-amber-200">{err}</p>}
 
       {ecount && (
-        <p className="mb-4 rounded-md border border-slate-700/40 bg-slate-800/50 px-2.5 py-1.5 text-[10px] leading-snug text-slate-500">
-          이카운트 생산입고 {ecount.linesCounted.toLocaleString("ko-KR")}행을 합산했습니다. 2차 마감이 있는
-          날짜는 중복을 막기 위해 {ecount.skippedBecauseSecondClosed.toLocaleString("ko-KR")}행 제외
-          {ecount.error ? ` · 조회 오류: ${ecount.error}` : ""}.
+        <p className="mb-4 rounded-md border border-slate-700/40 bg-slate-800/50 px-2.5 py-1.5 text-xs leading-snug text-slate-400">
+          생산실적 자료 {ecount.linesCounted.toLocaleString("ko-KR")}건을 반영했습니다. 이미 마감 처리된 날은
+          중복 없이 {ecount.skippedBecauseSecondClosed.toLocaleString("ko-KR")}건 제외
+          {ecount.error ? ` · ${ecount.error}` : ""}.
         </p>
       )}
 
