@@ -290,13 +290,16 @@ export interface ManualWasteImportSeries {
   doughProductionByDate: Record<string, number>;
   doughWasteByDate: Record<string, number>;
   parbakeWasteByDate: Record<string, number>;
+  /** 일자별 파베이크 생산량(개수). 있으면 파베%·Σ 파베생산 분모로 우선 사용 */
+  parbakeProductionByDate: Record<string, number>;
 }
 
 /**
- * 수동 JSONL(도우생산/도우폐기/파베폐기)을 번들 일자와 합쳐 표 표시용 행을 만든다.
+ * 수동 JSONL(도우생산/도우폐기/파베폐기/선택 파베생산)을 번들 일자와 합쳐 표 표시용 행을 만든다.
  * - 번들에 값이 있으면 우선 사용
  * - 번들 값이 0이고 수동 값이 있으면 수동 값으로 보강
  * - 번들에 없는 날짜도 수동 데이터가 있으면 행으로 추가
+ * - parbakeProductionByDate[date] > 0 이면 당일 파베 생산 분모(sameDayParbakeProductionQty)로 사용
  */
 export function mergeBundleDaysWithManualImportsForTable(
   bundleDays: DayProductionMetrics[],
@@ -308,6 +311,7 @@ export function mergeBundleDaysWithManualImportsForTable(
   for (const d of Object.keys(manual.doughProductionByDate)) allDates.add(d);
   for (const d of Object.keys(manual.doughWasteByDate)) allDates.add(d);
   for (const d of Object.keys(manual.parbakeWasteByDate)) allDates.add(d);
+  for (const d of Object.keys(manual.parbakeProductionByDate ?? {})) allDates.add(d);
 
   const filledManualDates: string[] = [];
   const rows = Array.from(allDates)
@@ -317,6 +321,7 @@ export function mergeBundleDaysWithManualImportsForTable(
       const manualMix = manual.doughProductionByDate[date] ?? 0;
       const manualDWaste = manual.doughWasteByDate[date] ?? 0;
       const manualPWaste = manual.parbakeWasteByDate[date] ?? 0;
+      const manualParbakeProd = manual.parbakeProductionByDate?.[date] ?? 0;
 
       const fromBundle = b
         ? {
@@ -342,9 +347,12 @@ export function mergeBundleDaysWithManualImportsForTable(
       const doughMixQty = useManual ? manualMix : fromBundle.doughMixQty;
       const doughWasteQty = useManual ? manualDWaste : fromBundle.doughWasteQty;
       const parbakeWasteQty = useManual ? manualPWaste : fromBundle.parbakeWasteQty;
-      const sameDayParbakeProductionQty = useManual
-        ? doughMixQty
-        : fromBundle.sameDayParbakeProductionQty;
+      const sameDayParbakeProductionQty =
+        manualParbakeProd > 0
+          ? manualParbakeProd
+          : useManual
+            ? doughMixQty
+            : fromBundle.sameDayParbakeProductionQty;
 
       if (useManual && (manualMix > 0 || manualDWaste > 0 || manualPWaste > 0)) {
         filledManualDates.push(date);

@@ -38,11 +38,13 @@ export async function GET(req: Request) {
   const doughProductionByDate = toDateQtyMap(path.join(dir, `${year}-dough-production.jsonl`));
   const doughWasteByDate = toDateQtyMap(path.join(dir, `${year}-waste-dough.jsonl`));
   const parbakeWasteByDate = toDateQtyMap(path.join(dir, `${year}-waste-parbake.jsonl`));
+  const parbakeProductionByDate = toDateQtyMap(path.join(dir, `${year}-parbake-production.jsonl`));
 
   return NextResponse.json({
     year,
     doughProductionByDate,
     doughWasteByDate,
     parbakeWasteByDate,
+    parbakeProductionByDate,
   });
 }

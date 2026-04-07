@@ -48,6 +48,7 @@ export default function ExecutiveWasteDetailPage() {
     doughProductionByDate: {},
     doughWasteByDate: {},
     parbakeWasteByDate: {},
+    parbakeProductionByDate: {},
   });
 
   const { rows: tableRows, filledManualDates } = useMemo(() => {
@@ -77,7 +78,13 @@ export default function ExecutiveWasteDetailPage() {
         loadProductionBundle(supabase, year, bomRowsToRefs(bomList), materialsToMeta(materials)),
         fetch(`/api/internal/manual-imports/summary?year=${year}`).then(async (r) => {
           if (!r.ok) throw new Error(`manual imports ${r.status}`);
-          return (await r.json()) as ManualWasteImportSeries;
+          const raw = (await r.json()) as Partial<ManualWasteImportSeries>;
+          return {
+            doughProductionByDate: raw.doughProductionByDate ?? {},
+            doughWasteByDate: raw.doughWasteByDate ?? {},
+            parbakeWasteByDate: raw.parbakeWasteByDate ?? {},
+            parbakeProductionByDate: raw.parbakeProductionByDate ?? {},
+          };
         }),
       ]);
       if (c) return;
@@ -110,7 +117,8 @@ export default function ExecutiveWasteDetailPage() {
       <DashboardBackLink />
       <h1 className="text-lg font-semibold text-slate-100 mb-1">폐기율 상세</h1>
       <p className="text-slate-500 text-sm mb-6">
-        일별 비율 후 올해 가중 평균(Σ폐기÷Σ분모). 파베이크 분모는 당일 파베이크 생산량과 동일(도우 사용량).
+        일별 비율 후 올해 가중 평균(Σ폐기÷Σ분모). 파베이크 분모는 해당 연도에 수동 파베 생산 집계가 있으면 그
+        수치를 쓰고, 없으면 스냅샷의 도우 사용량(수동 도우만 있을 때는 반죽량)을 씁니다.
       </p>
       <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
         <label htmlFor="waste-year-filter" className="text-xs text-slate-500">
