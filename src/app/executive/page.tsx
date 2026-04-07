@@ -288,6 +288,9 @@ const dashMutedMeta = "text-[13px] font-medium text-slate-400";
 const dashLabelXs = "text-xs font-semibold tracking-wide text-slate-400";
 /** 보조 링크(상세보기 옆 등) */
 const dashAuxLink = "text-[15px] font-medium text-slate-400 transition-colors hover:text-slate-200";
+/** 카드 헤더 우측「상세보기 →」CTA — KPI 카드 공통 */
+const dashCardDetailLink =
+  "shrink-0 inline-flex items-center rounded-md px-2 py-1.5 text-[15px] font-semibold text-cyan-400 transition-colors hover:text-cyan-300";
 
 export default function ExecutiveDashboardPage() {
   const planActualMiniDonutGradId = useId().replace(/:/g, "");
@@ -575,7 +578,7 @@ export default function ExecutiveDashboardPage() {
               </ExecutivePortalTooltip>
             </div>
             <div className="flex flex-col items-end gap-1 shrink-0 text-right">
-              <Link href="/executive/production" className="text-[15px] font-semibold text-cyan-400 hover:text-cyan-300">
+              <Link href="/executive/production" className={dashCardDetailLink}>
                 상세보기 →
               </Link>
               <Link href="/executive/ecount-import" className={dashAuxLink}>
@@ -666,10 +669,7 @@ export default function ExecutiveDashboardPage() {
                 이번 달 계획 대비 생산실적입니다. 월별 추이와 품목군별 달성률을 함께 보여줍니다.
               </ExecutivePortalTooltip>
             </div>
-            <Link
-              href="/executive/plan-actual"
-              className="shrink-0 text-[15px] font-semibold text-cyan-400 hover:text-cyan-300"
-            >
+            <Link href="/executive/plan-actual" className={dashCardDetailLink}>
               상세보기 →
             </Link>
           </div>
@@ -872,11 +872,8 @@ export default function ExecutiveDashboardPage() {
                 </span>
               </ExecutivePortalTooltip>
             </div>
-            <Link
-              href="/executive/waste"
-              className={`shrink-0 ${dashAuxLink}`}
-            >
-              상세보기
+            <Link href="/executive/waste" className={dashCardDetailLink}>
+              상세보기 →
             </Link>
           </div>
 
@@ -978,7 +975,7 @@ export default function ExecutiveDashboardPage() {
                 최근 7일 온·습도 점검 결과의 평균값입니다. 증감은 바로 이전 7일과 비교한 값입니다.
               </ExecutivePortalTooltip>
             </div>
-            <Link href="/executive/climate" className="shrink-0 text-[15px] font-semibold text-cyan-400 hover:text-cyan-300">
+            <Link href="/executive/climate" className={dashCardDetailLink}>
               상세보기 →
             </Link>
           </div>
@@ -1134,17 +1131,14 @@ export default function ExecutiveDashboardPage() {
             )}
           </div>
 
-          <div className="flex shrink-0 flex-col gap-2 self-start sm:self-center">
+          <div className="flex shrink-0 flex-col items-end gap-2 self-start sm:self-center">
             <Link
               href="/daily/manufacturing-equipment/incident/new"
               className="whitespace-nowrap rounded-lg border border-amber-600/40 bg-amber-950/25 px-3 py-2 text-center text-sm font-medium text-amber-200 hover:bg-amber-950/40"
             >
               설비 이상 등록
             </Link>
-            <Link
-              href="/executive/equipment"
-              className="text-center text-sm font-medium text-cyan-400 hover:text-cyan-300"
-            >
+            <Link href="/executive/equipment" className={dashCardDetailLink}>
               상세보기 →
             </Link>
           </div>
