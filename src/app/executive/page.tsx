@@ -28,7 +28,7 @@ import {
   DEFAULT_DASHBOARD_BASELINE_HEADCOUNT,
   formatMonthlyOperatingDays,
 } from "@/features/dashboard/manpowerUtilization";
-import { AlertTriangle, CheckCircle2, Droplets, Info, LayoutDashboard, Thermometer, Zap } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Droplets, Info, LayoutDashboard, Thermometer } from "lucide-react";
 import { executiveTooltipHostRowClass, executiveTooltipPanelClass } from "./executiveTooltipStyles";
 import type { ProductionBundle } from "@/features/dashboard/loadProductionBundle";
 import type { PlanActualDashboardMetrics } from "@/features/dashboard/planVsActual";
@@ -734,13 +734,13 @@ export default function ExecutiveDashboardPage() {
         {/* 태블릿 2열 · 데스크톱 3열 보조 KPI */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5 lg:gap-6 lg:items-stretch">
         <section className={dashCard}>
-          <div className={`flex items-center justify-between gap-3 ${executiveTooltipHostRowClass}`}>
+          <div className={`flex items-start justify-between gap-4 ${executiveTooltipHostRowClass}`}>
             <div className="flex min-w-0 items-center gap-1.5">
               <h2 className={dashTitle}>인력 가동 현황</h2>
               <span className="group relative inline-flex shrink-0">
                 <button
                   type="button"
-                  className="rounded p-0.5 text-cyan-500/80 hover:text-cyan-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
+                  className="rounded p-0.5 text-slate-500 hover:text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40"
                   aria-label="인력 가동·투입률 집계 기준 안내"
                 >
                   <Info className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
@@ -755,84 +755,90 @@ export default function ExecutiveDashboardPage() {
               </span>
             </div>
             {manpowerProductivityUnitsPerPersonDay != null && (
-              <div
-                className="flex min-h-9 max-w-[min(100%,15rem)] shrink-0 items-center gap-1.5 rounded-md border border-cyan-500/25 bg-slate-800/85 px-2.5 py-1.5 shadow-md shadow-black/20 sm:max-w-none sm:px-3"
+              <p
+                className="shrink-0 text-right text-[11px] leading-snug text-slate-500 tabular-nums"
                 title="이번 달 완제품 합계·가동일·평균 투입 인원 기준"
               >
-                <Zap className="h-4 w-4 shrink-0 text-cyan-400" strokeWidth={2.2} aria-hidden />
-                <span className="text-left text-xs font-semibold leading-snug text-emerald-300/95">
-                  1인당 생산성:{" "}
-                  <span className="whitespace-nowrap tabular-nums text-cyan-200">
-                    {Math.round(manpowerProductivityUnitsPerPersonDay).toLocaleString("ko-KR")}개/일
-                  </span>
+                생산성{" "}
+                <span className="text-slate-400">
+                  {Math.round(manpowerProductivityUnitsPerPersonDay).toLocaleString("ko-KR")}개/인·일
                 </span>
-              </div>
+              </p>
             )}
           </div>
 
           {manpower?.hasProcessedPlanData && manpower.avgDailyUtilizationPct != null ? (
-            <div className="mt-4 flex flex-1 flex-col gap-0">
-              <div>
-                <p className={dashLabelXs}>이번 달 투입률</p>
-                <p className={`mt-1.5 ${dashHero} text-cyan-200`}>{pct(manpower.avgDailyUtilizationPct)}</p>
-                <div className="mt-4 h-3.5 w-full overflow-hidden rounded-full bg-slate-700/55">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-teal-400/90 shadow-[0_0_12px_rgba(34,211,238,0.25)]"
-                    style={{ width: utilizationBarWidth(manpower.avgDailyUtilizationPct) }}
-                  />
-                </div>
-                <p className={`mt-2 text-right leading-snug ${dashMuted}`}>
-                  (평균 {manpower.avgDailyManpower?.toFixed(1) ?? "—"}명 / 총원 {manpower.baselineHeadcount}명)
-                </p>
-              </div>
+            <div className="mt-6 flex flex-1 flex-col">
+              {(() => {
+                const monthU = manpower.avgDailyUtilizationPct;
+                const ytdU = manpower.ytdAvgDailyUtilizationPct;
+                const deltaUtilVsYtd =
+                  monthU != null &&
+                  ytdU != null &&
+                  Number.isFinite(monthU) &&
+                  Number.isFinite(ytdU)
+                    ? monthU - ytdU
+                    : null;
+                return (
+                  <>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      이번 달 평균 투입률
+                    </p>
+                    <p className={`mt-2 ${dashHero} text-cyan-200/95`}>{pct(monthU)}</p>
+                    {deltaUtilVsYtd != null && ytdU != null ? (
+                      <p className="mt-2 text-xs leading-relaxed text-slate-500 tabular-nums">
+                        올해 평균 <span className="text-slate-400">{pct(ytdU)}</span> 대비{" "}
+                        <span className="text-slate-400">{formatDeltaPctPoint(deltaUtilVsYtd)}</span>
+                      </p>
+                    ) : ytdU != null ? (
+                      <p className="mt-2 text-xs text-slate-500">
+                        올해 평균 <span className="tabular-nums text-slate-400">{pct(ytdU)}</span>
+                      </p>
+                    ) : null}
+                    <div className="mt-5 h-3 w-full overflow-hidden rounded-full bg-slate-700/45">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-cyan-500/85 to-teal-400/70"
+                        style={{ width: utilizationBarWidth(monthU) }}
+                      />
+                    </div>
 
-              <div className="mt-7 border-t border-slate-700/50 pt-6">
-                <p className={dashLabelXs}>올해 평균 투입률</p>
-                <p className={`mt-1.5 ${dashSubHero} text-cyan-200/95`}>
-                  {pct(manpower.ytdAvgDailyUtilizationPct)}
-                </p>
-                <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-700/50">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-cyan-500/85 to-cyan-400/65"
-                    style={{ width: utilizationBarWidth(manpower.ytdAvgDailyUtilizationPct) }}
-                  />
-                </div>
-                <p className={`mt-2 text-right leading-snug ${dashMuted}`}>
-                  (평균 {manpower.ytdAvgDailyManpower?.toFixed(1) ?? "—"}명 / 총원 {manpower.baselineHeadcount}명)
-                </p>
-              </div>
-
-              <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-slate-700/50 pt-5">
-                <span className="rounded-md border border-slate-600/40 bg-slate-800/55 px-2.5 py-1 text-xs tabular-nums text-gray-400">
-                  이번 달 가동일 ({manpower.daysWithManpower}일)
-                </span>
-                <span className="rounded-md border border-slate-600/40 bg-slate-800/55 px-2.5 py-1 text-xs tabular-nums text-gray-400">
-                  올해 누적 가동일 ({manpower.ytdOperatingDays}일)
-                </span>
-                {manpower.monthlyOperatingDays.length > 0 && (
-                  <span className="group relative inline-flex shrink-0 items-center">
-                    <button
-                      type="button"
-                      className="rounded p-0.5 text-gray-500 hover:text-gray-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40"
-                      aria-label="월별 가동일 상세"
-                    >
-                      <Info className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                    </button>
-                    <span
-                      role="tooltip"
-                      className={`${executiveTooltipPanelClass} right-0 left-auto w-[min(18rem,calc(100vw-2rem))] md:left-auto md:right-0 md:translate-x-0`}
-                    >
-                      <span className="font-medium text-slate-100">월별 가동일</span>
-                      <span className="mt-1.5 block text-slate-400">
-                        {formatMonthlyOperatingDays(manpower.monthlyOperatingDays)}
-                      </span>
-                    </span>
-                  </span>
-                )}
-              </div>
+                    <div className="mt-8 border-t border-slate-700/35 pt-5 text-xs leading-relaxed text-slate-500">
+                      <p className="tabular-nums">
+                        평균 투입 인원 {manpower.avgDailyManpower?.toFixed(1) ?? "—"}명 · 총원{" "}
+                        {manpower.baselineHeadcount}명
+                      </p>
+                      <p className="mt-2 flex flex-wrap items-center gap-x-1 tabular-nums text-slate-500">
+                        <span>
+                          가동일 이번 달 {manpower.daysWithManpower}일 · 올해 {manpower.ytdOperatingDays}일
+                        </span>
+                        {manpower.monthlyOperatingDays.length > 0 && (
+                          <span className="group relative inline-flex items-center">
+                            <button
+                              type="button"
+                              className="ml-0.5 rounded p-0.5 text-slate-600 hover:text-slate-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/35"
+                              aria-label="월별 가동일 상세"
+                            >
+                              <Info className="h-3 w-3" strokeWidth={2} aria-hidden />
+                            </button>
+                            <span
+                              role="tooltip"
+                              className={`${executiveTooltipPanelClass} right-0 left-auto w-[min(18rem,calc(100vw-2rem))] md:left-auto md:right-0 md:translate-x-0`}
+                            >
+                              <span className="font-medium text-slate-100">월별 가동일</span>
+                              <span className="mt-1.5 block text-slate-400">
+                                {formatMonthlyOperatingDays(manpower.monthlyOperatingDays)}
+                              </span>
+                            </span>
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           ) : (
-            <p className={`mt-4 flex-1 ${dashMuted}`}>
+            <p className={`mt-6 flex-1 ${dashMuted}`}>
               생산계획가공 데이터가 없습니다. 시트에서 동기화 API로 행을 넣으면 이 카드가 채워집니다.
             </p>
           )}
