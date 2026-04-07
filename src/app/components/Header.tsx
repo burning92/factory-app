@@ -133,30 +133,44 @@ export default function Header() {
       className={headerClassName}
       style={{ ["--header-primary" as string]: primaryColor }}
     >
-      <Link
-        href="/"
-        className="flex items-center gap-2 text-slate-100 hover:text-white transition-colors shrink-0"
-      >
-        {effectiveLogoUrl.startsWith("http") ? (
-          <img src={effectiveLogoUrl} alt="로고" width={36} height={36} className="object-contain shrink-0 rounded" />
-        ) : (
-          <Image
-            src={effectiveLogoUrl}
-            alt="로고"
-            width={36}
-            height={36}
-            className="object-contain shrink-0"
-          />
+      <div className="flex min-w-0 flex-1 items-center gap-2 md:flex-none md:min-w-0">
+        <Link
+          href="/"
+          className="flex min-w-0 items-center gap-2 text-slate-100 hover:text-white transition-colors shrink-0"
+        >
+          {effectiveLogoUrl.startsWith("http") ? (
+            <img src={effectiveLogoUrl} alt="로고" width={36} height={36} className="object-contain shrink-0 rounded" />
+          ) : (
+            <Image
+              src={effectiveLogoUrl}
+              alt="로고"
+              width={36}
+              height={36}
+              className="object-contain shrink-0"
+            />
+          )}
+          {viewIsHarang ? (
+            <span className="font-semibold text-sm hidden sm:inline">하랑</span>
+          ) : (
+            <>
+              <span className="font-semibold text-sm hidden sm:inline">AF Factory Hub</span>
+              <span className="font-semibold text-sm sm:hidden">AF Hub</span>
+            </>
+          )}
+        </Link>
+        {showExecutiveLink && (
+          <Link
+            href="/executive"
+            className={`md:hidden shrink-0 rounded-md px-2 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors ${
+              pathname === "/executive" || pathname.startsWith("/executive/")
+                ? "bg-cyan-500/20 text-cyan-300"
+                : "text-cyan-400 hover:bg-slate-800/80 hover:text-cyan-300"
+            }`}
+          >
+            대시보드
+          </Link>
         )}
-        {viewIsHarang ? (
-          <span className="font-semibold text-sm hidden sm:inline">하랑</span>
-        ) : (
-          <>
-            <span className="font-semibold text-sm hidden sm:inline">AF Factory Hub</span>
-            <span className="font-semibold text-sm sm:hidden">AF Hub</span>
-          </>
-        )}
-      </Link>
+      </div>
 
       <nav className="hidden md:flex flex-1 justify-center items-center gap-6 min-w-0" aria-label="업무 카테고리">
         {showDesktopCategoryMenu && (viewIsHarang ? (
