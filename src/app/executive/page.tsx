@@ -45,6 +45,14 @@ import type { PlanActualDashboardMetrics } from "@/features/dashboard/planVsActu
 import type { ClimateDashboardWindows } from "@/features/dashboard/climateAndEquipment";
 import type { ManpowerMonthSummary } from "@/features/dashboard/manpowerUtilization";
 
+function equipmentDashboardUnitMeta(s: ExecutiveEquipmentUnitSnapshot): string {
+  if (s.statusLabel === "이력 없음") return "고장 이력 없음 · 이력 등록 시 여기에 반영됩니다.";
+  if (s.statusLabel === "진행 중") return "조치 진행 중 · 상세에서 최신 이력을 확인하세요.";
+  if (s.daysWithoutFault != null && s.daysWithoutFault >= 30) return "운영중 노출 · 최근 30일 이내 신규 고장 없음";
+  if (s.daysWithoutFault != null) return "운영중 노출 · 무고장 경과 30일 미만(점검 권장)";
+  return "설비이력기록부 기준 집계";
+}
+
 function pct(n: number | null, digits = 2): string {
   if (n == null || Number.isNaN(n)) return "—";
   return `${n.toFixed(digits)}%`;
@@ -98,6 +106,35 @@ function wasteSubRateBarFillClass(ratePct: number | null): string {
 /** 미래 월 막대 높이(아직 해당 월이 오지 않음) — 실적 없음을 낮은 막대로만 표시 */
 const PLAN_ACTUAL_SPARKLINE_FUTURE_PLACEHOLDER_PCT = 12;
 
+/** 데스크톱 넓은 대시보드용 공통 카드 셸 */
+const dashCard =
+  "overflow-visible rounded-xl border border-slate-700/60 bg-slate-800/50 p-5 md:p-6 lg:p-7 flex flex-col min-h-0 shadow-sm shadow-black/10";
+/** 카드 제목 (18~20px) */
+const dashTitle = "text-lg md:text-xl font-bold text-white tracking-tight";
+/** 라벨·보조 제목 (13~14px) */
+const dashLabel = "text-sm font-semibold tracking-wide text-slate-300";
+/** 대장 수치 (44~48px) */
+const dashHero =
+  "text-[2.75rem] md:text-[3rem] font-extrabold tracking-tight tabular-nums leading-[1.05]";
+/** 부대장 수치 */
+const dashSubHero = "text-[1.75rem] md:text-[2rem] font-bold tabular-nums leading-tight";
+/** 서브 지표 숫자 */
+const dashSubMetric = "text-[15px] font-semibold tabular-nums";
+/** 본문 라인(항목명 등) */
+const dashMuted = "text-[15px] font-medium text-slate-300";
+/** 보조 설명·메타 (13~15px, 가독성↑) */
+const dashMutedMeta = "text-sm font-medium text-slate-300/95 leading-snug";
+/** 캡션·보조 한 단계 낮음 */
+const dashCaption = "text-sm font-medium text-slate-400 leading-snug";
+/** 보조 링크 */
+const dashAuxLink = "text-sm font-medium text-slate-400 transition-colors hover:text-slate-200";
+/** 카드 헤더 우측 CTA */
+const dashCardDetailLink =
+  "shrink-0 inline-flex items-center rounded-md px-2 py-1.5 text-sm font-semibold text-cyan-400 transition-colors hover:text-cyan-300";
+/** 헤더·푸터 액션 버튼 (제조설비 등) */
+const dashHeaderActionBtn =
+  "inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium transition-colors";
+
 function PlanActualYtdAchievementMiniBars({
   year,
   currentMonth,
@@ -134,7 +171,7 @@ function PlanActualYtdAchievementMiniBars({
 
   return (
     <div className="w-full min-w-0 overflow-visible pt-1" aria-label={`${year}년 월별 달성 추이 미리보기`}>
-      <p className="mb-2 text-left text-[13px] font-semibold text-slate-400">올해 월별 달성 추이</p>
+      <p className={`mb-2 text-left ${dashLabel}`}>올해 월별 달성 추이</p>
       <div className="relative flex h-[4.75rem] items-end justify-between gap-1 overflow-visible sm:gap-1.5">
         {months.map((m, i) => {
           const v = values[i]!;
@@ -195,7 +232,7 @@ function PlanActualYtdAchievementMiniBars({
                       ) : null}
                     </div>
                   </div>
-                  <span className="text-[11px] tabular-nums text-slate-400 sm:text-xs">{m}월</span>
+                  <span className="text-sm tabular-nums text-slate-400">{m}월</span>
                 </div>
               }
             >
@@ -263,38 +300,15 @@ function PlanActualCategoryMiniDonut({
           </defs>
         </svg>
         <div className="absolute inset-0 flex items-center justify-center px-0.5">
-          <span className="text-center text-xs font-semibold tabular-nums leading-tight text-cyan-100/95 sm:text-sm">
+          <span className="text-center text-sm font-semibold tabular-nums leading-tight text-cyan-100/95">
             {valid ? `${(achievementPct as number).toFixed(1)}%` : "—"}
           </span>
         </div>
       </div>
-      <p className="mt-2 text-center text-[13px] font-medium text-slate-400">{label}</p>
+      <p className={`mt-2 text-center ${dashCaption}`}>{label}</p>
     </div>
   );
 }
-
-/** 데스크톱 넓은 대시보드용 공통 카드 셸 */
-const dashCard =
-  "overflow-visible rounded-xl border border-slate-700/60 bg-slate-800/50 p-5 md:p-6 lg:p-7 flex flex-col min-h-0 shadow-sm shadow-black/10";
-/** 카드 헤더 타이틀 */
-const dashTitle = "text-base font-bold text-white tracking-tight";
-/** 대장 지표: 생산량 총합, 종합 달성률, 이번 달 투입률 */
-const dashHero = "text-4xl font-extrabold tracking-tight tabular-nums";
-/** 부대장 지표: 온·습도 평균, 폐기율 전체, 올해 평균 투입률 */
-const dashSubHero = "text-3xl font-bold tabular-nums";
-/** 서브 지표 숫자 */
-const dashSubMetric = "text-base font-semibold tabular-nums";
-/** 보조 설명·라벨 — 한 단계 밝게(가독성) */
-const dashMuted = "text-[15px] font-medium text-slate-300";
-/** 보조 메타(한 줄 설명) */
-const dashMutedMeta = "text-[13px] font-medium text-slate-400";
-/** 작은 라벨(섹션 머리글 등) */
-const dashLabelXs = "text-xs font-semibold tracking-wide text-slate-400";
-/** 보조 링크(상세보기 옆 등) */
-const dashAuxLink = "text-[15px] font-medium text-slate-400 transition-colors hover:text-slate-200";
-/** 카드 헤더 우측「상세보기 →」CTA — KPI 카드 공통 */
-const dashCardDetailLink =
-  "shrink-0 inline-flex items-center rounded-md px-2 py-1.5 text-[15px] font-semibold text-cyan-400 transition-colors hover:text-cyan-300";
 
 export default function ExecutiveDashboardPage() {
   const planActualMiniDonutGradId = useId().replace(/:/g, "");
@@ -585,7 +599,7 @@ export default function ExecutiveDashboardPage() {
           </div>
 
           <div className="mt-3 mb-5 lg:mb-6">
-            <p className={`${dashLabelXs} normal-case tracking-normal`}>총 생산량</p>
+            <p className={`${dashLabel} normal-case tracking-normal`}>총 생산량</p>
             <p className={`mt-1 ${dashHero} text-cyan-200/95`}>
               {totalProductionYtd != null ? num(totalProductionYtd) : "—"}
             </p>
@@ -675,8 +689,8 @@ export default function ExecutiveDashboardPage() {
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:items-end sm:gap-6">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className={dashLabelXs}>종합 달성률</p>
-                  <span className="rounded-md border border-cyan-500/45 bg-cyan-500/10 px-2 py-0.5 text-[11px] font-bold tracking-wide text-cyan-300 shadow-[0_0_12px_rgba(34,211,238,0.12)]">
+                  <p className={dashLabel}>종합 달성률</p>
+                  <span className="rounded-md border border-cyan-500/45 bg-cyan-500/10 px-2 py-0.5 text-xs sm:text-sm font-bold tracking-wide text-cyan-300 shadow-[0_0_12px_rgba(34,211,238,0.12)]">
                     이번 달 · {planDashboard?.month ?? calendarMonth.m}월
                   </span>
                 </div>
@@ -714,7 +728,7 @@ export default function ExecutiveDashboardPage() {
             </div>
 
             <div className="mt-auto border-t border-slate-700/50 pt-4 sm:pt-5">
-              <p className={`mb-4 text-center ${dashLabelXs}`}>대분류 달성률</p>
+              <p className={`mb-4 text-center ${dashLabel}`}>대분류 달성률</p>
               <div className="grid grid-cols-3 gap-x-1 gap-y-2 sm:gap-x-3">
                 <PlanActualCategoryMiniDonut
                   label="피자"
@@ -759,7 +773,7 @@ export default function ExecutiveDashboardPage() {
             </div>
             {manpowerProductivityUnitsPerPersonDay != null && (
               <p
-                className="shrink-0 text-right text-[13px] leading-snug text-slate-400 tabular-nums font-medium"
+                className={`shrink-0 text-right ${dashMutedMeta} tabular-nums`}
                 title="이번 달 완제품 합계·가동일·평균 투입 인원 기준"
               >
                 생산성{" "}
@@ -784,17 +798,15 @@ export default function ExecutiveDashboardPage() {
                     : null;
                 return (
                   <>
-                    <p className="text-[11px] font-semibold tracking-wide text-slate-400">
-                      이번 달 평균 투입률
-                    </p>
+                    <p className={dashLabel}>이번 달 평균 투입률</p>
                     <p className={`mt-2 ${dashHero} text-cyan-200/95`}>{pct(monthU)}</p>
                     {deltaUtilVsYtd != null && ytdU != null ? (
-                      <p className="mt-2 text-[13px] leading-relaxed text-slate-400 tabular-nums font-medium">
+                      <p className={`mt-2 ${dashMutedMeta} leading-relaxed tabular-nums`}>
                         올해 평균 <span className="text-slate-300">{pct(ytdU)}</span> 대비{" "}
                         <span className="text-slate-300">{formatDeltaPctPoint(deltaUtilVsYtd)}</span>
                       </p>
                     ) : ytdU != null ? (
-                      <p className="mt-2 text-[13px] text-slate-400 font-medium">
+                      <p className={`mt-2 ${dashMutedMeta}`}>
                         올해 평균 <span className="tabular-nums text-slate-300">{pct(ytdU)}</span>
                       </p>
                     ) : null}
@@ -805,7 +817,7 @@ export default function ExecutiveDashboardPage() {
                       />
                     </div>
 
-                    <div className="mt-8 border-t border-slate-700/35 pt-5 text-[13px] leading-relaxed text-slate-400 font-medium">
+                    <div className={`mt-8 border-t border-slate-700/35 pt-5 ${dashMutedMeta} leading-relaxed`}>
                       <p className="tabular-nums">
                         평균 투입 인원 {manpower.avgDailyManpower?.toFixed(1) ?? "—"}명 · 총원{" "}
                         {manpower.baselineHeadcount}명
@@ -879,7 +891,7 @@ export default function ExecutiveDashboardPage() {
               <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                 <div className="min-w-0 text-sm text-slate-300">
                   <span className="font-medium text-slate-100">전체 폐기율</span>
-                  <span className="mt-0.5 block text-[12px] font-medium text-slate-400">목표: 4% 미만</span>
+                  <span className={`mt-0.5 block ${dashCaption}`}>목표: 4% 미만</span>
                 </div>
                 <span
                   className={`shrink-0 ${dashHero} ${wasteRateToneClass(w?.overallDiscardRatePct ?? null)}`}
@@ -893,20 +905,20 @@ export default function ExecutiveDashboardPage() {
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       {wasteYoyCompareUi.status && wasteYoyCompareUi.status !== "about_same" ? (
                         <span
-                          className={`inline-flex shrink-0 rounded-md border px-2 py-0.5 text-[11px] font-semibold tabular-nums leading-tight ${wasteYoYCompareBadgeClass(wasteYoyCompareUi.status)}`}
+                          className={`inline-flex shrink-0 rounded-md border px-2 py-0.5 text-xs sm:text-sm font-semibold tabular-nums leading-tight ${wasteYoYCompareBadgeClass(wasteYoyCompareUi.status)}`}
                         >
                           {wasteYoYCompareStatusLabel(wasteYoyCompareUi.status)}
                         </span>
                       ) : null}
                       {wasteYoyCompareUi.primaryPhrase ? (
-                        <span className="min-w-0 text-[13px] tabular-nums font-medium text-slate-300">
+                        <span className={`min-w-0 ${dashMutedMeta} tabular-nums`}>
                           {wasteYoyCompareUi.primaryPhrase}
                         </span>
                       ) : null}
                     </div>
                   )}
                   {wasteYoyCompareUi.secondLine ? (
-                    <p className="text-[12px] leading-snug tabular-nums font-medium text-slate-500">
+                    <p className={`${dashCaption} leading-snug tabular-nums`}>
                       {wasteYoyCompareUi.secondLine}
                     </p>
                   ) : null}
@@ -981,7 +993,7 @@ export default function ExecutiveDashboardPage() {
             <div className="mt-4 flex flex-1 flex-col">
               <div className="grid grid-cols-2 gap-4 md:gap-5">
                 <div className="min-w-0 rounded-lg border border-slate-700/35 bg-slate-900/25 px-3 py-3 md:px-4 md:py-4">
-                  <div className={`flex items-center gap-2 ${dashLabelXs}`}>
+                  <div className={`flex items-center gap-2 ${dashLabel}`}>
                     <Thermometer className="h-4 w-4 shrink-0 text-cyan-500/85" strokeWidth={2} aria-hidden />
                     <span>평균 온도</span>
                   </div>
@@ -991,14 +1003,14 @@ export default function ExecutiveDashboardPage() {
                       : "—"}
                   </p>
                   {climateDashboardCard.tempTrend && (
-                    <p className={`mt-2 tabular-nums text-[13px] font-medium text-slate-400`}>
+                    <p className={`mt-2 tabular-nums ${dashMutedMeta}`}>
                       {climateDashboardCard.tempTrend}
                       <span className="ml-1 font-normal text-slate-500">· 직전 7일</span>
                     </p>
                   )}
                 </div>
                 <div className="min-w-0 rounded-lg border border-slate-700/35 bg-slate-900/25 px-3 py-3 md:px-4 md:py-4">
-                  <div className={`flex items-center gap-2 ${dashLabelXs}`}>
+                  <div className={`flex items-center gap-2 ${dashLabel}`}>
                     <Droplets className="h-4 w-4 shrink-0 text-cyan-500/85" strokeWidth={2} aria-hidden />
                     <span>평균 습도</span>
                   </div>
@@ -1010,7 +1022,7 @@ export default function ExecutiveDashboardPage() {
                       : "—"}
                   </p>
                   {climateDashboardCard.humTrend && (
-                    <p className={`mt-2 tabular-nums text-[13px] font-medium text-slate-400`}>
+                    <p className={`mt-2 tabular-nums ${dashMutedMeta}`}>
                       {climateDashboardCard.humTrend}
                       <span className="ml-1 font-normal text-slate-500">· 직전 7일</span>
                     </p>
@@ -1021,13 +1033,13 @@ export default function ExecutiveDashboardPage() {
               <div className="mt-5 border-t border-slate-700/45 pt-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                   <div className="min-w-0 flex-1">
-                    <p className={`${dashLabelXs} font-medium normal-case tracking-normal`}>최고 온도 구역</p>
+                    <p className={`${dashLabel} font-medium normal-case tracking-normal`}>최고 온도 구역</p>
                     <span className="mt-1 inline-block rounded-md border border-slate-600/50 bg-slate-800/90 px-2.5 py-1 text-sm font-medium text-slate-200">
                       {climateDashboardCard.c.hottestZone ?? "—"}
                     </span>
                   </div>
                   <div className="min-w-0 flex-1 sm:text-right">
-                    <p className={`${dashLabelXs} font-medium normal-case tracking-normal`}>최저 온도 구역</p>
+                    <p className={`${dashLabel} font-medium normal-case tracking-normal`}>최저 온도 구역</p>
                     <span className="mt-1 inline-block rounded-md border border-slate-600/50 bg-slate-800/90 px-2.5 py-1 text-sm font-medium text-slate-200 sm:ml-auto">
                       {climateDashboardCard.c.coolestZone ?? "—"}
                     </span>
@@ -1041,9 +1053,10 @@ export default function ExecutiveDashboardPage() {
         </section>
         </div>
 
-        <section className={`${dashCard} flex flex-col gap-5`}>
-          <div className="min-w-0 flex-1 space-y-4">
-            <div className={`flex flex-wrap items-center gap-2 ${executiveTooltipHostRowClass}`}>
+        <section className={`${dashCard} flex flex-col gap-4 md:gap-5`}>
+          {/* 1) 헤더: 제목 + 액션 */}
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between xl:gap-4">
+            <div className={`flex flex-wrap items-center gap-2 min-w-0 ${executiveTooltipHostRowClass}`}>
               <span className="relative flex h-2.5 w-2.5 shrink-0" aria-hidden title="집계 구간 기준 모니터링">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/50 opacity-60" />
                 <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.65)]" />
@@ -1063,165 +1076,163 @@ export default function ExecutiveDashboardPage() {
                 최근 7일 설비 점검 결과입니다. 부적합 항목이 없으면 ‘점검 이상 무’로 표시됩니다. 아래 주요 설비 이력은 마스터의 대시보드 그룹·운영 상태·노출 설정을 기준으로 한 개별 설비(설비이력기록부)입니다.
               </ExecutivePortalTooltip>
             </div>
+            <div className="flex flex-wrap items-center gap-2 xl:justify-end shrink-0">
+              {canRegisterIncident && (
+                <Link
+                  href="/daily/manufacturing-equipment/incident/new"
+                  className={`${dashHeaderActionBtn} border-amber-600/35 bg-amber-950/20 text-amber-200/95 hover:bg-amber-950/35`}
+                >
+                  설비 이상 등록
+                </Link>
+              )}
+              <Link
+                href="/daily/manufacturing-equipment/incidents"
+                className={`${dashHeaderActionBtn} border-slate-600/70 bg-slate-950/40 text-slate-300 hover:bg-slate-800/80`}
+              >
+                설비 이상 이력
+              </Link>
+              <Link
+                href="/daily/equipment-history"
+                className={`${dashHeaderActionBtn} border-cyan-600/35 bg-cyan-950/20 text-cyan-200/95 hover:bg-cyan-950/35`}
+              >
+                설비이력기록부
+              </Link>
+              <Link href="/executive/equipment" className={dashCardDetailLink}>
+                상세보기 →
+              </Link>
+            </div>
+          </div>
 
-            {equipment == null && <p className={`font-medium ${dashMuted}`}>불러오는 중…</p>}
-            {equipment && equipment.issueCount === 0 && (
-              <div className="flex items-center gap-3.5 rounded-xl border border-emerald-500/30 bg-emerald-950/35 px-4 py-3.5 shadow-sm shadow-emerald-950/20 md:px-5 md:py-4">
-                <CheckCircle2
-                  className="h-9 w-9 shrink-0 text-emerald-400 md:h-10 md:w-10"
-                  strokeWidth={2.25}
-                  aria-hidden
-                />
-                <div className="min-w-0">
-                  <p className="text-lg font-bold leading-snug text-green-400">점검 이상 무</p>
-                  <p className="mt-0.5 text-sm font-medium text-emerald-200/85">최근 7일 부적합 항목 없음</p>
-                </div>
-              </div>
-            )}
-            {equipment && equipment.issueCount > 0 && (
-              <div className="flex items-center gap-3.5 rounded-xl border border-amber-500/35 bg-amber-950/25 px-4 py-3.5 md:px-5 md:py-4">
-                <AlertTriangle
-                  className="h-9 w-9 shrink-0 text-amber-400 md:h-10 md:w-10"
-                  strokeWidth={2.25}
-                  aria-hidden
-                />
-                <div className="min-w-0">
-                  <p className="text-lg font-bold leading-snug text-amber-100 md:text-xl">
-                    부적합 <span className="tabular-nums">{equipment.issueCount}</span>건
-                  </p>
-                  <p className="mt-0.5 text-sm font-medium text-amber-200/85">최근 7일 · 상세에서 내용을 확인하세요</p>
-                </div>
-              </div>
-            )}
+          {equipment == null && <p className={dashMutedMeta}>불러오는 중…</p>}
 
-            {equipment?.majorStats && (
-              <div>
-                <p className="text-xs font-semibold tracking-wide text-slate-400 mb-2.5">주요 설비 이력</p>
-                <p className="text-[11px] text-slate-500 mb-2 -mt-1">
-                  설비이력기록부 · 마스터에서 대시보드 그룹·노출·운영중/예비로 지정된 개별 설비
+          {/* 2) 상태 배너 (간결) */}
+          {equipment && equipment.issueCount === 0 && (
+            <div className="flex items-center gap-3 rounded-lg border border-emerald-500/30 bg-emerald-950/30 px-3 py-2.5 shadow-sm shadow-emerald-950/15">
+              <CheckCircle2 className="h-7 w-7 shrink-0 text-emerald-400" strokeWidth={2.25} aria-hidden />
+              <div className="min-w-0">
+                <p className="text-base font-bold leading-tight text-emerald-200">점검 이상 무</p>
+                <p className={`mt-0.5 ${dashCaption} text-emerald-200/90`}>최근 7일 부적합 항목 없음</p>
+              </div>
+            </div>
+          )}
+          {equipment && equipment.issueCount > 0 && (
+            <div className="flex items-center gap-3 rounded-lg border border-amber-500/35 bg-amber-950/20 px-3 py-2.5">
+              <AlertTriangle className="h-7 w-7 shrink-0 text-amber-400" strokeWidth={2.25} aria-hidden />
+              <div className="min-w-0">
+                <p className="text-base font-bold leading-tight text-amber-100">
+                  부적합 <span className="tabular-nums">{equipment.issueCount}</span>건
                 </p>
-                <div className="space-y-5">
-                  {(["화덕", "호이스트"] as const).map((name) => {
-                    const units = equipment.majorStats![name];
-                    return (
-                      <div key={name}>
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-2">
-                          {name}
-                          {units.length > 0 ? (
-                            <span className="ml-2 font-normal normal-case text-slate-400">
-                              운영중 {units.length}대
-                            </span>
-                          ) : (
-                            <span className="ml-2 font-normal normal-case text-slate-500">표시할 설비 없음</span>
-                          )}
+                <p className={`mt-0.5 ${dashCaption} text-amber-200/90`}>최근 7일 · 상세에서 내용을 확인하세요</p>
+              </div>
+            </div>
+          )}
+
+          {/* 3) 주요 설비 — 화덕/호이스트 2열 */}
+          {equipment?.majorStats && (
+            <div className="min-w-0 space-y-3">
+              <div>
+                <p className={dashLabel}>주요 설비 이력</p>
+                <p className={`mt-1 ${dashCaption}`}>
+                  설비이력기록부 · 대시보드 그룹·노출·운영중/예비로 지정된 개별 설비
+                </p>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-5">
+                {(["화덕", "호이스트"] as const).map((name) => {
+                  const units = equipment.majorStats![name];
+                  return (
+                    <div
+                      key={name}
+                      className="min-w-0 rounded-xl border border-slate-700/50 bg-slate-900/30 p-4 md:p-5 flex flex-col"
+                    >
+                      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-700/40 pb-2">
+                        <h3 className="text-base md:text-lg font-bold text-slate-100">{name}</h3>
+                        <span className={dashMutedMeta}>
+                          {units.length > 0 ? `운영중 ${units.length}대` : "표시할 설비 없음"}
+                        </span>
+                      </div>
+                      {units.length === 0 ? (
+                        <p className={dashCaption}>
+                          제조설비등록에서 `{name}` 그룹·대시보드 노출을 설정한 설비가 없습니다.
                         </p>
-                        {units.length === 0 ? (
-                          <p className="text-sm text-slate-500">
-                            제조설비등록에서 `{name}` 그룹·대시보드 노출을 설정한 설비가 없습니다.
-                          </p>
-                        ) : (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {units.map((s) => {
-                              const days = s.daysWithoutFault;
-                              const lastStr = s.lastFaultOrStopAt ?? "—";
-                              const hi = s.recentHighImpact;
-                              const st = s.statusLabel;
-                              const tone =
-                                days == null ? "stable" : days >= 90 ? "stable" : days >= 30 ? "warn" : "danger";
-                              const numClass =
-                                tone === "stable"
-                                  ? "text-emerald-300"
+                      ) : (
+                        <div className="flex flex-col gap-3">
+                          {units.map((s) => {
+                            const days = s.daysWithoutFault;
+                            const lastStr = s.lastFaultOrStopAt ?? "—";
+                            const hi = s.recentHighImpact;
+                            const st = s.statusLabel;
+                            const tone =
+                              days == null ? "stable" : days >= 90 ? "stable" : days >= 30 ? "warn" : "danger";
+                            const numClass =
+                              tone === "stable"
+                                ? "text-emerald-300"
+                                : tone === "warn"
+                                  ? "text-amber-300"
+                                  : "text-red-400";
+                            const borderClass =
+                              hi
+                                ? "border-amber-500/40 bg-amber-950/20"
+                                : tone === "stable"
+                                  ? "border-emerald-500/25 bg-emerald-950/10"
                                   : tone === "warn"
-                                    ? "text-amber-300"
-                                    : "text-red-400";
-                              const borderClass =
-                                hi
-                                  ? "border-amber-500/40 bg-amber-950/25"
-                                  : tone === "stable"
-                                    ? "border-emerald-500/30 bg-emerald-950/15"
-                                    : tone === "warn"
-                                      ? "border-amber-500/35 bg-amber-950/20"
-                                      : "border-red-500/30 bg-red-950/20";
-                              return (
-                                <div
-                                  key={`${name}-${s.masterId ?? s.displayTitle}`}
-                                  className={`rounded-xl border px-4 py-4 ${borderClass} flex flex-col gap-0`}
-                                >
-                                  <div className="flex items-start justify-between gap-2 min-h-[1.75rem]">
-                                    <h3
-                                      className="text-base font-semibold leading-snug text-slate-100 md:text-[1.0625rem] tracking-tight line-clamp-2"
-                                      title={s.displayTitle}
-                                    >
-                                      {s.displayTitle}
-                                    </h3>
-                                    {hi && (
-                                      <span className="shrink-0 rounded border border-amber-500/35 bg-amber-950/35 px-2 py-0.5 text-[10px] font-semibold text-amber-100/95 leading-tight text-right max-w-[9rem]">
-                                        생산영향·고장/가동중지 주의
-                                      </span>
-                                    )}
-                                  </div>
-                                  <p className="mt-3 text-sm font-medium text-slate-300">무고장 경과일 :</p>
-                                  <p
-                                    className={`mt-1 text-4xl font-extrabold tabular-nums leading-none tracking-tight md:text-5xl ${numClass}`}
+                                    ? "border-amber-500/30 bg-amber-950/15"
+                                    : "border-red-500/25 bg-red-950/15";
+                            return (
+                              <div
+                                key={`${name}-${s.masterId ?? s.displayTitle}`}
+                                className={`rounded-lg border px-4 py-3.5 ${borderClass} flex flex-col`}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <h4
+                                    className="min-w-0 text-base md:text-lg font-semibold leading-snug text-slate-100 line-clamp-2"
+                                    title={s.displayTitle}
                                   >
-                                    {days != null ? `${days}일` : "—"}
-                                  </p>
-                                  <p className="mt-3 text-sm leading-snug text-slate-300">
-                                    <span className="font-medium text-slate-400">현재 상태 </span>
+                                    {s.displayTitle}
+                                  </h4>
+                                  {hi && (
+                                    <span className="shrink-0 rounded border border-amber-500/35 bg-amber-950/40 px-2 py-0.5 text-xs font-semibold text-amber-100 leading-tight text-right max-w-[10rem]">
+                                      생산영향·고장/가동중지 주의
+                                    </span>
+                                  )}
+                                </div>
+                                <p className={`mt-3 ${dashLabel}`}>무고장 경과일</p>
+                                <p className={`mt-1 ${dashHero} ${numClass}`}>
+                                  {days != null ? `${days}일` : "—"}
+                                </p>
+                                <div className={`mt-3 space-y-2 ${dashMutedMeta}`}>
+                                  <p>
+                                    <span className="font-semibold text-slate-400">현재 상태</span>{" "}
                                     <span
                                       className={
                                         st === "진행 중"
                                           ? "font-semibold text-amber-200"
                                           : st === "조치 완료"
-                                            ? "font-semibold text-emerald-300/95"
-                                            : "font-semibold text-slate-400"
+                                            ? "font-semibold text-emerald-300"
+                                            : "font-semibold text-slate-300"
                                       }
                                     >
                                       {st}
                                     </span>
                                   </p>
-                                  <p className="mt-2 text-sm leading-snug text-slate-300">
-                                    <span className="font-medium text-slate-400">마지막 고장/중지 </span>
+                                  <p>
+                                    <span className="font-semibold text-slate-400">마지막 고장/중지</span>{" "}
                                     <span className="font-semibold tabular-nums text-slate-100">{lastStr}</span>
                                   </p>
                                 </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                                <p className={`mt-3 border-t border-slate-700/45 pt-3 ${dashCaption}`}>
+                                  {equipmentDashboardUnitMeta(s)}
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-700/40 pt-4">
-            {canRegisterIncident && (
-              <Link
-                href="/daily/manufacturing-equipment/incident/new"
-                className="inline-flex items-center rounded-lg border border-amber-600/35 bg-amber-950/20 px-3 py-1.5 text-xs font-medium text-amber-200/95 hover:bg-amber-950/35"
-              >
-                설비 이상 등록
-              </Link>
-            )}
-            <Link
-              href="/daily/manufacturing-equipment/incidents"
-              className="inline-flex items-center rounded-lg border border-slate-600/70 bg-slate-950/40 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800/80"
-            >
-              설비 이상 이력
-            </Link>
-            <Link
-              href="/daily/equipment-history"
-              className="inline-flex items-center rounded-lg border border-cyan-600/35 bg-cyan-950/20 px-3 py-1.5 text-xs font-medium text-cyan-200/95 hover:bg-cyan-950/35"
-            >
-              설비이력기록부
-            </Link>
-            <Link href="/executive/equipment" className={dashCardDetailLink}>
-              상세보기 →
-            </Link>
-          </div>
+            </div>
+          )}
         </section>
       </div>
 
