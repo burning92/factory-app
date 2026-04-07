@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
+import { canRegisterEquipmentIncident } from "@/features/daily/equipmentIncidentPermissions";
 import { supabase } from "@/lib/supabase";
 import {
   listEquipmentIncidents,
@@ -52,8 +53,9 @@ const IMPACT_FILTER: Array<{ v: EquipmentIncidentListFilters["productionImpact"]
 ];
 
 export default function EquipmentIncidentsListPage() {
-  const { viewOrganizationCode } = useAuth();
+  const { viewOrganizationCode, profile } = useAuth();
   const orgCode = viewOrganizationCode ?? "100";
+  const canRegisterIncident = canRegisterEquipmentIncident(profile?.role);
 
   const [filters, setFilters] = useState<EquipmentIncidentListFilters>({
     equipment: "all",
@@ -186,12 +188,14 @@ export default function EquipmentIncidentsListPage() {
           <h1 className="text-lg font-semibold text-slate-100">설비 이상 이력</h1>
           <p className="text-slate-500 text-sm mt-0.5">등록된 이상·고장·가동중지 기록을 최신순으로 표시합니다.</p>
         </div>
-        <Link
-          href="/daily/manufacturing-equipment/incident/new"
-          className="shrink-0 rounded-lg border border-amber-600/40 bg-amber-950/25 px-3 py-2 text-center text-sm font-medium text-amber-200 hover:bg-amber-950/40"
-        >
-          설비 이상 등록
-        </Link>
+        {canRegisterIncident && (
+          <Link
+            href="/daily/manufacturing-equipment/incident/new"
+            className="shrink-0 rounded-lg border border-amber-600/40 bg-amber-950/25 px-3 py-2 text-center text-sm font-medium text-amber-200 hover:bg-amber-950/40"
+          >
+            설비 이상 등록
+          </Link>
+        )}
       </div>
 
       {filterBar}
@@ -249,12 +253,12 @@ export default function EquipmentIncidentsListPage() {
                       >
                         상세
                       </Link>
-                      <Link
-                        href={`/daily/manufacturing-equipment/incidents/${r.id}/edit`}
-                        className="text-amber-400/90 hover:text-amber-300 text-xs font-medium"
+                      <span
+                        className="text-slate-600 text-xs font-medium cursor-not-allowed"
+                        title="현재 수정 기능은 비활성화되어 있습니다."
                       >
                         수정
-                      </Link>
+                      </span>
                     </td>
                   </tr>
                 );

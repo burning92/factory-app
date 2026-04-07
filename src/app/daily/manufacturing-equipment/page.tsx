@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { canRegisterEquipmentIncident } from "@/features/daily/equipmentIncidentPermissions";
 import { supabase } from "@/lib/supabase";
 import { Pencil, Trash2 } from "lucide-react";
 
@@ -43,7 +45,9 @@ function statusBadgeClass(s: LogStatus): string {
 }
 
 export default function DailyManufacturingEquipmentListPage() {
-  const { viewOrganizationCode } = useAuth();
+  const searchParams = useSearchParams();
+  const { viewOrganizationCode, profile } = useAuth();
+  const canRegisterIncident = canRegisterEquipmentIncident(profile?.role);
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; error?: boolean } | null>(null);
@@ -71,6 +75,18 @@ export default function DailyManufacturingEquipmentListPage() {
   useEffect(() => {
     fetchLogs();
   }, [fetchLogs]);
+
+  useEffect(() => {
+    if (searchParams.get("incident") === "restricted") {
+      setToast({
+        message: "설비 이상 등록은 관리자·매니저 권한에서만 가능합니다.",
+        error: true,
+      });
+      if (typeof window !== "undefined") {
+        window.history.replaceState(null, "", "/daily/manufacturing-equipment");
+      }
+    }
+  }, [searchParams]);
 
   const getRowHref = (log: LogRow) => {
     if (log.status === "draft" || log.status === "rejected") return `/daily/manufacturing-equipment/${log.id}/edit`;
@@ -104,12 +120,14 @@ export default function DailyManufacturingEquipmentListPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <h1 className="text-lg font-semibold text-slate-100">제조설비 점검표 — 목록</h1>
         <div className="flex flex-wrap gap-2 justify-end">
-          <Link
-            href="/daily/manufacturing-equipment/incident/new"
-            className="shrink-0 inline-flex items-center justify-center px-4 py-2.5 rounded-lg border border-amber-600/45 bg-amber-950/30 text-amber-200 font-medium text-sm hover:bg-amber-950/50"
-          >
-            설비 이상 등록
-          </Link>
+          {canRegisterIncident && (
+            <Link
+              href="/daily/manufacturing-equipment/incident/new"
+              className="shrink-0 inline-flex items-center justify-center px-4 py-2.5 rounded-lg border border-amber-600/45 bg-amber-950/30 text-amber-200 font-medium text-sm hover:bg-amber-950/50"
+            >
+              설비 이상 등록
+            </Link>
+          )}
           <Link
             href="/daily/manufacturing-equipment/incidents"
             className="shrink-0 inline-flex items-center justify-center px-4 py-2.5 rounded-lg border border-cyan-500/35 bg-cyan-950/20 text-cyan-200 font-medium text-sm hover:bg-cyan-950/35"

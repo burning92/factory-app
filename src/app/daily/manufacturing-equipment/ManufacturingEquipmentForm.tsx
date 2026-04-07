@@ -9,6 +9,7 @@ import {
   checklistSlotToTrackedEquipment,
   insertEquipmentIncident,
 } from "@/features/daily/equipmentIncidents";
+import { canRegisterEquipmentIncident } from "@/features/daily/equipmentIncidentPermissions";
 
 type LogStatus = "draft" | "submitted" | "approved" | "rejected";
 type ItemResult = "O" | "X";
@@ -51,6 +52,7 @@ export function ManufacturingEquipmentForm({ mode, editLogId }: Props) {
   const [linkDowntime, setLinkDowntime] = useState<Record<string, boolean>>({});
 
   const orgCode = viewOrganizationCode ?? "100";
+  const canRegisterIncident = canRegisterEquipmentIncident(profile?.role);
   const authorName = (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
   const canSubmit = currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus === null;
   const hasAnyX = useMemo(() => Object.values(results).some((v) => v === "X"), [results]);
@@ -86,6 +88,7 @@ export function ManufacturingEquipmentForm({ mode, editLogId }: Props) {
       logId: string,
       insertedRows: { id: string; category: string; question_index: number }[]
     ) => {
+      if (!canRegisterEquipmentIncident(profile?.role)) return;
       const occurred =
         corrective.datetime.trim() ? new Date(corrective.datetime).toISOString() : `${inspectionDate}T00:00:00`;
       for (const row of insertedRows) {
@@ -134,6 +137,7 @@ export function ManufacturingEquipmentForm({ mode, editLogId }: Props) {
       linkProductionImpact,
       rowKeyFromDb,
       user?.id,
+      profile?.role,
     ]
   );
 
@@ -447,12 +451,14 @@ export function ManufacturingEquipmentForm({ mode, editLogId }: Props) {
         <h1 className="text-lg font-semibold text-slate-100">
           {mode === "new" ? "제조설비 점검표 — 새 작성" : "제조설비 점검표 — 수정"}
         </h1>
-        <Link
-          href="/daily/manufacturing-equipment/incident/new"
-          className="shrink-0 rounded-lg border border-amber-600/40 bg-amber-950/30 px-3 py-1.5 text-xs font-medium text-amber-200 hover:bg-amber-950/50"
-        >
-          설비 이상 등록
-        </Link>
+        {canRegisterIncident && (
+          <Link
+            href="/daily/manufacturing-equipment/incident/new"
+            className="shrink-0 rounded-lg border border-amber-600/40 bg-amber-950/30 px-3 py-1.5 text-xs font-medium text-amber-200 hover:bg-amber-950/50"
+          >
+            설비 이상 등록
+          </Link>
+        )}
       </div>
       <p className="text-slate-500 text-sm mb-4">항목별 적합/부적합을 선택하세요. 부적합이 있으면 개선조치를 입력합니다.</p>
 
@@ -528,53 +534,61 @@ export function ManufacturingEquipmentForm({ mode, editLogId }: Props) {
                     {value === "X" && checklistSlotToTrackedEquipment(catIndex, qIndex) && (
                       <div className="mt-3 rounded-lg border border-amber-600/35 bg-amber-950/25 p-3 space-y-2">
                         <p className="text-[11px] font-semibold text-amber-200/95">화덕·호이스트 — 실제 이상 이력</p>
-                        <p className="text-[11px] text-slate-500 leading-relaxed">
-                          정기 점검 부적합과 별도로, 실제 고장·가동중지가 있었다면 아래에서 연동할 수 있습니다.
-                        </p>
-                        <label className="flex items-start gap-2 text-xs text-slate-300 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            className="mt-0.5 rounded border-slate-500"
-                            checked={!!linkIncident[key]}
-                            onChange={(e) =>
-                              setLinkIncident((p) => ({ ...p, [key]: e.target.checked }))
-                            }
-                          />
-                          <span>실제 설비 이상 등록으로 연결 (저장 시 함께 등록)</span>
-                        </label>
-                        {linkIncident[key] && (
-                          <div className="pl-6 space-y-2">
-                            <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+                        {canRegisterIncident ? (
+                          <>
+                            <p className="text-[11px] text-slate-500 leading-relaxed">
+                              정기 점검 부적합과 별도로, 실제 고장·가동중지가 있었다면 아래에서 연동할 수 있습니다.
+                            </p>
+                            <label className="flex items-start gap-2 text-xs text-slate-300 cursor-pointer">
                               <input
                                 type="checkbox"
-                                className="rounded border-slate-500"
-                                checked={!!linkProductionImpact[key]}
+                                className="mt-0.5 rounded border-slate-500"
+                                checked={!!linkIncident[key]}
                                 onChange={(e) =>
-                                  setLinkProductionImpact((p) => ({ ...p, [key]: e.target.checked }))
+                                  setLinkIncident((p) => ({ ...p, [key]: e.target.checked }))
                                 }
                               />
-                              생산영향 있음
+                              <span>실제 설비 이상 등록으로 연결 (저장 시 함께 등록)</span>
                             </label>
-                            <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                className="rounded border-slate-500"
-                                checked={!!linkDowntime[key]}
-                                onChange={(e) =>
-                                  setLinkDowntime((p) => ({ ...p, [key]: e.target.checked }))
-                                }
-                              />
-                              가동중지 발생
-                            </label>
-                            <Link
-                              href={`/daily/manufacturing-equipment/incident/new?equipment=${checklistSlotToTrackedEquipment(catIndex, qIndex)}&detail=${encodeURIComponent(
-                                `${category.title} · ${question} 점검 부적합`
-                              )}`}
-                              className="inline-block text-[11px] text-cyan-400 hover:text-cyan-300"
-                            >
-                              별도 화면에서 상세 입력 →
-                            </Link>
-                          </div>
+                            {linkIncident[key] && (
+                              <div className="pl-6 space-y-2">
+                                <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    className="rounded border-slate-500"
+                                    checked={!!linkProductionImpact[key]}
+                                    onChange={(e) =>
+                                      setLinkProductionImpact((p) => ({ ...p, [key]: e.target.checked }))
+                                    }
+                                  />
+                                  생산영향 있음
+                                </label>
+                                <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    className="rounded border-slate-500"
+                                    checked={!!linkDowntime[key]}
+                                    onChange={(e) =>
+                                      setLinkDowntime((p) => ({ ...p, [key]: e.target.checked }))
+                                    }
+                                  />
+                                  가동중지 발생
+                                </label>
+                                <Link
+                                  href={`/daily/manufacturing-equipment/incident/new?equipment=${checklistSlotToTrackedEquipment(catIndex, qIndex)}&detail=${encodeURIComponent(
+                                    `${category.title} · ${question} 점검 부적합`
+                                  )}`}
+                                  className="inline-block text-[11px] text-cyan-400 hover:text-cyan-300"
+                                >
+                                  별도 화면에서 상세 입력 →
+                                </Link>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <p className="text-[11px] text-slate-500 leading-relaxed">
+                            설비 이상 연동 등록은 관리자·매니저만 저장 시 반영됩니다.
+                          </p>
                         )}
                       </div>
                     )}

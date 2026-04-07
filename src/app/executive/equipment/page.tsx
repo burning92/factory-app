@@ -13,6 +13,7 @@ import {
   type EquipmentIncidentRow,
   type MajorEquipmentIncidentStats,
 } from "@/features/daily/equipmentIncidents";
+import { canRegisterEquipmentIncident } from "@/features/daily/equipmentIncidentPermissions";
 import { DashboardBackLink } from "../DashboardBackLink";
 import type { EquipmentIssueRow } from "@/features/dashboard/climateAndEquipment";
 
@@ -21,6 +22,7 @@ export default function ExecutiveEquipmentDetailPage() {
   const { profile, viewOrganizationCode, loading: authLoading } = useAuth();
   const orgCode = viewOrganizationCode ?? "100";
   const canView = !!profile;
+  const canRegisterIncident = canRegisterEquipmentIncident(profile?.role);
 
   const [issues, setIssues] = useState<EquipmentIssueRow[]>([]);
   const [majorStats, setMajorStats] = useState<{
@@ -74,12 +76,14 @@ export default function ExecutiveEquipmentDetailPage() {
           <p className="text-slate-500 text-sm">최근 7일 · 승인된 일지 중 부적합(X) 항목과 주요 설비 이상 이력</p>
         </div>
         <div className="flex flex-wrap gap-2 justify-end">
-          <Link
-            href="/daily/manufacturing-equipment/incident/new"
-            className="shrink-0 rounded-lg border border-amber-600/40 bg-amber-950/30 px-3 py-2 text-sm font-medium text-amber-200 hover:bg-amber-950/50"
-          >
-            설비 이상 등록
-          </Link>
+          {canRegisterIncident && (
+            <Link
+              href="/daily/manufacturing-equipment/incident/new"
+              className="shrink-0 rounded-lg border border-amber-600/40 bg-amber-950/30 px-3 py-2 text-sm font-medium text-amber-200 hover:bg-amber-950/50"
+            >
+              설비 이상 등록
+            </Link>
+          )}
           <Link
             href="/daily/manufacturing-equipment/incidents"
             className="shrink-0 rounded-lg border border-cyan-500/35 bg-cyan-950/25 px-3 py-2 text-sm font-medium text-cyan-200 hover:bg-cyan-950/40"

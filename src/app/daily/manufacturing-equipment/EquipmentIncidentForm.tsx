@@ -12,6 +12,7 @@ import {
   type EquipmentIncidentType,
   type EquipmentSymptomType,
 } from "@/features/daily/equipmentIncidents";
+import { canRegisterEquipmentIncident } from "@/features/daily/equipmentIncidentPermissions";
 
 const EQUIPMENT_OPTIONS: EquipmentIncidentEquipment[] = ["화덕", "호이스트", "기타"];
 const INCIDENT_TYPES: EquipmentIncidentType[] = ["이상", "고장", "가동중지"];
@@ -28,7 +29,8 @@ function localDatetimeInput(iso: string): string {
 export function EquipmentIncidentForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, profile, viewOrganizationCode } = useAuth();
+  const { user, profile, viewOrganizationCode, loading: authLoading } = useAuth();
+  const canRegister = canRegisterEquipmentIncident(profile?.role);
   const orgCode = viewOrganizationCode ?? "100";
 
   const [equipment, setEquipment] = useState<EquipmentIncidentEquipment>("화덕");
@@ -63,6 +65,10 @@ export function EquipmentIncidentForm() {
   }, [detail, equipment, equipmentOther, symptomType, symptomOther]);
 
   const handleSubmit = useCallback(async () => {
+    if (!canRegister) {
+      setToast({ message: "설비 이상 등록은 관리자·매니저 권한에서만 가능합니다.", error: true });
+      return;
+    }
     if (!canSubmit) {
       setToast({ message: "필수 항목을 입력해 주세요.", error: true });
       return;
@@ -118,9 +124,34 @@ export function EquipmentIncidentForm() {
     linkedInspectionId,
     user?.id,
     router,
+    canRegister,
   ]);
 
   const authorHint = (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
+
+  if (authLoading) {
+    return (
+      <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center p-6">
+        <p className="text-slate-500 text-sm">불러오는 중…</p>
+      </div>
+    );
+  }
+
+  if (profile && !canRegister) {
+    return (
+      <div className="min-h-[calc(100vh-3.5rem)] md:min-h-0 p-4 md:p-6 max-w-xl mx-auto pb-24 md:pb-8">
+        <p className="text-slate-200 text-sm mb-4">
+          설비 이상 등록은 관리자·매니저 권한에서만 가능합니다.
+        </p>
+        <Link
+          href="/daily/manufacturing-equipment"
+          className="text-cyan-400 hover:text-cyan-300 text-sm font-medium"
+        >
+          제조설비 점검표로 돌아가기
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[calc(100vh-3.5rem)] md:min-h-0 p-4 md:p-6 max-w-xl mx-auto pb-24 md:pb-8">

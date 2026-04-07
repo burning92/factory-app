@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import {
@@ -11,8 +11,6 @@ import {
   sourceTypeLabel,
   type EquipmentIncidentRow,
 } from "@/features/daily/equipmentIncidents";
-import { deleteEquipmentIncidentApi } from "@/features/daily/equipmentIncidentApi";
-
 function formatDt(iso: string | null): string {
   if (!iso) return "미입력";
   try {
@@ -29,16 +27,16 @@ function notesDisplay(n: string | null): string {
 
 export default function EquipmentIncidentDetailPage() {
   const params = useParams();
-  const router = useRouter();
+  const searchParams = useSearchParams();
   const id = typeof params?.id === "string" ? params.id : "";
   const { viewOrganizationCode } = useAuth();
   const orgCode = viewOrganizationCode ?? "100";
+  const showEditDisabledBanner = searchParams.get("edit") === "disabled";
 
   const [row, setRow] = useState<EquipmentIncidentRow | null>(null);
   const [authorLabel, setAuthorLabel] = useState<string>("—");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) {
@@ -121,13 +119,13 @@ export default function EquipmentIncidentDetailPage() {
 
       <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
         <h1 className="text-lg font-semibold text-slate-100">설비 이상 상세</h1>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href={`/daily/manufacturing-equipment/incidents/${row.id}/edit`}
-            className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium"
+        <div className="flex flex-wrap gap-2 items-center">
+          <span
+            className="px-4 py-2 rounded-lg border border-slate-700/80 bg-slate-800/50 text-slate-500 text-sm font-medium cursor-not-allowed"
+            title="현재 수정 기능은 비활성화되어 있습니다."
           >
             수정
-          </Link>
+          </span>
           <Link
             href="/daily/manufacturing-equipment/incidents"
             className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700/50 text-sm"
@@ -136,6 +134,12 @@ export default function EquipmentIncidentDetailPage() {
           </Link>
         </div>
       </div>
+
+      {showEditDisabledBanner && (
+        <p className="mb-4 text-sm text-slate-400 rounded-lg border border-slate-700/60 bg-slate-900/40 px-3 py-2">
+          현재 수정 기능은 비활성화되어 있습니다. 이력 수정은 추후 권한 정책 확정 후 제공 예정입니다.
+        </p>
+      )}
 
       <dl className="space-y-4 rounded-xl border border-slate-700/60 bg-slate-800/50 p-5 text-sm">
         <div>
@@ -199,29 +203,6 @@ export default function EquipmentIncidentDetailPage() {
         </div>
       </dl>
 
-      {row.source_type === "manual" && (
-        <div className="mt-6 flex justify-end">
-          <button
-            type="button"
-            disabled={deleting}
-            onClick={async () => {
-              if (!window.confirm("이 설비 이상 이력을 삭제하시겠습니까?")) return;
-              setDeleting(true);
-              try {
-                await deleteEquipmentIncidentApi(row.id, orgCode);
-                router.replace("/daily/manufacturing-equipment/incidents");
-              } catch (e) {
-                alert(e instanceof Error ? e.message : "삭제 실패");
-              } finally {
-                setDeleting(false);
-              }
-            }}
-            className="px-4 py-2 rounded-lg bg-red-900/40 border border-red-700/50 text-red-200 hover:bg-red-900/60 text-sm disabled:opacity-50"
-          >
-            {deleting ? "삭제 중…" : "삭제"}
-          </button>
-        </div>
-      )}
     </div>
   );
 }

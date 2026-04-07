@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { MANUFACTURING_EQUIPMENT_CHECKLIST } from "@/features/daily/manufacturingEquipmentChecklist";
 import { canShowDailyApproveReject } from "@/app/daily/dailyLogPermissions";
+import { canRegisterEquipmentIncident } from "@/features/daily/equipmentIncidentPermissions";
 
 type LogHeader = {
   id: string;
@@ -53,6 +54,7 @@ export default function DailyManufacturingEquipmentViewPage() {
   const params = useParams();
   const id = typeof params?.id === "string" ? params.id : "";
   const { user, profile } = useAuth();
+  const canRegisterIncident = canRegisterEquipmentIncident(profile?.role);
   const [header, setHeader] = useState<LogHeader | null>(null);
   const [items, setItems] = useState<LogItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -162,12 +164,14 @@ export default function DailyManufacturingEquipmentViewPage() {
       <h1 className="text-lg font-semibold text-slate-100 mb-1">제조설비 점검표 — 상세</h1>
 
       <div className="flex flex-wrap gap-2 mb-4">
-        <Link
-          href="/daily/manufacturing-equipment/incident/new"
-          className="inline-flex items-center rounded-lg border border-amber-600/40 bg-amber-950/25 px-3 py-2 text-sm font-medium text-amber-200 hover:bg-amber-950/40"
-        >
-          설비 이상 등록
-        </Link>
+        {canRegisterIncident && (
+          <Link
+            href="/daily/manufacturing-equipment/incident/new"
+            className="inline-flex items-center rounded-lg border border-amber-600/40 bg-amber-950/25 px-3 py-2 text-sm font-medium text-amber-200 hover:bg-amber-950/40"
+          >
+            설비 이상 등록
+          </Link>
+        )}
         <Link
           href="/daily/manufacturing-equipment/incidents"
           className="inline-flex items-center rounded-lg border border-cyan-500/35 bg-cyan-950/20 px-3 py-2 text-sm font-medium text-cyan-200 hover:bg-cyan-950/35"

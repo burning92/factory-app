@@ -28,6 +28,7 @@ import {
 } from "@/features/dashboard/planVsActual";
 import { loadClimateDashboardWindows, loadEquipmentIssues } from "@/features/dashboard/climateAndEquipment";
 import { loadMajorEquipmentIncidentStats, type MajorEquipmentIncidentStats } from "@/features/daily/equipmentIncidents";
+import { canRegisterEquipmentIncident } from "@/features/daily/equipmentIncidentPermissions";
 import {
   loadManpowerUtilizationMonthSummary,
   DEFAULT_DASHBOARD_BASELINE_HEADCOUNT,
@@ -298,6 +299,7 @@ export default function ExecutiveDashboardPage() {
   const { profile, viewOrganizationCode, loading: authLoading } = useAuth();
   const orgCode = viewOrganizationCode ?? "100";
   const canView = !!profile;
+  const canRegisterIncident = canRegisterEquipmentIncident(profile?.role);
 
   const materials = useMasterStore((s) => s.materials);
   const bomList = useMasterStore((s) => s.bomList);
@@ -1036,7 +1038,7 @@ export default function ExecutiveDashboardPage() {
         </section>
         </div>
 
-        <section className={`${dashCard} flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between sm:gap-8`}>
+        <section className={`${dashCard} flex flex-col gap-5`}>
           <div className="min-w-0 flex-1 space-y-4">
             <div className={`flex flex-wrap items-center gap-2 ${executiveTooltipHostRowClass}`}>
               <span className="relative flex h-2.5 w-2.5 shrink-0" aria-hidden title="집계 구간 기준 모니터링">
@@ -1090,49 +1092,68 @@ export default function ExecutiveDashboardPage() {
             )}
 
             {equipment?.majorStats && (
-              <div className="rounded-lg border border-slate-700/50 bg-slate-900/35 px-3 py-3">
+              <div>
                 <p className="text-[11px] font-semibold tracking-wide text-slate-500 mb-2">주요 설비 이력</p>
-                <ul className="space-y-2 text-[13px] leading-snug text-slate-400">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {(["화덕", "호이스트"] as const).map((name) => {
                     const s = equipment.majorStats![name];
-                    const lastStr = s.lastIncidentAt ?? "등록 없음";
-                    const faultStreak =
-                      s.daysWithoutFault != null
-                        ? `${s.daysWithoutFault}일`
-                        : "고장·가동중지 이력 없음";
+                    const days = s.daysWithoutFault;
+                    const lastStr = s.lastIncidentAt ?? "—";
                     const hi = s.recentHighImpact;
+                    const tone =
+                      days == null ? "stable" : days >= 90 ? "stable" : days >= 30 ? "warn" : "danger";
+                    const numClass =
+                      tone === "stable"
+                        ? "text-emerald-300"
+                        : tone === "warn"
+                          ? "text-amber-300"
+                          : "text-red-400";
+                    const borderClass =
+                      hi
+                        ? "border-amber-500/40 bg-amber-950/25"
+                        : tone === "stable"
+                          ? "border-emerald-500/30 bg-emerald-950/15"
+                          : tone === "warn"
+                            ? "border-amber-500/35 bg-amber-950/20"
+                            : "border-red-500/30 bg-red-950/20";
                     return (
-                      <li
+                      <div
                         key={name}
-                        className={`rounded-md border px-2.5 py-2 tabular-nums ${
-                          hi
-                            ? "border-amber-500/35 bg-amber-950/20 text-amber-100/95"
-                            : "border-transparent text-slate-400"
-                        }`}
+                        className={`rounded-xl border px-4 py-3.5 ${borderClass}`}
                       >
-                        <span className="font-semibold text-slate-200">{name}</span>
-                        <span className="mx-1.5 text-slate-600">·</span>
-                        마지막 이상일 {lastStr}
-                        <span className="mx-1.5 text-slate-600">·</span>
-                        무고장 경과 {faultStreak}
-                      </li>
+                        <p className="text-sm font-semibold text-slate-200 mb-1">{name}</p>
+                        <p className={`text-3xl font-extrabold tabular-nums leading-none tracking-tight ${numClass}`}>
+                          {days != null ? `${days}일` : "—"}
+                        </p>
+                        <p className="mt-1 text-xs font-medium text-slate-500">무고장 경과</p>
+                        <p className="mt-1.5 text-[11px] text-slate-500">
+                          마지막 이상 <span className="text-slate-400 tabular-nums">{lastStr}</span>
+                        </p>
+                        {hi && (
+                          <p className="mt-2 text-[10px] font-medium text-amber-200/90 rounded border border-amber-500/30 bg-amber-950/30 px-2 py-0.5 inline-block">
+                            생산영향·고장/가동중지 주의
+                          </p>
+                        )}
+                      </div>
                     );
                   })}
-                </ul>
+                </div>
               </div>
             )}
           </div>
 
-          <div className="flex shrink-0 flex-col items-end gap-2 self-start sm:self-center">
-            <Link
-              href="/daily/manufacturing-equipment/incident/new"
-              className="whitespace-nowrap rounded-lg border border-amber-600/40 bg-amber-950/25 px-3 py-2 text-center text-sm font-medium text-amber-200 hover:bg-amber-950/40"
-            >
-              설비 이상 등록
-            </Link>
+          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-700/40 pt-4">
+            {canRegisterIncident && (
+              <Link
+                href="/daily/manufacturing-equipment/incident/new"
+                className="inline-flex items-center rounded-lg border border-amber-600/35 bg-amber-950/20 px-3 py-1.5 text-xs font-medium text-amber-200/95 hover:bg-amber-950/35"
+              >
+                설비 이상 등록
+              </Link>
+            )}
             <Link
               href="/daily/manufacturing-equipment/incidents"
-              className="whitespace-nowrap rounded-lg border border-cyan-500/35 bg-cyan-950/20 px-3 py-2 text-center text-sm font-medium text-cyan-200 hover:bg-cyan-950/35"
+              className="inline-flex items-center rounded-lg border border-slate-600/70 bg-slate-950/40 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800/80"
             >
               설비 이상 이력
             </Link>
