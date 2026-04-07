@@ -49,6 +49,7 @@ const DESKTOP_DROPDOWN_DAILY_BLOCKS: DailyDropdownBlock[] = [
     section: "제조 설비",
     items: [
       { href: "/daily/manufacturing-equipment", label: "제조설비 점검일지" },
+      { href: "/daily/equipment-history", label: "설비이력기록부" },
       { href: "/daily/air-conditioning-equipment", label: "공조설비 점검일지" },
       { href: "/daily/hoist-inspection", label: "호이스트 점검기록" },
     ],
@@ -58,6 +59,7 @@ const DESKTOP_DROPDOWN_DAILY_BLOCKS: DailyDropdownBlock[] = [
 const DESKTOP_DROPDOWN_MANAGEMENT: DropdownItem[] = [
   { href: "/production/admin", label: "제품정보관리" },
   { href: "/manage", label: "사용자관리" },
+  { href: "/admin/equipment", label: "제조설비등록" },
 ];
 
 type DropdownKey = "production" | "materials" | "daily" | "management";
@@ -104,7 +106,7 @@ export default function Header() {
   const showDesktopCategoryMenu = viewIsHarang
     ? pathname === "/" || pathname.startsWith("/account")
     : pathname === "/" ||
-      ["/production", "/materials", "/daily", "/account", "/inventory", "/manage", "/executive"].some(
+      ["/production", "/materials", "/daily", "/account", "/inventory", "/manage", "/executive", "/admin"].some(
         (prefix) => pathname === prefix || pathname.startsWith(prefix + "/")
       );
 

@@ -110,6 +110,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     router.replace("/");
     return null;
   }
+  const isAdminEquipmentPath = pathname === "/admin/equipment" || pathname.startsWith("/admin/equipment/");
+  if (isAdminEquipmentPath && profile?.role !== "admin") {
+    router.replace("/");
+    return null;
+  }
 
   const showTabBar = true;
 

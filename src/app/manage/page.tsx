@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { Eye, EyeOff, Copy, KeyRound } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
@@ -240,6 +241,15 @@ export default function ManagePage() {
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-8">
       <h1 className="text-2xl font-bold text-slate-100">관리 (사업장 / 사용자)</h1>
+      <p className="text-sm text-slate-400 -mt-4">
+        <Link href="/admin/equipment" className="text-cyan-400 hover:text-cyan-300 font-medium">
+          제조설비등록
+        </Link>
+        <span className="text-slate-600 mx-2">·</span>
+        <Link href="/production/admin" className="text-slate-400 hover:text-slate-300">
+          기준정보(원료·BOM) 관리
+        </Link>
+      </p>
       {error && (
         <p className="text-red-400 text-sm" role="alert">
           {error}

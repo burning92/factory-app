@@ -13,6 +13,7 @@ import {
   Wrench,
   Wind,
   Cable,
+  History,
 } from "lucide-react";
 
 type HubEntry = { href: string; label: string; Icon: typeof ClipboardCheck };
@@ -35,6 +36,7 @@ const SECTIONS: { title: string; items: HubEntry[] }[] = [
     title: "제조 설비",
     items: [
       { href: "/daily/manufacturing-equipment", label: "제조설비 점검일지", Icon: Wrench },
+      { href: "/daily/equipment-history", label: "설비이력기록부", Icon: History },
       { href: "/daily/air-conditioning-equipment", label: "공조설비 점검일지", Icon: Wind },
       { href: "/daily/hoist-inspection", label: "호이스트 점검기록", Icon: Cable },
     ],

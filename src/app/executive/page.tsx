@@ -27,7 +27,10 @@ import {
   planActualSparklineWindowMonths,
 } from "@/features/dashboard/planVsActual";
 import { loadClimateDashboardWindows, loadEquipmentIssues } from "@/features/dashboard/climateAndEquipment";
-import { loadMajorEquipmentIncidentStats, type MajorEquipmentIncidentStats } from "@/features/daily/equipmentIncidents";
+import {
+  loadExecutiveEquipmentSlotSnapshots,
+  type ExecutiveEquipmentUnitSnapshot,
+} from "@/features/equipment/executiveEquipmentHistory";
 import { canRegisterEquipmentIncident } from "@/features/daily/equipmentIncidentPermissions";
 import {
   loadManpowerUtilizationMonthSummary,
@@ -318,7 +321,7 @@ export default function ExecutiveDashboardPage() {
   const [climateWindows, setClimateWindows] = useState<ClimateDashboardWindows | null>(null);
   const [equipment, setEquipment] = useState<{
     issueCount: number;
-    majorStats: { 화덕: MajorEquipmentIncidentStats; 호이스트: MajorEquipmentIncidentStats } | null;
+    majorStats: { 화덕: ExecutiveEquipmentUnitSnapshot[]; 호이스트: ExecutiveEquipmentUnitSnapshot[] } | null;
   } | null>(null);
   const [manpower, setManpower] = useState<ManpowerMonthSummary | null>(null);
   /** 수동 JSONL 병합 후 올해 폐기 누적(상세 페이지와 동일 소스) */
@@ -437,7 +440,7 @@ export default function ExecutiveDashboardPage() {
 
       const cl = await loadClimateDashboardWindows(supabase, orgCode, 7);
       const eq = await loadEquipmentIssues(supabase, orgCode, 7);
-      const majorStats = await loadMajorEquipmentIncidentStats(supabase, orgCode);
+      const majorStats = await loadExecutiveEquipmentSlotSnapshots(supabase, orgCode);
       if (cancelled) return;
       setClimateWindows(cl);
       setEquipment({ ...eq, majorStats });
@@ -1057,7 +1060,7 @@ export default function ExecutiveDashboardPage() {
                   </button>
                 }
               >
-                최근 7일 설비 점검 결과입니다. 부적합 항목이 없으면 ‘점검 이상 무’로 표시됩니다.
+                최근 7일 설비 점검 결과입니다. 부적합 항목이 없으면 ‘점검 이상 무’로 표시됩니다. 아래 주요 설비 이력은 마스터의 대시보드 그룹·운영 상태·노출 설정을 기준으로 한 개별 설비(설비이력기록부)입니다.
               </ExecutivePortalTooltip>
             </div>
 
@@ -1094,53 +1097,98 @@ export default function ExecutiveDashboardPage() {
             {equipment?.majorStats && (
               <div>
                 <p className="text-xs font-semibold tracking-wide text-slate-400 mb-2.5">주요 설비 이력</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <p className="text-[11px] text-slate-500 mb-2 -mt-1">
+                  설비이력기록부 · 마스터에서 대시보드 그룹·노출·운영중/예비로 지정된 개별 설비
+                </p>
+                <div className="space-y-5">
                   {(["화덕", "호이스트"] as const).map((name) => {
-                    const s = equipment.majorStats![name];
-                    const days = s.daysWithoutFault;
-                    const lastStr = s.lastIncidentAt ?? "—";
-                    const hi = s.recentHighImpact;
-                    const tone =
-                      days == null ? "stable" : days >= 90 ? "stable" : days >= 30 ? "warn" : "danger";
-                    const numClass =
-                      tone === "stable"
-                        ? "text-emerald-300"
-                        : tone === "warn"
-                          ? "text-amber-300"
-                          : "text-red-400";
-                    const borderClass =
-                      hi
-                        ? "border-amber-500/40 bg-amber-950/25"
-                        : tone === "stable"
-                          ? "border-emerald-500/30 bg-emerald-950/15"
-                          : tone === "warn"
-                            ? "border-amber-500/35 bg-amber-950/20"
-                            : "border-red-500/30 bg-red-950/20";
+                    const units = equipment.majorStats![name];
                     return (
-                      <div
-                        key={name}
-                        className={`rounded-xl border px-4 py-4 ${borderClass} flex flex-col gap-0`}
-                      >
-                        <div className="flex items-start justify-between gap-2 min-h-[1.75rem]">
-                          <h3 className="text-base font-semibold leading-snug text-slate-100 md:text-[1.0625rem] tracking-tight">
-                            {name}
-                          </h3>
-                          {hi && (
-                            <span className="shrink-0 rounded border border-amber-500/35 bg-amber-950/35 px-2 py-0.5 text-[10px] font-semibold text-amber-100/95 leading-tight text-right max-w-[9rem]">
-                              생산영향·고장/가동중지 주의
+                      <div key={name}>
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-2">
+                          {name}
+                          {units.length > 0 ? (
+                            <span className="ml-2 font-normal normal-case text-slate-400">
+                              운영중 {units.length}대
                             </span>
+                          ) : (
+                            <span className="ml-2 font-normal normal-case text-slate-500">표시할 설비 없음</span>
                           )}
-                        </div>
-                        <p className="mt-3 text-sm font-medium text-slate-300">무고장 경과일 :</p>
-                        <p
-                          className={`mt-1 text-4xl font-extrabold tabular-nums leading-none tracking-tight md:text-5xl ${numClass}`}
-                        >
-                          {days != null ? `${days}일` : "—"}
                         </p>
-                        <p className="mt-3 text-sm leading-snug text-slate-300">
-                          <span className="font-medium text-slate-400">마지막 고장/중지 </span>
-                          <span className="font-semibold tabular-nums text-slate-100">{lastStr}</span>
-                        </p>
+                        {units.length === 0 ? (
+                          <p className="text-sm text-slate-500">
+                            제조설비등록에서 `{name}` 그룹·대시보드 노출을 설정한 설비가 없습니다.
+                          </p>
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {units.map((s) => {
+                              const days = s.daysWithoutFault;
+                              const lastStr = s.lastFaultOrStopAt ?? "—";
+                              const hi = s.recentHighImpact;
+                              const st = s.statusLabel;
+                              const tone =
+                                days == null ? "stable" : days >= 90 ? "stable" : days >= 30 ? "warn" : "danger";
+                              const numClass =
+                                tone === "stable"
+                                  ? "text-emerald-300"
+                                  : tone === "warn"
+                                    ? "text-amber-300"
+                                    : "text-red-400";
+                              const borderClass =
+                                hi
+                                  ? "border-amber-500/40 bg-amber-950/25"
+                                  : tone === "stable"
+                                    ? "border-emerald-500/30 bg-emerald-950/15"
+                                    : tone === "warn"
+                                      ? "border-amber-500/35 bg-amber-950/20"
+                                      : "border-red-500/30 bg-red-950/20";
+                              return (
+                                <div
+                                  key={`${name}-${s.masterId ?? s.displayTitle}`}
+                                  className={`rounded-xl border px-4 py-4 ${borderClass} flex flex-col gap-0`}
+                                >
+                                  <div className="flex items-start justify-between gap-2 min-h-[1.75rem]">
+                                    <h3
+                                      className="text-base font-semibold leading-snug text-slate-100 md:text-[1.0625rem] tracking-tight line-clamp-2"
+                                      title={s.displayTitle}
+                                    >
+                                      {s.displayTitle}
+                                    </h3>
+                                    {hi && (
+                                      <span className="shrink-0 rounded border border-amber-500/35 bg-amber-950/35 px-2 py-0.5 text-[10px] font-semibold text-amber-100/95 leading-tight text-right max-w-[9rem]">
+                                        생산영향·고장/가동중지 주의
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="mt-3 text-sm font-medium text-slate-300">무고장 경과일 :</p>
+                                  <p
+                                    className={`mt-1 text-4xl font-extrabold tabular-nums leading-none tracking-tight md:text-5xl ${numClass}`}
+                                  >
+                                    {days != null ? `${days}일` : "—"}
+                                  </p>
+                                  <p className="mt-3 text-sm leading-snug text-slate-300">
+                                    <span className="font-medium text-slate-400">현재 상태 </span>
+                                    <span
+                                      className={
+                                        st === "진행 중"
+                                          ? "font-semibold text-amber-200"
+                                          : st === "조치 완료"
+                                            ? "font-semibold text-emerald-300/95"
+                                            : "font-semibold text-slate-400"
+                                      }
+                                    >
+                                      {st}
+                                    </span>
+                                  </p>
+                                  <p className="mt-2 text-sm leading-snug text-slate-300">
+                                    <span className="font-medium text-slate-400">마지막 고장/중지 </span>
+                                    <span className="font-semibold tabular-nums text-slate-100">{lastStr}</span>
+                                  </p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1163,6 +1211,12 @@ export default function ExecutiveDashboardPage() {
               className="inline-flex items-center rounded-lg border border-slate-600/70 bg-slate-950/40 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800/80"
             >
               설비 이상 이력
+            </Link>
+            <Link
+              href="/daily/equipment-history"
+              className="inline-flex items-center rounded-lg border border-cyan-600/35 bg-cyan-950/20 px-3 py-1.5 text-xs font-medium text-cyan-200/95 hover:bg-cyan-950/35"
+            >
+              설비이력기록부
             </Link>
             <Link href="/executive/equipment" className={dashCardDetailLink}>
               상세보기 →
