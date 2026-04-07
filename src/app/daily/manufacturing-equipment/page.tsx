@@ -103,12 +103,20 @@ export default function DailyManufacturingEquipmentListPage() {
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <h1 className="text-lg font-semibold text-slate-100">제조설비 점검표 — 목록</h1>
-        <Link
-          href="/daily/manufacturing-equipment/new"
-          className="shrink-0 inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-sm"
-        >
-          새 일지 작성
-        </Link>
+        <div className="flex flex-wrap gap-2 justify-end">
+          <Link
+            href="/daily/manufacturing-equipment/incident/new"
+            className="shrink-0 inline-flex items-center justify-center px-4 py-2.5 rounded-lg border border-amber-600/45 bg-amber-950/30 text-amber-200 font-medium text-sm hover:bg-amber-950/50"
+          >
+            설비 이상 등록
+          </Link>
+          <Link
+            href="/daily/manufacturing-equipment/new"
+            className="shrink-0 inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-sm"
+          >
+            새 일지 작성
+          </Link>
+        </div>
       </div>
 
       {toast && (

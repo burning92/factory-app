@@ -14,7 +14,7 @@ export const MANUFACTURING_EQUIPMENT_CHECKLIST: ManufacturingEquipmentCategory[]
   },
   {
     title: "성형실",
-    questions: ["도우성형기(스트레쳐)", "컨베이어"],
+    questions: ["도우성형기(스트레쳐)", "컨베이어", "호이스트"],
   },
   {
     title: "가열실",

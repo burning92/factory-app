@@ -27,6 +27,7 @@ import {
   planActualSparklineWindowMonths,
 } from "@/features/dashboard/planVsActual";
 import { loadClimateDashboardWindows, loadEquipmentIssues } from "@/features/dashboard/climateAndEquipment";
+import { loadMajorEquipmentIncidentStats, type MajorEquipmentIncidentStats } from "@/features/daily/equipmentIncidents";
 import {
   loadManpowerUtilizationMonthSummary,
   DEFAULT_DASHBOARD_BASELINE_HEADCOUNT,
@@ -310,7 +311,10 @@ export default function ExecutiveDashboardPage() {
     Record<number, number | null>
   >({});
   const [climateWindows, setClimateWindows] = useState<ClimateDashboardWindows | null>(null);
-  const [equipment, setEquipment] = useState<{ issueCount: number } | null>(null);
+  const [equipment, setEquipment] = useState<{
+    issueCount: number;
+    majorStats: { 화덕: MajorEquipmentIncidentStats; 호이스트: MajorEquipmentIncidentStats } | null;
+  } | null>(null);
   const [manpower, setManpower] = useState<ManpowerMonthSummary | null>(null);
   /** 수동 JSONL 병합 후 올해 폐기 누적(상세 페이지와 동일 소스) */
   const [wasteMergedRollup, setWasteMergedRollup] = useState<WasteRollupFromDayRows | null>(null);
@@ -428,9 +432,10 @@ export default function ExecutiveDashboardPage() {
 
       const cl = await loadClimateDashboardWindows(supabase, orgCode, 7);
       const eq = await loadEquipmentIssues(supabase, orgCode, 7);
+      const majorStats = await loadMajorEquipmentIncidentStats(supabase, orgCode);
       if (cancelled) return;
       setClimateWindows(cl);
-      setEquipment(eq);
+      setEquipment({ ...eq, majorStats });
     })();
 
     return () => {
@@ -1094,14 +1099,55 @@ export default function ExecutiveDashboardPage() {
                 </div>
               </div>
             )}
+
+            {equipment?.majorStats && (
+              <div className="rounded-lg border border-slate-700/50 bg-slate-900/35 px-3 py-3">
+                <p className="text-[11px] font-semibold tracking-wide text-slate-500 mb-2">주요 설비 이력</p>
+                <ul className="space-y-2 text-[13px] leading-snug text-slate-400">
+                  {(["화덕", "호이스트"] as const).map((name) => {
+                    const s = equipment.majorStats![name];
+                    const lastStr = s.lastIncidentAt ?? "등록 없음";
+                    const faultStreak =
+                      s.daysWithoutFault != null
+                        ? `${s.daysWithoutFault}일`
+                        : "고장·가동중지 이력 없음";
+                    const hi = s.recentHighImpact;
+                    return (
+                      <li
+                        key={name}
+                        className={`rounded-md border px-2.5 py-2 tabular-nums ${
+                          hi
+                            ? "border-amber-500/35 bg-amber-950/20 text-amber-100/95"
+                            : "border-transparent text-slate-400"
+                        }`}
+                      >
+                        <span className="font-semibold text-slate-200">{name}</span>
+                        <span className="mx-1.5 text-slate-600">·</span>
+                        마지막 이상일 {lastStr}
+                        <span className="mx-1.5 text-slate-600">·</span>
+                        무고장 경과 {faultStreak}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
           </div>
 
-          <Link
-            href="/executive/equipment"
-            className="shrink-0 self-start text-sm font-medium text-cyan-400 hover:text-cyan-300 sm:self-center"
-          >
-            상세보기 →
-          </Link>
+          <div className="flex shrink-0 flex-col gap-2 self-start sm:self-center">
+            <Link
+              href="/daily/manufacturing-equipment/incident/new"
+              className="whitespace-nowrap rounded-lg border border-amber-600/40 bg-amber-950/25 px-3 py-2 text-center text-sm font-medium text-amber-200 hover:bg-amber-950/40"
+            >
+              설비 이상 등록
+            </Link>
+            <Link
+              href="/executive/equipment"
+              className="text-center text-sm font-medium text-cyan-400 hover:text-cyan-300"
+            >
+              상세보기 →
+            </Link>
+          </div>
         </section>
       </div>
 
