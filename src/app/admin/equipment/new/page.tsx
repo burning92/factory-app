@@ -23,12 +23,11 @@ export default function AdminEquipmentNewPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
-    const mn = values.management_no.trim();
     const en = values.equipment_name.trim();
     const il = values.install_location.trim();
     const pu = values.purpose.trim();
-    if (!mn || !en || !il || !pu) {
-      setErr("관리번호, 기본 설비명, 설치장소, 용도는 필수입니다.");
+    if (!values.management_no_suffix.trim() || !en || !il || !pu) {
+      setErr("관리번호 뒤 번호, 기본 설비명, 설치장소, 용도는 필수입니다.");
       return;
     }
     setSaving(true);

@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import {
-  DASHBOARD_GROUPS,
-  EQUIPMENT_TYPES,
+  DEFAULT_DASHBOARD_GROUPS,
+  DEFAULT_EQUIPMENT_TYPES,
   LIFECYCLE_STATUSES,
   type DashboardGroup,
   type EquipmentType,
@@ -19,9 +20,43 @@ const fieldClass =
   "w-full px-3 py-2 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500";
 const labelClass = "block text-xs font-medium text-slate-400 mb-1";
 
+const MANAGEMENT_NO_PREFIX = "FP-812-1-" as const;
+
+function normalizeSuffix(raw: string): { ok: true; suffix: string } | { ok: false; reason: "empty" | "pattern" } {
+  const trimmed = String(raw ?? "").trim();
+  if (!trimmed) return { ok: false, reason: "empty" };
+
+  // 숫자/하이픈만 허용 → 나머지 제거하지 않고 에러 처리
+  if (!/^[0-9-]+$/.test(trimmed)) return { ok: false, reason: "pattern" };
+
+  // 연속 하이픈, 앞/뒤 하이픈 정리
+  const compact = trimmed.replace(/-+/g, "-").replace(/^-+/, "").replace(/-+$/, "");
+  if (!compact) return { ok: false, reason: "empty" };
+
+  // "1-2" 같은 형태만 허용 (숫자 묶음 + - + 숫자 묶음…)
+  if (!/^[0-9]+(-[0-9]+)*$/.test(compact)) return { ok: false, reason: "pattern" };
+
+  return { ok: true, suffix: compact };
+}
+
+function splitManagementNo(full: string): { prefix: string; suffix: string } {
+  const s = String(full ?? "").trim();
+  if (!s) return { prefix: MANAGEMENT_NO_PREFIX, suffix: "" };
+  if (s.startsWith(MANAGEMENT_NO_PREFIX)) {
+    return { prefix: MANAGEMENT_NO_PREFIX, suffix: s.slice(MANAGEMENT_NO_PREFIX.length) };
+  }
+  // 기존 데이터가 다른 포맷이면 suffix에 전체를 보여주고 저장 시에만 prefix 결합을 적용(사용자가 수정하면 정상화됨)
+  return { prefix: MANAGEMENT_NO_PREFIX, suffix: s };
+}
+
+function joinManagementNo(prefix: string, suffix: string): string {
+  const p = String(prefix ?? MANAGEMENT_NO_PREFIX);
+  return `${p}${suffix}`;
+}
+
 function normType(t: unknown): EquipmentType {
-  const s = String(t ?? "");
-  return (EQUIPMENT_TYPES as readonly string[]).includes(s) ? (s as EquipmentType) : "기타";
+  const s = String(t ?? "").trim();
+  return s || "기타";
 }
 
 function normLifecycle(s: unknown): LifecycleStatus {
@@ -31,12 +66,12 @@ function normLifecycle(s: unknown): LifecycleStatus {
 
 function normDashboardGroup(s: unknown): DashboardGroup | null {
   if (s == null || s === "") return null;
-  const x = String(s);
-  return (DASHBOARD_GROUPS as readonly string[]).includes(x) ? (x as DashboardGroup) : null;
+  const x = String(s).trim();
+  return x || null;
 }
 
 export type EquipmentMasterFormValues = {
-  management_no: string;
+  management_no_suffix: string;
   equipment_type: EquipmentType;
   equipment_name: string;
   unit_no: string;
@@ -64,7 +99,7 @@ export type EquipmentMasterFormValues = {
 
 export function emptyEquipmentMasterFormValues(): EquipmentMasterFormValues {
   return {
-    management_no: "",
+    management_no_suffix: "",
     equipment_type: "기타",
     equipment_name: "",
     unit_no: "",
@@ -94,8 +129,9 @@ export function emptyEquipmentMasterFormValues(): EquipmentMasterFormValues {
 export function equipmentMasterToFormValues(row: EquipmentMasterRow): EquipmentMasterFormValues {
   const lc = normLifecycle(row.lifecycle_status ?? (row.is_active ? "운영중" : "사용중지"));
   const dg = normDashboardGroup(row.dashboard_group);
+  const mn = splitManagementNo(row.management_no);
   return {
-    management_no: row.management_no,
+    management_no_suffix: mn.suffix,
     equipment_type: normType(row.equipment_type),
     equipment_name: row.equipment_name,
     unit_no: row.unit_no != null ? String(row.unit_no) : "",
@@ -123,12 +159,14 @@ export function equipmentMasterToFormValues(row: EquipmentMasterRow): EquipmentM
 }
 
 export function formValuesToEquipmentPayload(values: EquipmentMasterFormValues, opts: { syncIsActive: boolean }) {
+  const suffixNorm = normalizeSuffix(values.management_no_suffix);
+  const suffix = suffixNorm.ok ? suffixNorm.suffix : String(values.management_no_suffix ?? "").trim();
   const unitParsed = values.unit_no.trim() === "" ? null : Number.parseInt(values.unit_no, 10);
   const unit_no = unitParsed != null && Number.isFinite(unitParsed) && unitParsed > 0 ? unitParsed : null;
   const dg = values.dashboard_group === "" ? null : values.dashboard_group;
   const is_active = opts.syncIsActive ? lifecycleToIsActive(values.lifecycle_status) : undefined;
   const payload: Record<string, unknown> = {
-    management_no: values.management_no.trim(),
+    management_no: joinManagementNo(MANAGEMENT_NO_PREFIX, suffix),
     equipment_type: values.equipment_type,
     equipment_name: values.equipment_name.trim(),
     unit_no,
@@ -162,20 +200,22 @@ export function formValuesToEquipmentPayload(values: EquipmentMasterFormValues, 
 export function EquipmentMasterForm({
   values,
   onChange,
-  managementNoReadOnly,
   excludeEquipmentId,
 }: {
   values: EquipmentMasterFormValues;
   onChange: (v: EquipmentMasterFormValues) => void;
-  managementNoReadOnly?: boolean;
   /** 대체 설비 드롭다운에서 제외할 자기 자신 id */
   excludeEquipmentId?: string | null;
 }) {
-  const { viewOrganizationCode } = useAuth();
+  const { viewOrganizationCode, profile } = useAuth();
   const orgCode = viewOrganizationCode ?? "100";
   const set = (patch: Partial<EquipmentMasterFormValues>) => onChange({ ...values, ...patch });
 
   const [peers, setPeers] = useState<{ id: string; label: string }[]>([]);
+  const [typeOptions, setTypeOptions] = useState<{ code: string; label: string }[]>([]);
+  const [groupOptions, setGroupOptions] = useState<{ code: string; label: string }[]>([]);
+  const [optErr, setOptErr] = useState<string | null>(null);
+  const isAdmin = profile?.role === "admin";
 
   const loadPeers = useCallback(async () => {
     const { data, error } = await supabase
@@ -199,6 +239,40 @@ export function EquipmentMasterForm({
     loadPeers();
   }, [loadPeers]);
 
+  const loadOptionMasters = useCallback(async () => {
+    setOptErr(null);
+    const [{ data: t, error: te }, { data: g, error: ge }] = await Promise.all([
+      supabase
+        .from("equipment_type_options")
+        .select("code, label, is_active, sort_order")
+        .eq("organization_code", orgCode)
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true })
+        .order("label", { ascending: true }),
+      supabase
+        .from("equipment_dashboard_group_options")
+        .select("code, label, is_active, sort_order")
+        .eq("organization_code", orgCode)
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true })
+        .order("label", { ascending: true }),
+    ]);
+    if (te || ge) {
+      setOptErr((te ?? ge)!.message);
+      setTypeOptions(DEFAULT_EQUIPMENT_TYPES.map((x) => ({ code: x, label: x })));
+      setGroupOptions(DEFAULT_DASHBOARD_GROUPS.map((x) => ({ code: x, label: x })));
+      return;
+    }
+    const tList = (t ?? []) as { code: string; label: string }[];
+    const gList = (g ?? []) as { code: string; label: string }[];
+    setTypeOptions(tList.length ? tList : DEFAULT_EQUIPMENT_TYPES.map((x) => ({ code: x, label: x })));
+    setGroupOptions(gList.length ? gList : DEFAULT_DASHBOARD_GROUPS.map((x) => ({ code: x, label: x })));
+  }, [orgCode]);
+
+  useEffect(() => {
+    loadOptionMasters();
+  }, [loadOptionMasters]);
+
   const peerOptions = useMemo(
     () => peers.filter((p) => !excludeEquipmentId || p.id !== excludeEquipmentId),
     [peers, excludeEquipmentId]
@@ -212,30 +286,55 @@ export function EquipmentMasterForm({
   const lifecycleHint =
     values.lifecycle_status === "철거" && !values.removed_at.trim() ? "철거일을 입력하는 것을 권장합니다." : null;
 
+  const mnCheck = normalizeSuffix(values.management_no_suffix);
+  const managementNoError =
+    mnCheck.ok ? null : mnCheck.reason === "empty" ? "관리번호 뒤 번호를 입력하세요." : "관리번호 뒤 번호는 숫자와 하이픈만 입력할 수 있습니다. 예: 12, 1-2";
+
   return (
     <div className="space-y-4">
+      {optErr && <p className="text-xs text-amber-200/90">옵션을 불러오지 못했습니다. 임시 기본값으로 표시합니다. ({optErr})</p>}
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <label className={labelClass}>관리번호 (필수)</label>
-          <input
-            className={fieldClass}
-            value={values.management_no}
-            onChange={(e) => set({ management_no: e.target.value })}
-            required
-            readOnly={managementNoReadOnly}
-            disabled={managementNoReadOnly}
-          />
+          <label className={labelClass}>관리번호 (뒤 번호 입력)</label>
+          <div className="flex rounded-lg border border-slate-600 bg-space-900 overflow-hidden">
+            <div className="shrink-0 px-3 py-2 text-sm text-slate-400 border-r border-slate-700/60 font-mono">
+              {MANAGEMENT_NO_PREFIX}
+            </div>
+            <input
+              className="min-w-0 flex-1 px-3 py-2 text-sm bg-transparent text-slate-100 placeholder-slate-500 outline-none"
+              value={values.management_no_suffix}
+              onChange={(e) => set({ management_no_suffix: e.target.value })}
+              placeholder="예: 12 또는 1-2"
+              inputMode="numeric"
+              required
+              aria-invalid={!!managementNoError}
+            />
+          </div>
+          {managementNoError ? (
+            <p className="mt-1 text-[11px] text-red-400">{managementNoError}</p>
+          ) : (
+            <p className="mt-1 text-[11px] text-slate-500">
+              저장 시: <span className="font-mono text-slate-300">{joinManagementNo(MANAGEMENT_NO_PREFIX, mnCheck.ok ? mnCheck.suffix : values.management_no_suffix.trim())}</span>
+            </p>
+          )}
         </div>
         <div>
-          <label className={labelClass}>설비유형</label>
+          <div className="flex items-end justify-between gap-2">
+            <label className={labelClass}>설비유형 (관리자 설정값)</label>
+            {isAdmin && (
+              <Link href="/admin/equipment-options" className="text-[11px] text-cyan-400 hover:text-cyan-300">
+                옵션 관리
+              </Link>
+            )}
+          </div>
           <select
             className={fieldClass}
             value={values.equipment_type}
             onChange={(e) => set({ equipment_type: e.target.value as EquipmentType })}
           >
-            {EQUIPMENT_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
+            {typeOptions.map((t) => (
+              <option key={t.code} value={t.code}>
+                {t.label}
               </option>
             ))}
           </select>
@@ -319,16 +418,23 @@ export function EquipmentMasterForm({
           {lifecycleHint && <p className="mt-1 text-[11px] text-amber-400/90">{lifecycleHint}</p>}
         </div>
         <div>
-          <label className={labelClass}>대시보드 그룹</label>
+          <div className="flex items-end justify-between gap-2">
+            <label className={labelClass}>대시보드 그룹 (관리자 설정값)</label>
+            {isAdmin && (
+              <Link href="/admin/equipment-options" className="text-[11px] text-cyan-400 hover:text-cyan-300">
+                옵션 관리
+              </Link>
+            )}
+          </div>
           <select
             className={fieldClass}
             value={values.dashboard_group}
             onChange={(e) => set({ dashboard_group: e.target.value as "" | DashboardGroup })}
           >
             <option value="">없음</option>
-            {DASHBOARD_GROUPS.map((g) => (
-              <option key={g} value={g}>
-                {g}
+            {groupOptions.map((g) => (
+              <option key={g.code} value={g.code}>
+                {g.label}
               </option>
             ))}
           </select>
