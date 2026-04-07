@@ -405,3 +405,89 @@ export function rollupWasteMockFromDayRows(days: WasteDetailMockDayRow[]) {
     closedDayCount: days.length,
   };
 }
+
+export type WasteRollupFromDayRows = ReturnType<typeof rollupWasteMockFromDayRows>;
+
+/** 전년 동일 월·일(윤년 등은 말일로 클램프) */
+export function toPrevYearCalendarDate(isoDate: string, prevYear: number): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate);
+  if (!m) return `${prevYear}-12-31`;
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  const lastDay = new Date(prevYear, month, 0).getDate();
+  const d = Math.min(day, lastDay);
+  return `${prevYear}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+export type WasteYoySamePeriodResult = {
+  currentRate: number | null;
+  prevSamePeriodRate: number | null;
+  deltaPctPoint: number | null;
+  /** 올해 집계에 포함된 마지막 일자 */
+  periodEndDate: string | null;
+  /** 전년 동기 구간의 종료일(달력 기준) */
+  prevPeriodEndDate: string | null;
+};
+
+/**
+ * 올해 병합 행 기준 마지막 일자까지 vs 전년 같은 월·일까지 누적 전체 폐기율 비교.
+ * rowsThisYear / rowsPrevYear는 각 연도의 mergeBundleDaysWithManualImportsForTable 결과 전체.
+ */
+export function computeWasteYoySamePeriod(
+  rowsThisYear: WasteDetailMockDayRow[],
+  rowsPrevYear: WasteDetailMockDayRow[],
+  year: number
+): WasteYoySamePeriodResult {
+  const prefix = `${year}-`;
+  const dates = rowsThisYear.filter((r) => r.date.startsWith(prefix)).map((r) => r.date);
+  if (dates.length === 0) {
+    return {
+      currentRate: null,
+      prevSamePeriodRate: null,
+      deltaPctPoint: null,
+      periodEndDate: null,
+      prevPeriodEndDate: null,
+    };
+  }
+  dates.sort();
+  const periodEndDate = dates[dates.length - 1]!;
+  const curSlice = rowsThisYear.filter((r) => r.date >= `${year}-01-01` && r.date <= periodEndDate);
+  const curRoll = rollupWasteMockFromDayRows(curSlice);
+
+  const prevYear = year - 1;
+  const prevPeriodEndDate = toPrevYearCalendarDate(periodEndDate, prevYear);
+  const prevSlice = rowsPrevYear.filter(
+    (r) => r.date >= `${prevYear}-01-01` && r.date <= prevPeriodEndDate
+  );
+  const prevRoll = rollupWasteMockFromDayRows(prevSlice);
+
+  const currentRate = curRoll.overallDiscardRatePct;
+  const prevSamePeriodRate = prevRoll.overallDiscardRatePct;
+  const deltaPctPoint =
+    currentRate != null && prevSamePeriodRate != null ? currentRate - prevSamePeriodRate : null;
+
+  return {
+    currentRate,
+    prevSamePeriodRate,
+    deltaPctPoint,
+    periodEndDate,
+    prevPeriodEndDate,
+  };
+}
+
+/** %p 증감 문자열 (+/- 부호, 소수 자리 통일) */
+export function formatDeltaPctPoint(delta: number | null, digits = 2): string {
+  if (delta == null || !Number.isFinite(delta)) return "—";
+  const sign = delta > 0 ? "+" : "";
+  return `${sign}${delta.toFixed(digits)}%p`;
+}
+
+/**
+ * 폐기율 하락 = 개선. 아주 작은 변화는 중립 처리.
+ */
+export function wasteYoYDeltaToneClass(delta: number | null): string {
+  if (delta == null || !Number.isFinite(delta)) return "text-slate-500";
+  if (delta < -0.005) return "text-emerald-400/80";
+  if (delta > 0.005) return "text-amber-400/85";
+  return "text-slate-500";
+}

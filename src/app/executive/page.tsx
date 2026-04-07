@@ -9,6 +9,16 @@ import { useMasterStore } from "@/store/useMasterStore";
 import { bomRowsToRefs, materialsToMeta } from "@/features/dashboard/bomMaterialAdapters";
 import { loadProductionBundle } from "@/features/dashboard/loadProductionBundle";
 import {
+  mergeBundleDaysWithManualImportsForTable,
+  rollupWasteMockFromDayRows,
+  computeWasteYoySamePeriod,
+  formatDeltaPctPoint,
+  wasteYoYDeltaToneClass,
+  type ManualWasteImportSeries,
+  type WasteYoySamePeriodResult,
+  type WasteRollupFromDayRows,
+} from "@/features/dashboard/wasteDetailMockData";
+import {
   loadPlanActualDashboardMetrics,
   planActualSparklineWindowMonths,
 } from "@/features/dashboard/planVsActual";
@@ -291,6 +301,9 @@ export default function ExecutiveDashboardPage() {
   const [climateWindows, setClimateWindows] = useState<ClimateDashboardWindows | null>(null);
   const [equipment, setEquipment] = useState<{ issueCount: number } | null>(null);
   const [manpower, setManpower] = useState<ManpowerMonthSummary | null>(null);
+  /** 수동 JSONL 병합 후 올해 폐기 누적(상세 페이지와 동일 소스) */
+  const [wasteMergedRollup, setWasteMergedRollup] = useState<WasteRollupFromDayRows | null>(null);
+  const [wasteYoy, setWasteYoy] = useState<WasteYoySamePeriodResult | null>(null);
 
   const year = useMemo(() => new Date().getFullYear(), []);
   const calendarMonth = useMemo(() => {
@@ -325,8 +338,49 @@ export default function ExecutiveDashboardPage() {
         setPlanDashboard(null);
         setPlanSparklineAchievementByMonth({});
         setManpower(null);
+        setWasteMergedRollup(null);
+        setWasteYoy(null);
       } else {
         setBundle(b);
+        try {
+          const emptyManual = (): ManualWasteImportSeries => ({
+            doughProductionByDate: {},
+            doughWasteByDate: {},
+            parbakeWasteByDate: {},
+            parbakeProductionByDate: {},
+          });
+          const normManual = (raw: Partial<ManualWasteImportSeries>): ManualWasteImportSeries => ({
+            doughProductionByDate: raw.doughProductionByDate ?? {},
+            doughWasteByDate: raw.doughWasteByDate ?? {},
+            parbakeWasteByDate: raw.parbakeWasteByDate ?? {},
+            parbakeProductionByDate: raw.parbakeProductionByDate ?? {},
+          });
+          const fetchManual = async (y: number) => {
+            const r = await fetch(`/api/internal/manual-imports/summary?year=${y}`);
+            if (!r.ok) return emptyManual();
+            return normManual((await r.json()) as Partial<ManualWasteImportSeries>);
+          };
+          const [bPrev, mCur, mPrev] = await Promise.all([
+            loadProductionBundle(supabase, year - 1, bomRefs, meta),
+            fetchManual(year),
+            fetchManual(year - 1),
+          ]);
+          if (cancelled) return;
+          if (!b?.days) {
+            setWasteMergedRollup(null);
+            setWasteYoy(null);
+          } else {
+            const rowsCur = mergeBundleDaysWithManualImportsForTable(b.days, mCur).rows;
+            setWasteMergedRollup(rollupWasteMockFromDayRows(rowsCur));
+            const rowsPrev = mergeBundleDaysWithManualImportsForTable(bPrev.bundle?.days ?? [], mPrev).rows;
+            setWasteYoy(computeWasteYoySamePeriod(rowsCur, rowsPrev, year));
+          }
+        } catch {
+          if (!cancelled) {
+            setWasteMergedRollup(null);
+            setWasteYoy(null);
+          }
+        }
         const sparkMonths = planActualSparklineWindowMonths(calendarMonth.m);
         const monthsToLoad = Array.from(
           new Set(sparkMonths.filter((m) => m <= calendarMonth.m))
@@ -391,7 +445,8 @@ export default function ExecutiveDashboardPage() {
   }
 
   const y = bundle?.ytdProduction;
-  const w = bundle?.ytdWaste;
+  /** 폐기 카드: 수동 JSONL 병합값 우선, 실패 시 스냅샷·이카운트 번들 ytd */
+  const w = wasteMergedRollup ?? bundle?.ytdWaste;
 
   const totalProductionYtd =
     y != null
@@ -800,33 +855,49 @@ export default function ExecutiveDashboardPage() {
                   className={`${executiveTooltipPanelClass} left-1/2 w-[min(20rem,calc(100vw-2rem))] -translate-x-1/2 md:left-0 md:translate-x-0`}
                 >
                   <span className="block">
-                    도우·파베이크 폐기는 생산일지 계산과 동일합니다. 파베 분모 = 당일 파베이크 생산량(도우 사용량
-                    기준).
+                    도우·파베이크 폐기는 생산일지 계산과 동일합니다. 파베 분모는 수동 파베 생산 집계가 있으면 그
+                    수치, 없으면 도우 사용량(또는 반죽량)입니다. 수동 JSONL이 있으면 표와 같은 병합값으로 집계합니다.
                   </span>
                   <span className="mt-2 block text-slate-400">
-                    2차 마감 {w?.closedDayCount ?? 0}일 반영 · Σ도우반죽 {w ? num(w.sumDoughMix) : "—"}
+                    집계 일수 {w?.closedDayCount ?? 0}일 · Σ도우반죽 {w ? num(w.sumDoughMix) : "—"}
                   </span>
                 </span>
               </span>
             </div>
-            <Link href="/executive/waste" className="shrink-0 text-sm font-medium text-cyan-400 hover:text-cyan-300">
-              상세보기 →
+            <Link
+              href="/executive/waste"
+              className="shrink-0 text-xs font-medium text-slate-500 transition-colors hover:text-slate-300"
+            >
+              상세보기
             </Link>
           </div>
 
           <ul className="mt-4 flex-1 space-y-4 text-slate-300">
             <li className="space-y-2">
               <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                <div className={`min-w-0 ${dashMuted}`}>
-                  <span className="font-medium text-slate-300">전체 폐기율</span>
-                  <span className="mt-0.5 block text-xs font-normal text-gray-500">목표: 4% 미만</span>
+                <div className="min-w-0 text-sm text-slate-400">
+                  <span className="font-medium text-slate-200">전체 폐기율</span>
+                  <span className="mt-0.5 block text-[11px] font-normal text-slate-600">목표: 4% 미만</span>
                 </div>
                 <span
-                  className={`shrink-0 ${dashSubHero} ${wasteRateToneClass(w?.overallDiscardRatePct ?? null)}`}
+                  className={`shrink-0 ${dashHero} ${wasteRateToneClass(w?.overallDiscardRatePct ?? null)}`}
                 >
                   {pct(w?.overallDiscardRatePct ?? null)}
                 </span>
               </div>
+              {wasteYoy?.periodEndDate && (
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-xs tabular-nums text-slate-500">
+                  <span>
+                    전년 동기{" "}
+                    <span className="text-slate-400">
+                      {wasteYoy.prevSamePeriodRate != null ? pct(wasteYoy.prevSamePeriodRate) : "—"}
+                    </span>
+                  </span>
+                  <span className={wasteYoYDeltaToneClass(wasteYoy.deltaPctPoint)}>
+                    {wasteYoy.deltaPctPoint != null ? formatDeltaPctPoint(wasteYoy.deltaPctPoint) : "—"}
+                  </span>
+                </div>
+              )}
               <div className="h-2 w-full overflow-hidden rounded-full bg-slate-700/45">
                 <div
                   className={`h-full rounded-full transition-[width] duration-500 ease-out ${wasteSubRateBarFillClass(w?.overallDiscardRatePct ?? null)}`}
