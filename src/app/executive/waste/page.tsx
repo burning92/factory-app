@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
@@ -67,6 +68,37 @@ function overallColClass(pct: number | null, dim: boolean): string {
   return "text-slate-300";
 }
 
+/** 반죽·폐기·파베 생산이 모두 0이면 일별 표에서 제외 */
+function wasteDayRowHasData(d: WasteDetailMockDayRow): boolean {
+  return (
+    d.doughMixQty > 0 ||
+    d.doughWasteQty > 0 ||
+    d.parbakeWasteQty > 0 ||
+    d.sameDayParbakeProductionQty > 0
+  );
+}
+
+function groupWasteDayRowsByMonth(rows: WasteDetailMockDayRow[], year: number): { month: number; dayRows: WasteDetailMockDayRow[] }[] {
+  const map = new Map<number, WasteDetailMockDayRow[]>();
+  const prefix = `${year}-`;
+  for (const r of rows) {
+    if (!r.date.startsWith(prefix)) continue;
+    const parsed = /^(\d{4})-(\d{2})-\d{2}$/.exec(r.date);
+    if (!parsed) continue;
+    const month = Number(parsed[2]);
+    if (month < 1 || month > 12) continue;
+    const list = map.get(month) ?? [];
+    list.push(r);
+    map.set(month, list);
+  }
+  return Array.from(map.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([month, dayRows]) => ({
+      month,
+      dayRows: dayRows.sort((a, b) => a.date.localeCompare(b.date)),
+    }));
+}
+
 export default function ExecutiveWasteDetailPage() {
   const router = useRouter();
   const { profile, loading: authLoading } = useAuth();
@@ -105,13 +137,33 @@ export default function ExecutiveWasteDetailPage() {
     [tableRows, year]
   );
 
+  const monthlyRowsWithData = useMemo(
+    () => monthlyRows.filter((r) => r.dayCount > 0),
+    [monthlyRows]
+  );
+
+  const monthlyRowsForChart = useMemo(
+    () =>
+      monthlyRowsWithData.filter(
+        (r) => r.overallDiscardRatePct != null && Number.isFinite(r.overallDiscardRatePct)
+      ),
+    [monthlyRowsWithData]
+  );
+
   const monthlyChartMaxPct = useMemo(() => {
-    const rates = monthlyRows
-      .map((r) => r.overallDiscardRatePct)
-      .filter((x): x is number => x != null && Number.isFinite(x));
+    const rates = monthlyRowsForChart.map((r) => r.overallDiscardRatePct!);
     if (rates.length === 0) return 4;
     return Math.max(4, ...rates);
-  }, [monthlyRows]);
+  }, [monthlyRowsForChart]);
+
+  const dailyRowsForYear = useMemo(() => {
+    return tableRows.filter((r) => r.date.startsWith(`${year}-`)).filter(wasteDayRowHasData);
+  }, [tableRows, year]);
+
+  const dailyGroupsByMonth = useMemo(
+    () => groupWasteDayRowsByMonth(dailyRowsForYear, year),
+    [dailyRowsForYear, year]
+  );
 
   const yoy = useMemo(() => computeWasteYoySamePeriod(tableRows, prevTableRows, year), [tableRows, prevTableRows, year]);
   const yoyCompareUi = useMemo(() => {
@@ -311,33 +363,51 @@ export default function ExecutiveWasteDetailPage() {
 
         <div className="mb-4 rounded-lg border border-slate-700/35 bg-slate-900/20 px-3 py-3">
           <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-slate-600">월별 전체 폐기율 추이</p>
-          <div className="flex h-28 items-end justify-between gap-0.5 sm:gap-1" role="img" aria-label="월별 전체 폐기율 막대 그래프">
-            {monthlyRows.map((m) => {
-              const pct = m.overallDiscardRatePct;
-              const has = m.dayCount > 0 && pct != null && Number.isFinite(pct);
-              const hPct = has ? Math.min(100, (pct / monthlyChartMaxPct) * 100) : 0;
-              const barTone =
-                !has
-                  ? "bg-slate-700/25"
-                  : pct >= WASTE_DANGER_PCT
+          {monthlyRowsForChart.length === 0 ? (
+            <p className="py-6 text-center text-xs text-slate-500">막대로 표시할 월별 전체 폐기율이 없습니다.</p>
+          ) : (
+            <div
+              className="flex h-28 items-end justify-start gap-2 sm:gap-3"
+              role="img"
+              aria-label="월별 전체 폐기율 막대 그래프"
+            >
+              {monthlyRowsForChart.map((m) => {
+                const pct = m.overallDiscardRatePct!;
+                const hPct = Math.min(100, (pct / monthlyChartMaxPct) * 100);
+                const barTone =
+                  pct >= WASTE_DANGER_PCT
                     ? "bg-red-500/55"
                     : pct >= WASTE_WARN_PCT
                       ? "bg-amber-500/45"
                       : "bg-cyan-600/40";
-              return (
-                <div key={m.month} className="flex min-w-0 flex-1 flex-col items-center gap-1">
-                  <div className="flex h-24 w-full items-end justify-center">
-                    <div
-                      className={`w-full max-w-[2rem] rounded-t-sm transition-[height] duration-300 ${barTone}`}
-                      style={{ height: has ? `${Math.max(hPct, 6)}%` : "4px" }}
-                      title={has ? `${m.month}월 ${pct.toFixed(2)}%` : `${m.month}월 데이터 없음`}
-                    />
+                return (
+                  <div
+                    key={m.month}
+                    className="group/bar flex min-w-[2.25rem] flex-col items-center gap-1"
+                  >
+                    <div className="relative flex h-24 w-full min-w-[1.75rem] max-w-[2.5rem] flex-col items-center justify-end">
+                      <div
+                        className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 -translate-x-1/2 rounded-md border border-slate-600/55 bg-slate-900/95 px-2 py-1.5 text-center opacity-0 shadow-lg ring-1 ring-black/20 transition-opacity duration-150 group-hover/bar:opacity-100"
+                        role="tooltip"
+                      >
+                        <div className="text-[11px] font-medium text-slate-200">{m.month}월</div>
+                        <div className="mt-0.5 text-xs tabular-nums text-cyan-200/95">전체 {pct.toFixed(2)}%</div>
+                        <div className="mt-1 space-y-0.5 border-t border-slate-700/50 pt-1 text-[10px] tabular-nums text-slate-500">
+                          <div>도우 {m.doughDiscardRatePct != null ? `${m.doughDiscardRatePct.toFixed(2)}%` : "—"}</div>
+                          <div>파베 {m.parbakeDiscardRatePct != null ? `${m.parbakeDiscardRatePct.toFixed(2)}%` : "—"}</div>
+                        </div>
+                      </div>
+                      <div
+                        className={`w-full max-w-[2.25rem] cursor-default rounded-t-sm transition-[height] duration-300 ${barTone}`}
+                        style={{ height: `${Math.max(hPct, 8)}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] tabular-nums text-slate-500">{m.month}월</span>
                   </div>
-                  <span className="text-[10px] tabular-nums text-slate-500">{m.month}</span>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className="overflow-x-auto rounded-lg border border-slate-700/40">
@@ -353,38 +423,45 @@ export default function ExecutiveWasteDetailPage() {
               </tr>
             </thead>
             <tbody className="text-slate-400">
-              {monthlyRows.map((row) => {
-                const empty = row.dayCount === 0;
-                const dim = empty || row.sumDoughMix === 0;
-                return (
-                  <tr key={row.month} className="border-b border-slate-700/20">
-                    <td className={`px-4 py-2.5 font-medium ${dim ? "text-slate-600" : "text-slate-400"}`}>
-                      {row.month}월
-                    </td>
-                    <td
-                      className={`px-4 py-2.5 text-right tabular-nums ${dim ? "text-slate-600" : "text-slate-400"}`}
-                    >
-                      {empty ? "—" : row.sumDoughMix.toLocaleString("ko-KR")}
-                    </td>
-                    <td
-                      className={`px-4 py-2.5 text-right tabular-nums ${dim ? "text-slate-600" : "text-slate-400"}`}
-                    >
-                      {empty ? "—" : row.sumSameDayParbakeProduction.toLocaleString("ko-KR")}
-                    </td>
-                    <td className={`px-4 py-2.5 text-right tabular-nums ${rateCellClass(row.doughDiscardRatePct, dim)}`}>
-                      {pct2(row.doughDiscardRatePct)}
-                    </td>
-                    <td className={`px-4 py-2.5 text-right tabular-nums ${rateCellClass(row.parbakeDiscardRatePct, dim)}`}>
-                      {pct2(row.parbakeDiscardRatePct)}
-                    </td>
-                    <td
-                      className={`px-4 py-2.5 text-right tabular-nums text-[15px] font-semibold ${overallColClass(row.overallDiscardRatePct, dim)}`}
-                    >
-                      {pct2(row.overallDiscardRatePct)}
-                    </td>
-                  </tr>
-                );
-              })}
+              {monthlyRowsWithData.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                    해당 연도에 월별 요약 데이터가 없습니다.
+                  </td>
+                </tr>
+              ) : (
+                monthlyRowsWithData.map((row) => {
+                  const dim = row.sumDoughMix === 0;
+                  return (
+                    <tr key={row.month} className="border-b border-slate-700/20">
+                      <td className={`px-4 py-2.5 font-medium ${dim ? "text-slate-600" : "text-slate-400"}`}>
+                        {row.month}월
+                      </td>
+                      <td
+                        className={`px-4 py-2.5 text-right tabular-nums ${dim ? "text-slate-600" : "text-slate-400"}`}
+                      >
+                        {row.sumDoughMix.toLocaleString("ko-KR")}
+                      </td>
+                      <td
+                        className={`px-4 py-2.5 text-right tabular-nums ${dim ? "text-slate-600" : "text-slate-400"}`}
+                      >
+                        {row.sumSameDayParbakeProduction.toLocaleString("ko-KR")}
+                      </td>
+                      <td className={`px-4 py-2.5 text-right tabular-nums ${rateCellClass(row.doughDiscardRatePct, dim)}`}>
+                        {pct2(row.doughDiscardRatePct)}
+                      </td>
+                      <td className={`px-4 py-2.5 text-right tabular-nums ${rateCellClass(row.parbakeDiscardRatePct, dim)}`}>
+                        {pct2(row.parbakeDiscardRatePct)}
+                      </td>
+                      <td
+                        className={`px-4 py-2.5 text-right tabular-nums text-[15px] font-semibold ${overallColClass(row.overallDiscardRatePct, dim)}`}
+                      >
+                        {pct2(row.overallDiscardRatePct)}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -392,77 +469,112 @@ export default function ExecutiveWasteDetailPage() {
 
       <div className="mb-2">
         <h2 className="text-base font-semibold text-slate-200">일별 상세</h2>
-        <p className="mt-1 text-xs text-slate-500">생산일별 반죽·폐기·파베 생산 및 일별 비율입니다.</p>
+        <p className="mt-1 text-xs text-slate-500">
+          {year}년 기준, 반죽·폐기·파베 생산 중 하나라도 있는 날만 표시합니다. 월을 누르면 해당 월 일자를 펼칩니다.
+        </p>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-slate-700/40">
-        <table className="w-full text-sm text-left">
-          <thead>
-            <tr className="border-b border-slate-700/30 bg-slate-800/50 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              <th rowSpan={2} className="align-bottom px-4 py-3 font-medium">
-                일자
-              </th>
-              <th colSpan={3} className="border-l border-slate-700/25 px-4 py-2 text-center font-medium text-slate-500">
-                도우
-              </th>
-              <th colSpan={3} className="border-l border-slate-700/25 px-4 py-2 text-center font-medium text-slate-500">
-                파베이크
-              </th>
-              <th rowSpan={2} className="border-l border-slate-700/25 px-4 py-3 text-right align-bottom font-medium">
-                전체%
-              </th>
-            </tr>
-            <tr className="border-b border-slate-700/30 bg-slate-800/40 text-[10px] uppercase tracking-wide text-slate-600">
-              <th className="border-l border-slate-700/25 px-4 py-2.5 text-right font-normal">반죽량</th>
-              <th className="px-4 py-2.5 text-right font-normal">도우폐기</th>
-              <th className="px-4 py-2.5 text-right font-normal">도우%</th>
-              <th className="border-l border-slate-700/25 px-4 py-2.5 text-right font-normal">파베생산</th>
-              <th className="px-4 py-2.5 text-right font-normal">파베폐기</th>
-              <th className="px-4 py-2.5 text-right font-normal">파베%</th>
-            </tr>
-          </thead>
-          <tbody className="text-slate-400">
-            {tableRows.length === 0 && (
-              <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-slate-500">
-                  데이터가 없습니다.
-                </td>
-              </tr>
-            )}
-            {tableRows.map((d: WasteDetailMockDayRow) => {
-              const dim = d.doughMixQty === 0;
-              const doughP = d.doughDiscardRatePct;
-              const parP = d.parbakeDiscardRatePct;
-              const allP = d.overallDiscardRatePct;
-              const rowBorder = "border-b border-slate-700/20";
-              return (
-                <tr key={d.date} className={rowBorder}>
-                  <td className={`px-4 py-3 font-mono text-xs ${dim ? "text-slate-600" : "text-slate-500"}`}>
-                    {d.date}
-                  </td>
-                  <td className={`border-l border-slate-700/20 px-4 py-3 text-right tabular-nums ${dim ? "text-slate-600" : "text-slate-400"}`}>
-                    {d.doughMixQty.toLocaleString("ko-KR")}
-                  </td>
-                  <td className={`px-4 py-3 text-right tabular-nums ${dim ? "text-slate-600" : "text-slate-400"}`}>
-                    {d.doughWasteQty.toLocaleString("ko-KR")}
-                  </td>
-                  <td className={`px-4 py-3 text-right tabular-nums ${rateCellClass(doughP, dim)}`}>{pct2(doughP)}</td>
-                  <td className={`border-l border-slate-700/20 px-4 py-3 text-right tabular-nums ${dim ? "text-slate-600" : "text-slate-400"}`}>
-                    {d.sameDayParbakeProductionQty.toLocaleString("ko-KR")}
-                  </td>
-                  <td className={`px-4 py-3 text-right tabular-nums ${dim ? "text-slate-600" : "text-slate-400"}`}>
-                    {d.parbakeWasteQty.toLocaleString("ko-KR")}
-                  </td>
-                  <td className={`px-4 py-3 text-right tabular-nums ${rateCellClass(parP, dim)}`}>{pct2(parP)}</td>
-                  <td className={`border-l border-slate-700/20 px-4 py-3 text-right tabular-nums ${overallColClass(allP, dim)}`}>
-                    {pct2(allP)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      {dailyGroupsByMonth.length === 0 ? (
+        <div className="rounded-lg border border-slate-700/40 px-4 py-10 text-center text-sm text-slate-500">
+          표시할 일별 데이터가 없습니다.
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-slate-700/40">
+          {dailyGroupsByMonth.map(({ month, dayRows }) => (
+            <details
+              key={month}
+              className="open:[&>summary_svg]:rotate-90 border-b border-slate-700/25 last:border-b-0"
+            >
+              <summary className="flex cursor-pointer list-none items-center gap-2 bg-slate-800/30 px-4 py-3 text-sm text-slate-200 transition-colors hover:bg-slate-800/50 [&::-webkit-details-marker]:hidden">
+                <ChevronRight className="h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200" aria-hidden />
+                <span className="font-medium">
+                  {year}년 {month}월
+                </span>
+                <span className="text-slate-500">· {dayRows.length}일</span>
+              </summary>
+              <div className="overflow-x-auto border-t border-slate-700/30 bg-slate-900/20">
+                <table className="w-full text-sm text-left">
+                  <thead>
+                    <tr className="border-b border-slate-700/30 bg-slate-800/50 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                      <th rowSpan={2} className="align-bottom px-4 py-3 font-medium">
+                        일자
+                      </th>
+                      <th
+                        colSpan={3}
+                        className="border-l border-slate-700/25 px-4 py-2 text-center font-medium text-slate-500"
+                      >
+                        도우
+                      </th>
+                      <th
+                        colSpan={3}
+                        className="border-l border-slate-700/25 px-4 py-2 text-center font-medium text-slate-500"
+                      >
+                        파베이크
+                      </th>
+                      <th
+                        rowSpan={2}
+                        className="border-l border-slate-700/25 px-4 py-3 text-right align-bottom font-medium"
+                      >
+                        전체%
+                      </th>
+                    </tr>
+                    <tr className="border-b border-slate-700/30 bg-slate-800/40 text-[10px] uppercase tracking-wide text-slate-600">
+                      <th className="border-l border-slate-700/25 px-4 py-2.5 text-right font-normal">반죽량</th>
+                      <th className="px-4 py-2.5 text-right font-normal">도우폐기</th>
+                      <th className="px-4 py-2.5 text-right font-normal">도우%</th>
+                      <th className="border-l border-slate-700/25 px-4 py-2.5 text-right font-normal">파베생산</th>
+                      <th className="px-4 py-2.5 text-right font-normal">파베폐기</th>
+                      <th className="px-4 py-2.5 text-right font-normal">파베%</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-slate-400">
+                    {dayRows.map((d: WasteDetailMockDayRow) => {
+                      const dim = d.doughMixQty === 0;
+                      const doughP = d.doughDiscardRatePct;
+                      const parP = d.parbakeDiscardRatePct;
+                      const allP = d.overallDiscardRatePct;
+                      return (
+                        <tr key={d.date} className="border-b border-slate-700/20">
+                          <td className={`px-4 py-3 font-mono text-xs ${dim ? "text-slate-600" : "text-slate-500"}`}>
+                            {d.date}
+                          </td>
+                          <td
+                            className={`border-l border-slate-700/20 px-4 py-3 text-right tabular-nums ${dim ? "text-slate-600" : "text-slate-400"}`}
+                          >
+                            {d.doughMixQty.toLocaleString("ko-KR")}
+                          </td>
+                          <td className={`px-4 py-3 text-right tabular-nums ${dim ? "text-slate-600" : "text-slate-400"}`}>
+                            {d.doughWasteQty.toLocaleString("ko-KR")}
+                          </td>
+                          <td className={`px-4 py-3 text-right tabular-nums ${rateCellClass(doughP, dim)}`}>
+                            {pct2(doughP)}
+                          </td>
+                          <td
+                            className={`border-l border-slate-700/20 px-4 py-3 text-right tabular-nums ${dim ? "text-slate-600" : "text-slate-400"}`}
+                          >
+                            {d.sameDayParbakeProductionQty.toLocaleString("ko-KR")}
+                          </td>
+                          <td className={`px-4 py-3 text-right tabular-nums ${dim ? "text-slate-600" : "text-slate-400"}`}>
+                            {d.parbakeWasteQty.toLocaleString("ko-KR")}
+                          </td>
+                          <td className={`px-4 py-3 text-right tabular-nums ${rateCellClass(parP, dim)}`}>
+                            {pct2(parP)}
+                          </td>
+                          <td
+                            className={`border-l border-slate-700/20 px-4 py-3 text-right tabular-nums ${overallColClass(allP, dim)}`}
+                          >
+                            {pct2(allP)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
