@@ -11,6 +11,22 @@ const LOGIN_PATH = "/login";
 const CHANGE_PASSWORD_PATH = "/login/change-password";
 const LOGOUT_PATH = "/logout";
 
+/** 접속 로그 수집 대상 경로만 기록 (잡음 경로 제외) */
+function shouldTrackAccessPath(pathname: string): boolean {
+  if (pathname === "/" || pathname === "/executive" || pathname === "/daily" || pathname === "/production") {
+    return true;
+  }
+  if (pathname === "/materials" || pathname === "/inventory/ecount" || pathname === "/manage") {
+    return true;
+  }
+  if (pathname.startsWith("/executive/")) return true;
+  if (pathname.startsWith("/daily/")) return true;
+  if (pathname.startsWith("/production/")) return true;
+  if (pathname.startsWith("/materials/")) return true;
+  if (pathname.startsWith("/admin/equipment")) return true;
+  return false;
+}
+
 /** 하랑(200)이 접근하면 안 되는 100용 업무 경로 (실제 app 라우트 기준) */
 function isHarangBlockedPath(pathname: string): boolean {
   return (
@@ -80,6 +96,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loading || !user || !profile) return;
     if (pathname === LOGIN_PATH || pathname === CHANGE_PASSWORD_PATH || pathname === LOGOUT_PATH) return;
+    if (pathname === "/admin/logs" || pathname.startsWith("/admin/logs/")) return;
+    if (!shouldTrackAccessPath(pathname)) return;
     const key = `access-log:${user.id}:${pathname}`;
     const now = Date.now();
     const prevRaw = sessionStorage.getItem(key);
