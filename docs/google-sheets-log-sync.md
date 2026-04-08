@@ -186,3 +186,4 @@ function safeStringify(v) {
 - 감사 로그의 `before_data`, `after_data`, `meta`는 JSON 문자열로 저장됩니다.
 - 접속 로그는 잡음 감소를 위해 중요 경로만 수집하며, `/admin/logs` 자체 조회 경로는 제외됩니다.
 - 동일 사용자·동일 경로는 클라이언트 5분/서버 15분 중복 방지 정책이 적용됩니다.
+- 감사 로그는 DB 트리거로 적재되어 데일리 일지, 원료사용량(`usage_calculations`), 반죽사용량(`dough_logs`), 생산기록(`production_logs`)의 작성/수정/삭제를 자동 수집합니다.
