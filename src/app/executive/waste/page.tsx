@@ -376,12 +376,13 @@ export default function ExecutiveWasteDetailPage() {
           {monthlyRowsForChart.length === 0 ? (
             <p className="py-6 text-center text-xs text-slate-500">막대로 표시할 월별 전체 폐기율이 없습니다.</p>
           ) : (
-            <div
-              className="flex h-28 items-end justify-start gap-2 sm:gap-3"
-              role="img"
-              aria-label="월별 전체 폐기율 막대 그래프"
-            >
-              {monthlyRowsForChart.map((m) => {
+            <div className="max-w-full overflow-x-auto">
+              <div
+                className="flex h-28 min-w-[26rem] items-end justify-start gap-2 sm:min-w-0 sm:justify-between sm:gap-3"
+                role="img"
+                aria-label="월별 전체 폐기율 막대 그래프"
+              >
+                {monthlyRowsForChart.map((m) => {
                 const pct = m.overallDiscardRatePct!;
                 const hPct = Math.min(100, (pct / monthlyChartMaxPct) * 100);
                 const selected = activeChartMonth === m.month;
@@ -392,10 +393,7 @@ export default function ExecutiveWasteDetailPage() {
                       ? "bg-amber-500/45"
                       : "bg-cyan-600/40";
                 return (
-                  <div
-                    key={m.month}
-                    className="group/bar flex min-w-[2.25rem] flex-col items-center gap-1"
-                  >
+                  <div key={m.month} className="group/bar flex min-w-[2rem] flex-1 flex-col items-center gap-1">
                     <div className="relative flex h-24 w-full min-w-[1.75rem] max-w-[2.5rem] flex-col items-center justify-end">
                       <div
                         className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 -translate-x-1/2 rounded-md border border-slate-600/55 bg-slate-900/95 px-2 py-1.5 text-center opacity-0 shadow-lg ring-1 ring-black/20 transition-opacity duration-150 group-hover/bar:opacity-100"
@@ -421,7 +419,8 @@ export default function ExecutiveWasteDetailPage() {
                     <span className="text-[10px] tabular-nums text-slate-500">{m.month}월</span>
                   </div>
                 );
-              })}
+                })}
+              </div>
             </div>
           )}
           {activeChartMonth != null && (
