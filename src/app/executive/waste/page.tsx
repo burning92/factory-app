@@ -118,6 +118,7 @@ export default function ExecutiveWasteDetailPage() {
   const [manualSeries, setManualSeries] = useState<ManualWasteImportSeries>(emptyManual());
   const [prevManualSeries, setPrevManualSeries] = useState<ManualWasteImportSeries>(emptyManual());
   const [showCriteria, setShowCriteria] = useState(false);
+  const [activeChartMonth, setActiveChartMonth] = useState<number | null>(null);
 
   const { rows: tableRows, filledManualDates } = useMemo(() => {
     return mergeBundleDaysWithManualImportsForTable(bundle?.days ?? [], manualSeries);
@@ -155,6 +156,15 @@ export default function ExecutiveWasteDetailPage() {
     if (rates.length === 0) return 4;
     return Math.max(4, ...rates);
   }, [monthlyRowsForChart]);
+
+  useEffect(() => {
+    if (monthlyRowsForChart.length === 0) {
+      setActiveChartMonth(null);
+      return;
+    }
+    const exists = monthlyRowsForChart.some((r) => r.month === activeChartMonth);
+    if (!exists) setActiveChartMonth(monthlyRowsForChart[monthlyRowsForChart.length - 1]!.month);
+  }, [monthlyRowsForChart, activeChartMonth]);
 
   const dailyRowsForYear = useMemo(() => {
     return tableRows.filter((r) => r.date.startsWith(`${year}-`)).filter(wasteDayRowHasData);
@@ -374,6 +384,7 @@ export default function ExecutiveWasteDetailPage() {
               {monthlyRowsForChart.map((m) => {
                 const pct = m.overallDiscardRatePct!;
                 const hPct = Math.min(100, (pct / monthlyChartMaxPct) * 100);
+                const selected = activeChartMonth === m.month;
                 const barTone =
                   pct >= WASTE_DANGER_PCT
                     ? "bg-red-500/55"
@@ -397,15 +408,35 @@ export default function ExecutiveWasteDetailPage() {
                           <div>파베 {m.parbakeDiscardRatePct != null ? `${m.parbakeDiscardRatePct.toFixed(2)}%` : "—"}</div>
                         </div>
                       </div>
-                      <div
-                        className={`w-full max-w-[2.25rem] cursor-default rounded-t-sm transition-[height] duration-300 ${barTone}`}
+                      <button
+                        type="button"
+                        onClick={() => setActiveChartMonth(m.month)}
+                        className={`w-full max-w-[2.25rem] rounded-t-sm transition-[height] duration-300 ${barTone} ${
+                          selected ? "ring-2 ring-cyan-300/70 ring-offset-1 ring-offset-slate-900/60" : ""
+                        }`}
                         style={{ height: `${Math.max(hPct, 8)}%` }}
+                        aria-label={`${m.month}월 전체 폐기율 ${pct.toFixed(2)}%`}
                       />
                     </div>
                     <span className="text-[10px] tabular-nums text-slate-500">{m.month}월</span>
                   </div>
                 );
               })}
+            </div>
+          )}
+          {activeChartMonth != null && (
+            <div className="mt-2 rounded-md border border-slate-700/45 bg-slate-900/45 px-2.5 py-2 text-[11px] tabular-nums text-slate-400 sm:hidden">
+              {(() => {
+                const m = monthlyRowsForChart.find((row) => row.month === activeChartMonth);
+                if (!m || m.overallDiscardRatePct == null) return null;
+                return (
+                  <p>
+                    {m.month}월 · 전체 {m.overallDiscardRatePct.toFixed(2)}% · 도우{" "}
+                    {m.doughDiscardRatePct != null ? `${m.doughDiscardRatePct.toFixed(2)}%` : "—"} · 파베{" "}
+                    {m.parbakeDiscardRatePct != null ? `${m.parbakeDiscardRatePct.toFixed(2)}%` : "—"}
+                  </p>
+                );
+              })()}
             </div>
           )}
         </div>

@@ -206,24 +206,24 @@ export default function ExecutiveEquipmentDetailPage() {
             최근 7일 · 승인 일지 부적합(X)과, 설비이력기록부(마스터 대시보드 그룹·개별 설비 ID 기준)
           </p>
         </div>
-        <div className="flex flex-wrap gap-2 justify-end">
+        <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:justify-end sm:overflow-visible sm:px-0 sm:pb-0">
           <Link
             href="/daily/equipment-history"
-            className="shrink-0 rounded-lg border border-cyan-500/40 bg-cyan-950/25 px-3 py-2 text-sm font-medium text-cyan-200 hover:bg-cyan-950/40"
+            className="shrink-0 whitespace-nowrap rounded-lg border border-cyan-500/40 bg-cyan-950/25 px-3 py-2 text-sm font-medium text-cyan-200 hover:bg-cyan-950/40"
           >
             설비이력기록부
           </Link>
           {canRegisterIncident && (
             <Link
               href="/daily/manufacturing-equipment/incident/new"
-              className="shrink-0 rounded-lg border border-amber-600/40 bg-amber-950/30 px-3 py-2 text-sm font-medium text-amber-200 hover:bg-amber-950/50"
+              className="shrink-0 whitespace-nowrap rounded-lg border border-amber-600/40 bg-amber-950/30 px-3 py-2 text-sm font-medium text-amber-200 hover:bg-amber-950/50"
             >
               설비 이상 등록
             </Link>
           )}
           <Link
             href="/daily/manufacturing-equipment/incidents"
-            className="shrink-0 rounded-lg border border-slate-600/70 bg-slate-900/50 px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800/80"
+            className="shrink-0 whitespace-nowrap rounded-lg border border-slate-600/70 bg-slate-900/50 px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800/80"
           >
             설비 이상 이력
           </Link>

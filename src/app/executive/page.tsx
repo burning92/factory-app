@@ -110,14 +110,14 @@ const PLAN_ACTUAL_SPARKLINE_FUTURE_PLACEHOLDER_PCT = 12;
 const dashCard =
   "overflow-visible rounded-xl border border-slate-700/60 bg-slate-800/50 p-5 md:p-6 lg:p-7 flex flex-col min-h-0 shadow-sm shadow-black/10";
 /** 카드 제목 (18~20px) */
-const dashTitle = "text-lg md:text-xl font-bold text-white tracking-tight";
+const dashTitle = "text-base sm:text-lg md:text-xl font-bold text-white tracking-tight";
 /** 라벨·보조 제목 (13~14px) */
 const dashLabel = "text-sm font-semibold tracking-wide text-slate-300";
 /** 대장 수치 (44~48px) */
 const dashHero =
-  "text-[2.75rem] md:text-[3rem] font-extrabold tracking-tight tabular-nums leading-[1.05]";
+  "text-[2.1rem] sm:text-[2.5rem] md:text-[3rem] font-extrabold tracking-tight tabular-nums leading-[1.05]";
 /** 부대장 수치 */
-const dashSubHero = "text-[1.75rem] md:text-[2rem] font-bold tabular-nums leading-tight";
+const dashSubHero = "text-[1.45rem] sm:text-[1.65rem] md:text-[2rem] font-bold tabular-nums leading-tight";
 /** 서브 지표 숫자 */
 const dashSubMetric = "text-[15px] font-semibold tabular-nums";
 /** 본문 라인(항목명 등) */
@@ -588,7 +588,7 @@ export default function ExecutiveDashboardPage() {
                 <span className="mt-2 block text-slate-300">상세 페이지에서 일자별 기준을 확인할 수 있습니다.</span>
               </ExecutivePortalTooltip>
             </div>
-            <div className="flex flex-col items-end gap-1 shrink-0 text-right">
+            <div className="flex min-w-0 flex-col items-start gap-1 text-left sm:items-end sm:text-right">
               <Link href="/executive/production" className={dashCardDetailLink}>
                 상세보기 →
               </Link>
@@ -1076,28 +1076,28 @@ export default function ExecutiveDashboardPage() {
                 최근 7일 설비 점검 결과입니다. 부적합 항목이 없으면 ‘점검 이상 무’로 표시됩니다. 아래 주요 설비 이력은 마스터의 대시보드 그룹·운영 상태·노출 설정을 기준으로 한 개별 설비(설비이력기록부)입니다.
               </ExecutivePortalTooltip>
             </div>
-            <div className="flex flex-wrap items-center gap-2 xl:justify-end shrink-0">
+            <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 xl:mx-0 xl:flex-wrap xl:justify-end xl:overflow-visible xl:px-0 xl:pb-0 shrink-0">
               {canRegisterIncident && (
                 <Link
                   href="/daily/manufacturing-equipment/incident/new"
-                  className={`${dashHeaderActionBtn} border-amber-600/35 bg-amber-950/20 text-amber-200/95 hover:bg-amber-950/35`}
+                  className={`${dashHeaderActionBtn} whitespace-nowrap border-amber-600/35 bg-amber-950/20 text-amber-200/95 hover:bg-amber-950/35`}
                 >
                   설비 이상 등록
                 </Link>
               )}
               <Link
                 href="/daily/manufacturing-equipment/incidents"
-                className={`${dashHeaderActionBtn} border-slate-600/70 bg-slate-950/40 text-slate-300 hover:bg-slate-800/80`}
+                className={`${dashHeaderActionBtn} whitespace-nowrap border-slate-600/70 bg-slate-950/40 text-slate-300 hover:bg-slate-800/80`}
               >
                 설비 이상 이력
               </Link>
               <Link
                 href="/daily/equipment-history"
-                className={`${dashHeaderActionBtn} border-cyan-600/35 bg-cyan-950/20 text-cyan-200/95 hover:bg-cyan-950/35`}
+                className={`${dashHeaderActionBtn} whitespace-nowrap border-cyan-600/35 bg-cyan-950/20 text-cyan-200/95 hover:bg-cyan-950/35`}
               >
                 설비이력기록부
               </Link>
-              <Link href="/executive/equipment" className={dashCardDetailLink}>
+              <Link href="/executive/equipment" className={`${dashCardDetailLink} whitespace-nowrap`}>
                 상세보기 →
               </Link>
             </div>
