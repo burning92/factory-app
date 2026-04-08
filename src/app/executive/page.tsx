@@ -31,7 +31,6 @@ import {
   loadExecutiveEquipmentSlotSnapshots,
   type ExecutiveEquipmentUnitSnapshot,
 } from "@/features/equipment/executiveEquipmentHistory";
-import { canRegisterEquipmentIncident } from "@/features/daily/equipmentIncidentPermissions";
 import {
   loadManpowerUtilizationMonthSummary,
   DEFAULT_DASHBOARD_BASELINE_HEADCOUNT,
@@ -131,9 +130,6 @@ const dashAuxLink = "text-sm font-medium text-slate-400 transition-colors hover:
 /** 카드 헤더 우측 CTA */
 const dashCardDetailLink =
   "shrink-0 inline-flex items-center rounded-md px-2 py-1.5 text-sm font-semibold text-cyan-400 transition-colors hover:text-cyan-300";
-/** 헤더·푸터 액션 버튼 (제조설비 등) */
-const dashHeaderActionBtn =
-  "inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium transition-colors";
 
 function PlanActualYtdAchievementMiniBars({
   year,
@@ -316,7 +312,6 @@ export default function ExecutiveDashboardPage() {
   const { profile, viewOrganizationCode, loading: authLoading } = useAuth();
   const orgCode = viewOrganizationCode ?? "100";
   const canView = !!profile;
-  const canRegisterIncident = canRegisterEquipmentIncident(profile?.role);
 
   const materials = useMasterStore((s) => s.materials);
   const bomList = useMasterStore((s) => s.bomList);
@@ -1076,27 +1071,7 @@ export default function ExecutiveDashboardPage() {
                 최근 7일 설비 점검 결과입니다. 부적합 항목이 없으면 ‘점검 이상 무’로 표시됩니다. 아래 주요 설비 이력은 마스터의 대시보드 그룹·운영 상태·노출 설정을 기준으로 한 개별 설비(설비이력기록부)입니다.
               </ExecutivePortalTooltip>
             </div>
-            <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 xl:mx-0 xl:flex-wrap xl:justify-end xl:overflow-visible xl:px-0 xl:pb-0 shrink-0">
-              {canRegisterIncident && (
-                <Link
-                  href="/daily/manufacturing-equipment/incident/new"
-                  className={`${dashHeaderActionBtn} whitespace-nowrap border-amber-600/35 bg-amber-950/20 text-amber-200/95 hover:bg-amber-950/35`}
-                >
-                  설비 이상 등록
-                </Link>
-              )}
-              <Link
-                href="/daily/manufacturing-equipment/incidents"
-                className={`${dashHeaderActionBtn} whitespace-nowrap border-slate-600/70 bg-slate-950/40 text-slate-300 hover:bg-slate-800/80`}
-              >
-                설비 이상 이력
-              </Link>
-              <Link
-                href="/daily/equipment-history"
-                className={`${dashHeaderActionBtn} whitespace-nowrap border-cyan-600/35 bg-cyan-950/20 text-cyan-200/95 hover:bg-cyan-950/35`}
-              >
-                설비이력기록부
-              </Link>
+            <div className="flex shrink-0 justify-end">
               <Link href="/executive/equipment" className={`${dashCardDetailLink} whitespace-nowrap`}>
                 상세보기 →
               </Link>
