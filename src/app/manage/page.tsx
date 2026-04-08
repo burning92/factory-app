@@ -249,6 +249,10 @@ export default function ManagePage() {
         <Link href="/production/admin" className="text-slate-400 hover:text-slate-300">
           기준정보(원료·BOM) 관리
         </Link>
+        <span className="text-slate-600 mx-2">·</span>
+        <Link href="/admin/logs" className="text-slate-400 hover:text-slate-300">
+          로그 조회
+        </Link>
       </p>
       {error && (
         <p className="text-red-400 text-sm" role="alert">

@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabase";
 import Header from "./Header";
 import MobileTabBar from "./MobileTabBar";
 
@@ -75,6 +76,35 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, [loading, profile, pathname, router]);
 
+  /** 접속(페이지 진입) 로그: 자동로그인 사용자 포함, 동일 경로는 짧은 구간 중복 전송 방지 */
+  useEffect(() => {
+    if (loading || !user || !profile) return;
+    if (pathname === LOGIN_PATH || pathname === CHANGE_PASSWORD_PATH || pathname === LOGOUT_PATH) return;
+    const key = `access-log:${user.id}:${pathname}`;
+    const now = Date.now();
+    const prevRaw = sessionStorage.getItem(key);
+    const prev = prevRaw ? Number(prevRaw) : 0;
+    if (prev && Number.isFinite(prev) && now - prev < 5 * 60 * 1000) return;
+    sessionStorage.setItem(key, String(now));
+
+    (async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) return;
+      await fetch("/api/logs/access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+          page_path: pathname,
+          event: "page_view",
+        }),
+      });
+    })().catch(() => {});
+  }, [loading, user, profile, pathname]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-space-900">
@@ -112,6 +142,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
   const isAdminEquipmentPath = pathname === "/admin/equipment" || pathname.startsWith("/admin/equipment/");
   if (isAdminEquipmentPath && profile?.role !== "admin") {
+    router.replace("/");
+    return null;
+  }
+  const isAdminLogsPath = pathname === "/admin/logs" || pathname.startsWith("/admin/logs/");
+  if (isAdminLogsPath && profile?.role !== "admin") {
     router.replace("/");
     return null;
   }

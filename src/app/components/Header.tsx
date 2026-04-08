@@ -61,6 +61,7 @@ const DESKTOP_DROPDOWN_MANAGEMENT: DropdownItem[] = [
   { href: "/manage", label: "사용자관리" },
   { href: "/admin/equipment", label: "제조설비등록" },
   { href: "/admin/equipment-options", label: "설비옵션관리" },
+  { href: "/admin/logs", label: "로그조회" },
 ];
 
 type DropdownKey = "production" | "materials" | "daily" | "management";
