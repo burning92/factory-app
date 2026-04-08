@@ -10,6 +10,7 @@ import { loadProductionBundle } from "@/features/dashboard/loadProductionBundle"
 import {
   mergeBundleDaysWithManualImportsForTable,
   rollupWasteMockFromDayRows,
+  rollupWasteMockByMonthFromDayRows,
   computeWasteYoySamePeriod,
   wasteYoYCompareBadgeClass,
   wasteYoYCompareStatusFromDelta,
@@ -98,6 +99,19 @@ export default function ExecutiveWasteDetailPage() {
     if (tableRows.length === 0) return null;
     return rollupWasteMockFromDayRows(tableRows);
   }, [tableRows]);
+
+  const monthlyRows = useMemo(
+    () => rollupWasteMockByMonthFromDayRows(tableRows, year),
+    [tableRows, year]
+  );
+
+  const monthlyChartMaxPct = useMemo(() => {
+    const rates = monthlyRows
+      .map((r) => r.overallDiscardRatePct)
+      .filter((x): x is number => x != null && Number.isFinite(x));
+    if (rates.length === 0) return 4;
+    return Math.max(4, ...rates);
+  }, [monthlyRows]);
 
   const yoy = useMemo(() => computeWasteYoySamePeriod(tableRows, prevTableRows, year), [tableRows, prevTableRows, year]);
   const yoyCompareUi = useMemo(() => {
@@ -239,7 +253,9 @@ export default function ExecutiveWasteDetailPage() {
       {err && <p className="text-amber-200/90 text-sm mb-4">{err}</p>}
 
       {w && (
-        <section className="rounded-lg border border-slate-700/45 bg-slate-800/35 p-5 mb-6">
+        <section className="mb-6">
+          <h2 className="mb-3 text-base font-semibold text-slate-200">연간 누적 요약</h2>
+          <div className="rounded-lg border border-slate-700/45 bg-slate-800/35 p-5">
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-3 sm:gap-6">
             <div className="sm:col-span-3 rounded-md border border-slate-700/30 bg-slate-900/25 px-4 py-3">
               <dt className="text-xs font-medium text-slate-500">전체 (도우~파베)</dt>
@@ -280,8 +296,104 @@ export default function ExecutiveWasteDetailPage() {
               </p>
             </div>
           </div>
+          </div>
         </section>
       )}
+
+      <section className="mb-8">
+        <div className="mb-3">
+          <h2 className="text-base font-semibold text-slate-200">월별 폐기율 요약</h2>
+          <p className="mt-1 text-xs leading-relaxed text-slate-500">
+            월 단위로 반죽·파베 생산·폐기를 합산한 뒤, 연간 요약과 같은 가중 방식(Σ폐기 ÷ Σ분모)으로 계산했습니다. 아래
+            일별 표와 동일한 병합 데이터를 사용합니다.
+          </p>
+        </div>
+
+        <div className="mb-4 rounded-lg border border-slate-700/35 bg-slate-900/20 px-3 py-3">
+          <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-slate-600">월별 전체 폐기율 추이</p>
+          <div className="flex h-28 items-end justify-between gap-0.5 sm:gap-1" role="img" aria-label="월별 전체 폐기율 막대 그래프">
+            {monthlyRows.map((m) => {
+              const pct = m.overallDiscardRatePct;
+              const has = m.dayCount > 0 && pct != null && Number.isFinite(pct);
+              const hPct = has ? Math.min(100, (pct / monthlyChartMaxPct) * 100) : 0;
+              const barTone =
+                !has
+                  ? "bg-slate-700/25"
+                  : pct >= WASTE_DANGER_PCT
+                    ? "bg-red-500/55"
+                    : pct >= WASTE_WARN_PCT
+                      ? "bg-amber-500/45"
+                      : "bg-cyan-600/40";
+              return (
+                <div key={m.month} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+                  <div className="flex h-24 w-full items-end justify-center">
+                    <div
+                      className={`w-full max-w-[2rem] rounded-t-sm transition-[height] duration-300 ${barTone}`}
+                      style={{ height: has ? `${Math.max(hPct, 6)}%` : "4px" }}
+                      title={has ? `${m.month}월 ${pct.toFixed(2)}%` : `${m.month}월 데이터 없음`}
+                    />
+                  </div>
+                  <span className="text-[10px] tabular-nums text-slate-500">{m.month}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="overflow-x-auto rounded-lg border border-slate-700/40">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead>
+              <tr className="border-b border-slate-700/30 bg-slate-800/50 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                <th className="px-4 py-3 text-left font-medium text-slate-500">월</th>
+                <th className="px-4 py-3 text-right font-medium">반죽량 합계</th>
+                <th className="px-4 py-3 text-right font-medium">파베생산 합계</th>
+                <th className="px-4 py-3 text-right font-medium">도우 폐기율</th>
+                <th className="px-4 py-3 text-right font-medium">파베이크 폐기율</th>
+                <th className="px-4 py-3 text-right font-medium text-slate-300">전체 폐기율</th>
+              </tr>
+            </thead>
+            <tbody className="text-slate-400">
+              {monthlyRows.map((row) => {
+                const empty = row.dayCount === 0;
+                const dim = empty || row.sumDoughMix === 0;
+                return (
+                  <tr key={row.month} className="border-b border-slate-700/20">
+                    <td className={`px-4 py-2.5 font-medium ${dim ? "text-slate-600" : "text-slate-400"}`}>
+                      {row.month}월
+                    </td>
+                    <td
+                      className={`px-4 py-2.5 text-right tabular-nums ${dim ? "text-slate-600" : "text-slate-400"}`}
+                    >
+                      {empty ? "—" : row.sumDoughMix.toLocaleString("ko-KR")}
+                    </td>
+                    <td
+                      className={`px-4 py-2.5 text-right tabular-nums ${dim ? "text-slate-600" : "text-slate-400"}`}
+                    >
+                      {empty ? "—" : row.sumSameDayParbakeProduction.toLocaleString("ko-KR")}
+                    </td>
+                    <td className={`px-4 py-2.5 text-right tabular-nums ${rateCellClass(row.doughDiscardRatePct, dim)}`}>
+                      {pct2(row.doughDiscardRatePct)}
+                    </td>
+                    <td className={`px-4 py-2.5 text-right tabular-nums ${rateCellClass(row.parbakeDiscardRatePct, dim)}`}>
+                      {pct2(row.parbakeDiscardRatePct)}
+                    </td>
+                    <td
+                      className={`px-4 py-2.5 text-right tabular-nums text-[15px] font-semibold ${overallColClass(row.overallDiscardRatePct, dim)}`}
+                    >
+                      {pct2(row.overallDiscardRatePct)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div className="mb-2">
+        <h2 className="text-base font-semibold text-slate-200">일별 상세</h2>
+        <p className="mt-1 text-xs text-slate-500">생산일별 반죽·폐기·파베 생산 및 일별 비율입니다.</p>
+      </div>
 
       <div className="overflow-x-auto rounded-lg border border-slate-700/40">
         <table className="w-full text-sm text-left">

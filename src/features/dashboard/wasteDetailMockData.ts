@@ -408,6 +408,76 @@ export function rollupWasteMockFromDayRows(days: WasteDetailMockDayRow[]) {
 
 export type WasteRollupFromDayRows = ReturnType<typeof rollupWasteMockFromDayRows>;
 
+/** 선택 연도의 월별 가중 폐기율(일별 병합 행과 동일 합산·동일 식) */
+export type WasteMonthlyRollupRow = {
+  month: number;
+  sumDoughMix: number;
+  sumDoughWaste: number;
+  sumParbakeWaste: number;
+  sumSameDayParbakeProduction: number;
+  doughDiscardRatePct: number | null;
+  parbakeDiscardRatePct: number | null;
+  overallDiscardRatePct: number | null;
+  /** 해당 월에 포함된 일자 수 */
+  dayCount: number;
+};
+
+/**
+ * `mergeBundleDaysWithManualImportsForTable` 결과 `tableRows`를 연도로 필터한 뒤 월 단위로 합산.
+ * - 도우% = Σ도우폐기 / Σ반죽량
+ * - 파베% = Σ파베폐기 / Σ파베생산(당일 분모 합)
+ * - 전체% = Σ(도우폐기+파베폐기) / Σ반죽량
+ */
+export function rollupWasteMockByMonthFromDayRows(
+  rows: WasteDetailMockDayRow[],
+  year: number
+): WasteMonthlyRollupRow[] {
+  const prefix = `${year}-`;
+  const byMonth = new Map<number, WasteDetailMockDayRow[]>();
+  for (let m = 1; m <= 12; m++) byMonth.set(m, []);
+
+  for (const r of rows) {
+    if (!r.date.startsWith(prefix)) continue;
+    const parsed = /^(\d{4})-(\d{2})-\d{2}$/.exec(r.date);
+    if (!parsed) continue;
+    const monthNum = Number(parsed[2]);
+    if (monthNum < 1 || monthNum > 12) continue;
+    byMonth.get(monthNum)!.push(r);
+  }
+
+  const out: WasteMonthlyRollupRow[] = [];
+  for (let month = 1; month <= 12; month++) {
+    const monthRows = byMonth.get(month)!;
+    if (monthRows.length === 0) {
+      out.push({
+        month,
+        sumDoughMix: 0,
+        sumDoughWaste: 0,
+        sumParbakeWaste: 0,
+        sumSameDayParbakeProduction: 0,
+        doughDiscardRatePct: null,
+        parbakeDiscardRatePct: null,
+        overallDiscardRatePct: null,
+        dayCount: 0,
+      });
+      continue;
+    }
+    const roll = rollupWasteMockFromDayRows(monthRows);
+    out.push({
+      month,
+      sumDoughMix: roll.sumDoughMix,
+      sumDoughWaste: roll.sumDoughWaste,
+      sumParbakeWaste: roll.sumParbakeWaste,
+      sumSameDayParbakeProduction: roll.sumSameDayParbakeProduction,
+      doughDiscardRatePct: roll.doughDiscardRatePct,
+      parbakeDiscardRatePct: roll.parbakeDiscardRatePct,
+      overallDiscardRatePct: roll.overallDiscardRatePct,
+      dayCount: monthRows.length,
+    });
+  }
+  return out;
+}
+
 /** 전년 동일 월·일(윤년 등은 말일로 클램프) */
 export function toPrevYearCalendarDate(isoDate: string, prevYear: number): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate);
