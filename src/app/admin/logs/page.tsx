@@ -28,6 +28,11 @@ type AuditLogRow = {
   target_label: string | null;
 };
 
+type AuditDisplayRow = AuditLogRow & {
+  summary_count?: number;
+  is_summary?: boolean;
+};
+
 function formatDateTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
@@ -42,6 +47,113 @@ function formatDateTime(iso: string): string {
   });
 }
 
+function actionLabel(action: string): string {
+  switch (action) {
+    case "create":
+      return "작성";
+    case "update":
+      return "수정";
+    case "delete":
+      return "삭제";
+    default:
+      return action;
+  }
+}
+
+function targetTableLabel(targetTable: string): string {
+  const map: Record<string, string> = {
+    daily_hygiene_logs: "영업장 환경위생 일지",
+    daily_hygiene_log_items: "영업장 환경위생 항목",
+    daily_temp_humidity_logs: "온습도 일지",
+    daily_temp_humidity_log_items: "온습도 항목",
+    daily_sanitation_facility_logs: "위생시설 점검일지",
+    daily_sanitation_facility_log_items: "위생시설 항목",
+    daily_worker_hygiene_logs: "작업자 위생 점검일지",
+    daily_worker_hygiene_log_items: "작업자 위생 항목",
+    daily_cold_storage_hygiene_logs: "냉장냉동 위생 일지",
+    daily_cold_storage_hygiene_log_items: "냉장냉동 위생 항목",
+    daily_process_control_bread_logs: "공정관리(빵류) 일지",
+    daily_process_control_bread_log_items: "공정관리(빵류) 항목",
+    daily_illumination_logs: "조도 점검일지",
+    daily_illumination_log_items: "조도 점검 항목",
+    daily_material_storage_3f_logs: "원부자재 창고 점검일지",
+    daily_material_storage_3f_log_items: "원부자재 창고 점검 항목",
+    daily_manufacturing_equipment_logs: "제조설비 점검일지",
+    daily_manufacturing_equipment_log_items: "제조설비 점검 항목",
+    daily_air_conditioning_equipment_logs: "공조설비 점검일지",
+    daily_air_conditioning_equipment_log_items: "공조설비 점검 항목",
+    daily_hoist_inspection_logs: "호이스트 점검일지",
+    daily_hoist_inspection_log_items: "호이스트 점검 항목",
+    daily_material_receiving_inspection_logs: "원료 입고검수 일지",
+    daily_material_receiving_inspection_log_items: "원료 입고검수 항목",
+    daily_raw_thawing_logs: "원료 해동 일지",
+    usage_calculations: "원료 사용량",
+    dough_logs: "반죽 사용량",
+    production_logs: "원부자재 출고 입력",
+  };
+  return map[targetTable] ?? targetTable;
+}
+
+function pathLabel(path: string): string {
+  if (path === "/") return "홈";
+  if (path === "/executive") return "대시보드";
+  if (path.startsWith("/executive/")) return `대시보드 상세 (${path.replace("/executive/", "")})`;
+  if (path === "/daily") return "데일리 허브";
+  if (path.startsWith("/daily/")) return `데일리 (${path.replace("/daily/", "")})`;
+  if (path === "/production") return "생산 허브";
+  if (path.startsWith("/production/")) return `생산 (${path.replace("/production/", "")})`;
+  if (path.startsWith("/materials/") || path === "/materials") return `원부자재 (${path.replace("/materials", "").replace(/^\//, "") || "허브"})`;
+  return path;
+}
+
+function summarizeAuditRows(rows: AuditLogRow[]): AuditDisplayRow[] {
+  const out: AuditDisplayRow[] = [];
+  const itemTableSet = new Set([
+    "daily_hygiene_log_items",
+    "daily_temp_humidity_log_items",
+    "daily_sanitation_facility_log_items",
+    "daily_worker_hygiene_log_items",
+    "daily_cold_storage_hygiene_log_items",
+    "daily_process_control_bread_log_items",
+    "daily_illumination_log_items",
+    "daily_material_storage_3f_log_items",
+    "daily_manufacturing_equipment_log_items",
+    "daily_air_conditioning_equipment_log_items",
+    "daily_hoist_inspection_log_items",
+    "daily_material_receiving_inspection_log_items",
+  ]);
+  const grouped = new Map<string, AuditDisplayRow[]>();
+
+  for (const r of rows) {
+    if (!itemTableSet.has(r.target_table) || r.action !== "create") {
+      out.push(r);
+      continue;
+    }
+    const k = `${r.created_at}|${r.actor_login_id ?? ""}|${r.action}|${r.target_table}`;
+    const arr = grouped.get(k) ?? [];
+    arr.push(r);
+    grouped.set(k, arr);
+  }
+
+  for (const arr of Array.from(grouped.values())) {
+    const first = arr[0]!;
+    if (arr.length <= 1) {
+      out.push(first);
+      continue;
+    }
+    out.push({
+      ...first,
+      id: `${first.id}-summary`,
+      target_id: null,
+      target_label: `항목 ${arr.length}건 일괄 생성`,
+      summary_count: arr.length,
+      is_summary: true,
+    });
+  }
+
+  return out.sort((a, b) => b.created_at.localeCompare(a.created_at));
+}
+
 export default function AdminLogsPage() {
   const { profile, loading } = useAuth();
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +165,7 @@ export default function AdminLogsPage() {
   const [days, setDays] = useState(7);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [showAuditDetails, setShowAuditDetails] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -114,6 +227,11 @@ export default function AdminLogsPage() {
       )
     );
   }, [auditRows, keyword]);
+
+  const displayAuditRows = useMemo(() => {
+    if (showAuditDetails) return filteredAuditRows.map((r) => ({ ...r }));
+    return summarizeAuditRows(filteredAuditRows);
+  }, [filteredAuditRows, showAuditDetails]);
 
   const handleSyncGoogleSheets = useCallback(async () => {
     setSyncMessage(null);
@@ -191,6 +309,17 @@ export default function AdminLogsPage() {
               감사 로그
             </button>
           </div>
+          {activeTab === "audit" && (
+            <label className="inline-flex items-center gap-2 rounded-md border border-slate-700/70 bg-slate-900/55 px-2.5 py-1.5 text-xs text-slate-300">
+              <input
+                type="checkbox"
+                checked={showAuditDetails}
+                onChange={(e) => setShowAuditDetails(e.target.checked)}
+                className="h-3.5 w-3.5 accent-cyan-500"
+              />
+              세부 행 보기
+            </label>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <select
               value={days}
@@ -264,7 +393,7 @@ export default function AdminLogsPage() {
                     <td className="px-3 py-2.5">{r.display_name ?? "—"}</td>
                     <td className="px-3 py-2.5">{r.role ?? "—"}</td>
                     <td className="px-3 py-2.5">{r.event}</td>
-                    <td className="px-3 py-2.5 font-mono text-slate-400">{r.page_path}</td>
+                    <td className="px-3 py-2.5 text-slate-300">{pathLabel(r.page_path)}</td>
                     <td className="px-3 py-2.5 font-mono text-slate-500">{r.ip_address ?? "—"}</td>
                   </tr>
                 ))
@@ -294,23 +423,25 @@ export default function AdminLogsPage() {
                     불러오는 중…
                   </td>
                 </tr>
-              ) : filteredAuditRows.length === 0 ? (
+              ) : displayAuditRows.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-3 py-10 text-center text-slate-500">
                     데이터가 없습니다.
                   </td>
                 </tr>
               ) : (
-                filteredAuditRows.map((r) => (
+                displayAuditRows.map((r) => (
                   <tr key={r.id} className="border-t border-slate-800/80 text-slate-300">
                     <td className="px-3 py-2.5 tabular-nums text-slate-400">{formatDateTime(r.created_at)}</td>
                     <td className="px-3 py-2.5 font-mono">{r.actor_login_id ?? "—"}</td>
                     <td className="px-3 py-2.5">{r.actor_display_name ?? "—"}</td>
                     <td className="px-3 py-2.5">{r.actor_role ?? "—"}</td>
-                    <td className="px-3 py-2.5">{r.action}</td>
-                    <td className="px-3 py-2.5 font-mono">{r.target_table}</td>
+                    <td className="px-3 py-2.5">{actionLabel(r.action)}</td>
+                    <td className="px-3 py-2.5">{targetTableLabel(r.target_table)}</td>
                     <td className="px-3 py-2.5 font-mono text-slate-400">{r.target_id ?? "—"}</td>
-                    <td className="px-3 py-2.5">{r.target_label ?? "—"}</td>
+                    <td className={`px-3 py-2.5 ${"is_summary" in r && r.is_summary ? "font-semibold text-cyan-300/90" : ""}`}>
+                      {r.target_label ?? "—"}
+                    </td>
                   </tr>
                 ))
               )}
