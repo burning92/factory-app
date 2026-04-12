@@ -30,6 +30,8 @@ function getCategoryClass(category: string | null): string {
       return "bg-violet-500/20 text-violet-300 border border-violet-500/40";
     case "기타":
       return "bg-slate-500/20 text-slate-300 border border-slate-500/40";
+    case "메모":
+      return "bg-amber-500/15 text-amber-200 border border-amber-500/35";
     default:
       return "bg-slate-700/60 text-slate-300 border border-slate-600/60";
   }
@@ -46,11 +48,13 @@ function getProductionClassByName(productName: string): string {
 }
 
 function getRowClass(category: string | null, productName: string): string {
+  if (category === "메모") return getCategoryClass(category);
   if (category === "생산") return getProductionClassByName(productName);
   return getCategoryClass(category);
 }
 
-function getDisplayName(category: string | null, productName: string): string {
+function getDisplayName(category: string | null, productName: string, note: string | null): string {
+  if (category === "메모" && note && note.trim()) return `(${note.trim()})`;
   if (category === "연차") return `휴 : ${productName}`;
   if (category === "반차") return `반 : ${productName}`;
   return productName;
@@ -285,7 +289,7 @@ export default async function ProductionPlanPage({
                           <div className="space-y-2">
                             {dayRows.map((row) => (
                               <div key={row.id} className={`rounded-md px-2 py-1 text-[11px] ${getRowClass(row.category, row.product_name)}`}>
-                                <p className="leading-snug">{getDisplayName(row.category, row.product_name)}</p>
+                                <p className="leading-snug">{getDisplayName(row.category, row.product_name, row.note)}</p>
                                 {row.qty != null && Number.isFinite(row.qty) ? (
                                   <p className="text-[10px] mt-0.5 tabular-nums">수량 {formatQty(row.qty)}</p>
                                 ) : null}
@@ -311,9 +315,9 @@ export default async function ProductionPlanPage({
                   date,
                   rows: dayRows.map((row) => ({
                     id: row.id,
-                    label: getDisplayName(row.category, row.product_name),
+                    label: getDisplayName(row.category, row.product_name, row.note),
                     qty: row.qty,
-                    note: row.note ?? null,
+                    note: row.category === "메모" ? null : row.note ?? null,
                     className: getRowClass(row.category, row.product_name),
                   })),
                 }))}

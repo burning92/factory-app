@@ -55,10 +55,29 @@ export function normalizePlanRows(rawRows: RawProductionPlanRow[]): {
   rawRows.forEach((raw, index) => {
     const plan_date = toDateStr(raw.plan_date);
     const product_name = (raw.product_name != null ? String(raw.product_name) : "").trim();
-    if (!plan_date || !product_name) {
+    const category =
+      raw.category != null && String(raw.category).trim()
+        ? String(raw.category).trim()
+        : null;
+    const note =
+      raw.note != null && String(raw.note).trim() ? String(raw.note).trim() : null;
+
+    if (!plan_date) {
       filtered += 1;
       return;
     }
+
+    const isMemoRow = category === "메모" || (note != null && product_name === "");
+
+    if (!product_name && !isMemoRow) {
+      filtered += 1;
+      return;
+    }
+    if (isMemoRow && !note) {
+      filtered += 1;
+      return;
+    }
+
     const ymd = plan_date.split("-");
     const dateYear = Number(ymd[0]);
     const dateMonth = Number(ymd[1]);
@@ -72,11 +91,8 @@ export function normalizePlanRows(rawRows: RawProductionPlanRow[]): {
       plan_date,
       product_name,
       qty: toQty(raw.qty),
-      category:
-        raw.category != null && String(raw.category).trim()
-          ? String(raw.category).trim()
-          : null,
-      note: raw.note != null && String(raw.note).trim() ? String(raw.note).trim() : null,
+      category,
+      note,
       plan_year,
       plan_month,
       plan_version: toVersion(raw.plan_version),
