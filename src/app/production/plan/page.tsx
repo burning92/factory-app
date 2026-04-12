@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getProductionPlanPageData } from "@/features/production/plan/getProductionPlanPageData";
+import type { ProductionPlanRow } from "@/features/production/plan/types";
 import { formatDateTimeKorea } from "@/lib/formatDateTimeKorea";
 import MobilePlanList from "./MobilePlanList";
 import AutoScrollToToday from "./AutoScrollToToday";
@@ -58,6 +59,75 @@ function getDisplayName(category: string | null, productName: string, note: stri
   if (category === "연차") return `휴 : ${productName}`;
   if (category === "반차") return `반 : ${productName}`;
   return productName;
+}
+
+/** 시트 수식과 비슷한 읽기 순서: 공휴일 → 생산 → 메모 → 연차 → 반차 → 기타 */
+const DESKTOP_ROW_ORDER: Record<string, number> = {
+  공휴일: 0,
+  생산: 1,
+  메모: 2,
+  연차: 3,
+  반차: 4,
+  기타: 5,
+};
+
+function sortRowsForDesktop(rows: ProductionPlanRow[]): ProductionPlanRow[] {
+  return [...rows].sort((a, b) => {
+    const ao = DESKTOP_ROW_ORDER[a.category ?? ""] ?? 50;
+    const bo = DESKTOP_ROW_ORDER[b.category ?? ""] ?? 50;
+    if (ao !== bo) return ao - bo;
+    return a.sort_order - b.sort_order;
+  });
+}
+
+/** KST 기준 요일 (0=일 … 6=토). 서버 TZ와 무관하게 동일한 결과. */
+function isoWeekdayKst(iso: string): number {
+  const [y, m, d] = iso.split("-").map((x) => parseInt(x, 10));
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return 0;
+  return new Date(Date.UTC(y, m - 1, d, 3, 0, 0)).getUTCDay();
+}
+
+function DesktopPlanEntry({ row }: { row: ProductionPlanRow }) {
+  const label = getDisplayName(row.category, row.product_name, row.note);
+
+  if (row.category === "메모") {
+    return (
+      <div className="rounded-md border-l-[3px] border-amber-400/80 bg-amber-500/[0.07] pl-2 pr-1.5 py-1 text-[11px] leading-snug text-amber-100/95">
+        {label}
+      </div>
+    );
+  }
+
+  if (row.category === "생산") {
+    return (
+      <div
+        className={`rounded-lg px-2 py-1.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] ${getRowClass(row.category, row.product_name)}`}
+      >
+        <p className="text-[12px] font-medium leading-snug tracking-tight text-white/95">{row.product_name}</p>
+        {row.qty != null && Number.isFinite(row.qty) ? (
+          <p className="mt-0.5 text-[10px] tabular-nums text-white/50">수량 {formatQty(row.qty)}</p>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (row.category === "공휴일") {
+    return (
+      <div
+        className={`rounded-lg px-2 py-1.5 text-center text-[11px] font-semibold leading-snug shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] ${getRowClass(row.category, row.product_name)}`}
+      >
+        {label}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`rounded-md px-2 py-1 text-[11px] leading-snug shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] ${getRowClass(row.category, row.product_name)}`}
+    >
+      {label}
+    </div>
+  );
 }
 
 function monthKeyFromYM(year: number, month: number): string {
@@ -174,7 +244,7 @@ export default async function ProductionPlanPage({
       : null;
 
   return (
-    <div className="min-h-[calc(100vh-3.5rem)] md:min-h-0 p-4 md:px-8 md:py-6 xl:px-10 max-w-[1280px] mx-auto">
+    <div className="min-h-[calc(100vh-3.5rem)] md:min-h-0 p-4 md:px-6 md:py-6 lg:px-10 max-w-[min(100%,90rem)] mx-auto">
       <div className="mb-4">
         <Link href="/production" className="text-sm text-cyan-400 hover:underline">
           ← 생산 허브
@@ -261,39 +331,78 @@ export default async function ProductionPlanPage({
             </section>
           )}
           {monthKey && (
-            <section className="hidden md:block rounded-xl border border-slate-700 bg-space-800/50 overflow-hidden">
-              <div className="px-4 py-3 border-b border-slate-700/80 bg-space-900/40">
+            <section className="hidden md:block rounded-xl border border-slate-700 bg-space-800/50 overflow-hidden shadow-lg shadow-black/20">
+              <div className="flex flex-col gap-2 border-b border-slate-700/80 bg-space-900/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <h2 className="text-base font-semibold text-cyan-300/90">{formatMonthTitle(monthKey)}</h2>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-sm bg-cyan-400/70" />
+                    생산
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-sm bg-amber-400/80" />
+                    비고
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-sm bg-amber-500/60" />
+                    휴
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-sm bg-violet-400/70" />
+                    반차
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-sm bg-slate-400/60" />
+                    기타
+                  </span>
+                </div>
               </div>
               <div className="grid grid-cols-7 border-b border-slate-700/80 bg-space-900/30">
                 {WEEKDAY_LABELS.map((w) => (
-                  <div key={w} className="px-3 py-2 text-xs font-medium text-slate-400 border-r border-slate-700/60 last:border-r-0">
+                  <div
+                    key={w}
+                    className="px-2 py-2.5 text-center text-[11px] font-semibold tracking-wide text-slate-400 border-r border-slate-700/60 [&:nth-child(7n)]:border-r-0"
+                  >
                     {w}
                   </div>
                 ))}
               </div>
               <div className="grid grid-cols-7">
                 {dayCells.map((dateKey, idx) => {
-                  const dayRows = dateKey ? (byDate.get(dateKey) ?? []) : [];
+                  const rawRows = dateKey ? (byDate.get(dateKey) ?? []) : [];
+                  const dayRows = sortRowsForDesktop(rawRows);
                   const dayNum = dateKey ? Number(dateKey.slice(8, 10)) : null;
+                  const isToday = dateKey === todayIso;
+                  const wd = dateKey ? isoWeekdayKst(dateKey) : -1;
+                  const isWeekend = wd === 0 || wd === 6;
                   return (
                     <div
                       key={`${dateKey ?? "empty"}-${idx}`}
                       id={dateKey ? `plan-day-${dateKey}` : undefined}
-                      data-plan-today={dateKey === todayIso ? "true" : undefined}
-                      className="min-h-[160px] border-r border-b border-slate-700/60 last:border-r-0 p-3"
+                      data-plan-today={isToday ? "true" : undefined}
+                      className={`min-h-[168px] border-r border-b border-slate-700/50 p-2 min-w-0 [&:nth-child(7n)]:border-r-0 ${
+                        isWeekend ? "bg-slate-900/35" : "bg-space-900/10"
+                      } ${isToday ? "ring-1 ring-inset ring-cyan-500/45 bg-cyan-950/[0.18]" : ""}`}
                     >
                       {dateKey ? (
                         <>
-                          <p className="text-sm font-semibold text-slate-200 mb-2">{dayNum}</p>
-                          <div className="space-y-2">
+                          <div className="mb-1.5 flex items-baseline justify-between gap-1">
+                            <span
+                              className={`text-sm font-bold tabular-nums ${
+                                isToday ? "text-cyan-200" : "text-slate-200"
+                              }`}
+                            >
+                              {dayNum}
+                            </span>
+                            {isToday ? (
+                              <span className="text-[9px] font-medium uppercase tracking-wider text-cyan-400/90">
+                                오늘
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="flex flex-col gap-1">
                             {dayRows.map((row) => (
-                              <div key={row.id} className={`rounded-md px-2 py-1 text-[11px] ${getRowClass(row.category, row.product_name)}`}>
-                                <p className="leading-snug">{getDisplayName(row.category, row.product_name, row.note)}</p>
-                                {row.qty != null && Number.isFinite(row.qty) ? (
-                                  <p className="text-[10px] mt-0.5 tabular-nums">수량 {formatQty(row.qty)}</p>
-                                ) : null}
-                              </div>
+                              <DesktopPlanEntry key={row.id} row={row} />
                             ))}
                           </div>
                         </>
