@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Calculator, FileText, Plus, List, CalendarDays, ChevronRight } from "lucide-react";
+import { Calculator, FileText, Plus, List, CalendarDays, ChevronRight, Package } from "lucide-react";
 
 const HUB_ITEMS = [
   {
@@ -42,6 +42,14 @@ const HUB_ITEMS = [
     description: "생산 완료 기록 확인",
     badge: "기록",
     Icon: FileText,
+    featured: false,
+  },
+  {
+    href: "/production/lot-consumption",
+    label: "LOT별 생산 소모",
+    description: "출고 일지 기준 LOT·원료별 소모 (이카운트 입력 전 확인)",
+    badge: "조회",
+    Icon: Package,
     featured: false,
   },
 ] as const;

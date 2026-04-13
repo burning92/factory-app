@@ -352,6 +352,7 @@ function DetailView({
   editingLogId,
   editingLineIndex,
   setEditing,
+  showFirstCloseReminder,
 }: {
   logs: ProductionLog[];
   materials: MaterialLike[];
@@ -366,6 +367,8 @@ function DetailView({
   editingLogId: string | null;
   editingLineIndex: number | null;
   setEditing: (logId: string | null, lineIndex: number | null) => void;
+  /** 이미 1차 마감된 날짜면 안내(출고 수정은 가능, 사용량 계산·일지 재확인 권장) */
+  showFirstCloseReminder: boolean;
 }) {
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -385,6 +388,15 @@ function DetailView({
   return (
     <div className="bg-space-900/80 border-t border-slate-600">
       <div className="px-2.5 md:px-4 py-3 space-y-3">
+        {showFirstCloseReminder ? (
+          <div className="rounded-lg border border-cyan-500/35 bg-cyan-500/10 px-3 py-2 text-sm text-slate-200 leading-relaxed">
+            이 생산일자는 <span className="font-medium text-cyan-200">1차 마감이 이미 저장</span>된 상태입니다. 출고를 수정·추가해도 됩니다. 다만{" "}
+            <Link href="/production/history" className="text-cyan-300 underline hover:text-cyan-200">
+              사용량 계산
+            </Link>
+            에서 해당 날짜 재고·마감을 다시 맞추고, 필요하면 생산일지를 다시 확인해 주세요. (이카운트 입력값과 일치하려면 마감 데이터가 출고와 같이 가야 합니다.)
+          </div>
+        ) : null}
         {logs.length === 0 ? (
           <p className="text-slate-500 text-sm py-4">출고된 원료가 없습니다.</p>
         ) : (
@@ -456,6 +468,9 @@ export default function OutboundHistoryPage() {
     addProductionLog,
     saving,
     error,
+    productionHistoryDateStates,
+    productionHistoryDateStatesLoading,
+    fetchProductionHistoryDateStates,
   } = useMasterStore();
 
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -474,7 +489,16 @@ export default function OutboundHistoryPage() {
     fetchProductionLogs();
     fetchBom();
     fetchMaterials();
-  }, [fetchProductionLogs, fetchBom, fetchMaterials]);
+    void fetchProductionHistoryDateStates();
+  }, [fetchProductionLogs, fetchBom, fetchMaterials, fetchProductionHistoryDateStates]);
+
+  /** 1차 마감된 날짜 안내용(출고 수정은 허용) */
+  const showFirstCloseReminderForDate = useCallback(
+    (생산일자: string) =>
+      !productionHistoryDateStatesLoading &&
+      Boolean(productionHistoryDateStates[생산일자.slice(0, 10)]?.first_closed_at),
+    [productionHistoryDateStates, productionHistoryDateStatesLoading]
+  );
 
   const materialsList = useMemo(
     () => materials.map((m) => ({ materialName: m.materialName, boxWeightG: m.boxWeightG, unitWeightG: m.unitWeightG })),
@@ -730,6 +754,7 @@ export default function OutboundHistoryPage() {
                         editingLogId={editingLogId}
                         editingLineIndex={editingLineIndex}
                         setEditing={setEditing}
+                        showFirstCloseReminder={showFirstCloseReminderForDate(group.생산일자)}
                       />
                     )}
                   </div>
@@ -809,6 +834,7 @@ export default function OutboundHistoryPage() {
                                 editingLogId={editingLogId}
                                 editingLineIndex={editingLineIndex}
                                 setEditing={setEditing}
+                                showFirstCloseReminder={showFirstCloseReminderForDate(group.생산일자)}
                               />
                             </td>
                           </tr>

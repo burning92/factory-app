@@ -82,10 +82,30 @@ function JournalPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const date = searchParams.get("date") ?? "";
-  const { bomList, getDoughLogByDate, fetchDoughLogs } = useMasterStore();
+  const { bomList, fetchBom, fetchDoughLogs } = useMasterStore();
+  /** 새로고침 직후 store에 BOM이 비어 있으면 fetch 완료까지 제품별 원료 표를 그리지 않음 */
+  const [bomReady, setBomReady] = useState(() => bomList.length > 0);
+  /** doughLogsMap 갱신 시 구독되어 반죽 사용량이 다시 계산되도록 함 (getDoughLogByDate만 쓰면 useMemo가 갱신 안 됨) */
+  const doughLog = useMasterStore((s) =>
+    date ? s.doughLogsMap[date.slice(0, 10)] ?? null : null
+  );
 
   const [stored, setStored] = useState<StoredJournal | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (bomList.length > 0) {
+      setBomReady(true);
+      return;
+    }
+    let cancelled = false;
+    void fetchBom().finally(() => {
+      if (!cancelled) setBomReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchBom, bomList.length]);
 
   useEffect(() => {
     if (date) fetchDoughLogs();
@@ -153,11 +173,10 @@ function JournalPageContent() {
   }, [stored, bomRefs]);
 
   /** 반죽 내역(사용일자=생산일자 기준) 집계. P1 총괄 "반죽 사용량" 블록용. */
-  const doughUsageLines = useMemo(() => {
-    if (!date) return [];
-    const log = getDoughLogByDate(date);
-    return aggregateDoughUsageForJournal(log);
-  }, [date, getDoughLogByDate]);
+  const doughUsageLines = useMemo(
+    () => aggregateDoughUsageForJournal(doughLog),
+    [doughLog]
+  );
 
   /** 페이지 배열: 총괄 1 + 제품별 N (빈 페이지 없음). Hook 순서 고정을 위해 항상 호출. */
   const journalPages = useMemo(() => {
@@ -229,6 +248,14 @@ function JournalPageContent() {
     return (
       <div className="min-h-screen bg-space-950 text-slate-200 py-12 px-4">
         <div className="max-w-lg mx-auto text-center">불러오는 중…</div>
+      </div>
+    );
+  }
+
+  if (stored && !bomReady) {
+    return (
+      <div className="min-h-screen bg-space-950 text-slate-200 py-12 px-4">
+        <div className="max-w-lg mx-auto text-center">원료 BOM 불러오는 중…</div>
       </div>
     );
   }
