@@ -5,6 +5,14 @@ import { Calculator, FileText, Plus, List, CalendarDays, ChevronRight, Package }
 
 const HUB_ITEMS = [
   {
+    href: "/production/planning",
+    label: "월간 생산계획 보드",
+    description: "달력 + 상세패널로 월 계획 입력/마감",
+    badge: "신규",
+    Icon: CalendarDays,
+    featured: true,
+  },
+  {
     href: "/production/plan",
     label: "생산계획",
     description: "오늘/이번달 계획 확인",

@@ -7,6 +7,12 @@ const CATEGORY_DAYS: Record<string, number> = {
   월차: 1,
 };
 
+/**
+ * 운영 cutover: 이 날짜 이상은 planning board를 원장으로 사용.
+ * legacy production_plan_rows 기반 연차 차감은 이 날짜 미만만 반영한다.
+ */
+const PLANNING_BOARD_CUTOVER_DATE = "2026-05-01";
+
 function normalizePersonKey(name: string): string {
   return name.normalize("NFC").trim().replace(/\s+/g, " ");
 }
@@ -103,6 +109,8 @@ export async function syncLeaveDeductionsFromProductionPlan(
     }
 
     const usage_date = String(r.plan_date).slice(0, 10);
+    if (usage_date >= PLANNING_BOARD_CUTOVER_DATE) continue;
+
     const y = Number(usage_date.slice(0, 4));
     if (!Number.isFinite(y)) continue;
 
