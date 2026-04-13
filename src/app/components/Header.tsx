@@ -18,6 +18,7 @@ const DESKTOP_DROPDOWN_PRODUCTION: DropdownItem[] = [
   { href: "/production/dough-logs", label: "반죽 내역" },
   { href: "/production/history", label: "원료 사용량" },
   { href: "/production/history/completed", label: "생산일지" },
+  { href: "/production/lot-consumption", label: "LOT별 생산 소모" },
   { href: "/production/plan", label: "생산계획" },
 ];
 
