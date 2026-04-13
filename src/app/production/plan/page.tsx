@@ -26,13 +26,13 @@ function getCategoryClass(category: string | null): string {
     case "공휴일":
       return "bg-rose-500/20 text-rose-300 border border-rose-500/40";
     case "연차":
-      return "bg-amber-500/20 text-amber-300 border border-amber-500/40";
+      return "bg-orange-500/25 text-orange-100 border border-orange-400/50";
     case "반차":
       return "bg-violet-500/20 text-violet-300 border border-violet-500/40";
     case "기타":
       return "bg-slate-500/20 text-slate-300 border border-slate-500/40";
     case "메모":
-      return "bg-amber-500/15 text-amber-200 border border-amber-500/35";
+      return "bg-yellow-500/25 text-yellow-50 border border-yellow-400/55 shadow-[0_0_0_1px_rgba(250,204,21,0.12)]";
     default:
       return "bg-slate-700/60 text-slate-300 border border-slate-600/60";
   }
@@ -55,7 +55,7 @@ function getRowClass(category: string | null, productName: string): string {
 }
 
 function getDisplayName(category: string | null, productName: string, note: string | null): string {
-  if (category === "메모" && note && note.trim()) return `(${note.trim()})`;
+  if (category === "메모" && note && note.trim()) return note.trim();
   if (category === "연차") return `휴 : ${productName}`;
   if (category === "반차") return `반 : ${productName}`;
   return productName;
@@ -92,7 +92,7 @@ function DesktopPlanEntry({ row }: { row: ProductionPlanRow }) {
 
   if (row.category === "메모") {
     return (
-      <div className="rounded-md border-l-[3px] border-amber-400/80 bg-amber-500/[0.07] pl-2 pr-1.5 py-1 text-[11px] leading-snug text-amber-100/95">
+      <div className="rounded-md border border-yellow-400/50 border-l-[4px] border-l-yellow-400 bg-yellow-500/20 pl-2 pr-1.5 py-1.5 text-[11px] font-semibold leading-snug text-yellow-50 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
         {label}
       </div>
     );
@@ -340,11 +340,11 @@ export default async function ProductionPlanPage({
                     생산
                   </span>
                   <span className="inline-flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-sm bg-amber-400/80" />
+                    <span className="h-2 w-2 rounded-sm bg-yellow-400 shadow-[0_0_6px_rgba(250,204,21,0.7)]" />
                     비고
                   </span>
                   <span className="inline-flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-sm bg-amber-500/60" />
+                    <span className="h-2 w-2 rounded-sm bg-orange-500 shadow-[0_0_6px_rgba(249,115,22,0.55)]" />
                     휴
                   </span>
                   <span className="inline-flex items-center gap-1.5">
