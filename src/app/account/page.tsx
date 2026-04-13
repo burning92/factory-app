@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { KeyRound, LayoutDashboard, LogOut, User } from "lucide-react";
+import { CalendarDays, KeyRound, LayoutDashboard, LogOut, User } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 const LINK_ITEMS = [
+  { href: "/account/leave", label: "나의 연차", Icon: CalendarDays },
   { href: "/account/change-password", label: "비밀번호 변경", Icon: KeyRound },
   { href: "/logout", label: "로그아웃", Icon: LogOut },
 ] as const;

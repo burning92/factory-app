@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Eye, EyeOff, Copy, KeyRound } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
+import ManageAnnualLeaveSection from "./ManageAnnualLeaveSection";
 
 function generateTempPassword(length = 12): string {
   const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -463,6 +464,8 @@ export default function ManagePage() {
           추가된 사용자는 설정한 초기 비밀번호로 로그인합니다. 필요 시 비밀번호 재설정 버튼으로 변경하세요.
         </p>
       </section>
+
+      <ManageAnnualLeaveSection profiles={filteredProfiles} />
     </div>
   );
 }
