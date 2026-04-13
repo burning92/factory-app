@@ -84,6 +84,10 @@ export default function Header() {
   const effectiveLogoUrl = viewIsHarang ? HARANG_PEOPLE_ICON_SRC : ARMORED_LOGO_SRC;
   const primaryColor = uiSettings?.primary_color?.trim() || "#06b6d4";
   const isAdmin = profile?.role === "admin";
+  const isManagerOrAdmin = profile?.role === "admin" || profile?.role === "manager";
+  const desktopProductionItems: DropdownItem[] = isManagerOrAdmin
+    ? [...DESKTOP_DROPDOWN_PRODUCTION, { href: "/production/planning", label: "플래닝" }]
+    : DESKTOP_DROPDOWN_PRODUCTION;
   /** 임원 대시보드: 로그인 사용자 전원(100 조직 보기 시) */
   const showExecutiveLink = !viewIsHarang;
 
@@ -206,7 +210,7 @@ export default function Header() {
                       : "/manage";
               const items =
                 key === "production"
-                  ? DESKTOP_DROPDOWN_PRODUCTION
+                  ? desktopProductionItems
                   : key === "materials"
                     ? DESKTOP_DROPDOWN_MATERIALS
                     : key === "daily"
