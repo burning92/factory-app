@@ -6,7 +6,11 @@ set -e
 cd /home/ubuntu/factory-app || exit 1
 
 echo "=== 1. git pull ==="
+git fetch origin
+# 서버에서 npm이 lockfile을 건드리면 pull이 거부되므로, 마지막 커밋 기준으로 되돌린 뒤 병합
+git checkout -- package-lock.json 2>/dev/null || true
 git pull origin main
+echo "HEAD: $(git rev-parse --short HEAD) $(git log -1 --oneline)"
 
 echo ""
 echo "=== 2. npm ci ==="
