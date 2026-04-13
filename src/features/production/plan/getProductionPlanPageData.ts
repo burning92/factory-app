@@ -2,6 +2,7 @@ import { getSupabaseAdmin } from "@/lib/supabaseServer";
 import type { ProductionPlanPageData, ProductionPlanRow } from "./types";
 
 const SYNC_NAME = "production_plan";
+const PLANNING_CUTOVER_DATE = "2026-05-01";
 
 export async function getProductionPlanPageData(): Promise<ProductionPlanPageData> {
   const supabase = getSupabaseAdmin();
@@ -25,7 +26,7 @@ export async function getProductionPlanPageData(): Promise<ProductionPlanPageDat
 
   if (rowsRes.error) throw rowsRes.error;
 
-  const rows: ProductionPlanRow[] = (rowsRes.data ?? []).map((r) => ({
+  const rowsRaw: ProductionPlanRow[] = (rowsRes.data ?? []).map((r) => ({
     id: Number(r.id),
     plan_date: String(r.plan_date).slice(0, 10),
     product_name: String(r.product_name ?? ""),
@@ -45,6 +46,12 @@ export async function getProductionPlanPageData(): Promise<ProductionPlanPageDat
     sort_order: Number(r.sort_order) || 0,
     updated_at: r.updated_at ? String(r.updated_at) : "",
   }));
+  const rows = rowsRaw.filter((r) => {
+    if (r.plan_date >= PLANNING_CUTOVER_DATE) {
+      return (r.source_sheet_name ?? "") === "planning_board";
+    }
+    return true;
+  });
 
   const s = syncRes.data;
   const sync =

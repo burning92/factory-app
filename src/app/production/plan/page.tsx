@@ -58,6 +58,10 @@ function getDisplayName(category: string | null, productName: string, note: stri
   if (category === "메모" && note && note.trim()) return note.trim();
   if (category === "연차") return `휴 : ${productName}`;
   if (category === "반차") return `반 : ${productName}`;
+  if (category === "생산") {
+    const idx = productName.indexOf(" - ");
+    return idx >= 0 ? productName.slice(0, idx).trim() : productName;
+  }
   return productName;
 }
 
