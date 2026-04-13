@@ -383,6 +383,7 @@ export default async function ProductionPlanPage({
                   const isSaturday = wd === 6;
                   const isHoliday = dateKey ? isKoreanPublicHoliday(dateKey) : false;
                   const holidayName = dateKey ? getKoreanHolidayName(dateKey) : null;
+                  const hasHolidayRow = dayRows.some((row) => row.category === "공휴일");
                   const isWeekend = isSunday || isSaturday;
                   return (
                     <div
@@ -419,9 +420,9 @@ export default async function ProductionPlanPage({
                               </span>
                             ) : null}
                           </div>
-                          {holidayName ? (
+                          {holidayName && !hasHolidayRow ? (
                             <div className="mb-1.5">
-                              <div className="inline-flex rounded-md border border-rose-500/45 bg-rose-500/20 px-2 py-0.5 text-[10px] font-semibold leading-none text-rose-200">
+                              <div className="rounded-lg border border-rose-500/45 bg-rose-500/20 px-2 py-1.5 text-center text-[11px] font-semibold leading-snug text-rose-200 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
                                 {holidayName}
                               </div>
                             </div>
