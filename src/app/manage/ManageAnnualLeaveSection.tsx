@@ -20,6 +20,7 @@ type LeaveDeductionRow = {
   days: number | string;
   memo: string | null;
   created_at: string;
+  source?: string | null;
 };
 
 function orgCode(p: ManageLeaveProfileRow): string {
@@ -71,7 +72,7 @@ export default function ManageAnnualLeaveSection({ profiles }: { profiles: Manag
       supabase.from("leave_annual_totals").select("profile_id,year,total_days").eq("year", leaveYear).in("profile_id", ids),
       supabase
         .from("leave_deductions")
-        .select("id,profile_id,year,usage_date,days,memo,created_at")
+        .select("id,profile_id,year,usage_date,days,memo,created_at,source")
         .eq("year", leaveYear)
         .in("profile_id", ids)
         .order("usage_date", { ascending: false }),
@@ -160,8 +161,9 @@ export default function ManageAnnualLeaveSection({ profiles }: { profiles: Manag
         days,
         memo: newMemo.trim() || null,
         created_by: user.id,
+        source: "manual",
       })
-      .select("id,profile_id,year,usage_date,days,memo,created_at")
+      .select("id,profile_id,year,usage_date,days,memo,created_at,source")
       .single();
     setSubmittingDeduction(false);
     if (e) {
@@ -199,8 +201,12 @@ export default function ManageAnnualLeaveSection({ profiles }: { profiles: Manag
     <section className="rounded-xl border border-slate-700 bg-space-800/80 p-6">
       <h2 className="text-lg font-semibold text-slate-100 mb-1">연차 (발생 총량 · 차감)</h2>
       <p className="text-xs text-slate-500 mb-4">
-        발생 총량은 연도별로 관리합니다. 차감은 일수만 누적되며, 잔여 = 발생 총량 − 차감 합계입니다. 병가 등 연차가 아닌 경우
-        차감 행을 넣지 않거나, 잘못 넣었다면 삭제하거나 발생 총량을 조정하세요.
+        발생 총량은 연도별로 관리합니다. 차감은 일수만 누적되며, 잔여 = 발생 총량 − 차감 합계입니다.{" "}
+        <span className="text-slate-400">
+          생산계획 시트 동기화 시 <strong className="text-slate-300">MASTER</strong> 버전의 연차·반차·월차가 자동 반영됩니다(메모에
+          「생산계획 자동」). 수동 등록과 합산됩니다.
+        </span>{" "}
+        병가 등은 시트에 넣지 않거나, 수동으로만 조정하세요.
       </p>
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <label className="text-xs text-slate-400">연도</label>
@@ -246,10 +252,14 @@ export default function ManageAnnualLeaveSection({ profiles }: { profiles: Manag
             </thead>
             <tbody>
               {profiles.map((p) => {
-                const total = totalsByProfile[p.id] ?? 0;
+                const savedTotal = totalsByProfile[p.id] ?? 0;
+                const draftStr = draftTotals[p.id];
+                /** 입력 중에도 잔여 미리보기: 칸이 비어 있으면 저장값 기준 */
+                const effectiveTotal =
+                  draftStr !== undefined && String(draftStr).trim() !== "" ? parseTotal(String(draftStr)) : savedTotal;
                 const dlist = deductionsByProfile[p.id] ?? [];
                 const used = sumDeductions(dlist);
-                const remain = total - used;
+                const remain = effectiveTotal - used;
                 return (
                   <tr key={p.id} className="border-b border-slate-800/80 text-slate-300">
                     <td className="py-2 pr-2 font-mono text-xs">{orgCode(p) || "—"}</td>
@@ -372,6 +382,11 @@ export default function ManageAnnualLeaveSection({ profiles }: { profiles: Manag
                       className="flex flex-wrap items-center justify-between gap-2 text-xs bg-space-800/80 rounded-lg px-2 py-1.5 border border-slate-700/80"
                     >
                       <span className="text-slate-300">
+                        {r.source === "production_plan" ? (
+                          <span className="mr-1.5 rounded bg-violet-500/25 px-1 py-0.5 text-[10px] text-violet-200">
+                            계획
+                          </span>
+                        ) : null}
                         {String(r.usage_date).slice(0, 10)} · {Number(r.days).toLocaleString("ko-KR")}일
                         {r.memo ? <span className="text-slate-500"> — {r.memo}</span> : null}
                       </span>

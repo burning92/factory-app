@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
 import type { ProductionPlanSyncPayload } from "@/features/production/plan/types";
 import { normalizePlanRows } from "@/features/production/plan/normalizePlanRows";
+import { syncLeaveDeductionsFromProductionPlan } from "@/features/leave/syncLeaveDeductionsFromProductionPlan";
 
 const SYNC_NAME = "production_plan";
 
@@ -70,6 +71,8 @@ export async function POST(req: NextRequest) {
       inserted = ins?.length ?? 0;
     }
 
+    const leaveSync = await syncLeaveDeductionsFromProductionPlan(supabase);
+
     await supabase.from("production_plan_sync_status").upsert(
       {
         sync_name: SYNC_NAME,
@@ -88,6 +91,7 @@ export async function POST(req: NextRequest) {
       inserted,
       filtered,
       replaced: normalized.length,
+      leaveSync,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

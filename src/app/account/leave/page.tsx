@@ -10,6 +10,7 @@ type DeductionRow = {
   usage_date: string;
   days: number | string;
   memo: string | null;
+  source?: string | null;
 };
 
 export default function AccountLeavePage() {
@@ -28,7 +29,7 @@ export default function AccountLeavePage() {
       supabase.from("leave_annual_totals").select("total_days").eq("profile_id", profile.id).eq("year", year).maybeSingle(),
       supabase
         .from("leave_deductions")
-        .select("id,usage_date,days,memo")
+        .select("id,usage_date,days,memo,source")
         .eq("profile_id", profile.id)
         .eq("year", year)
         .order("usage_date", { ascending: false }),
@@ -70,7 +71,9 @@ export default function AccountLeavePage() {
         ← 계정
       </Link>
       <h1 className="text-lg font-semibold text-slate-100 mb-1">나의 연차</h1>
-      <p className="text-slate-500 text-sm mb-6">발생 총량·차감 내역은 관리자가 등록합니다. 문의는 관리자에게 해 주세요.</p>
+      <p className="text-slate-500 text-sm mb-6">
+        발생 총량은 관리자가 설정하고, 차감은 생산계획(MASTER) 연동·관리자 입력이 합산됩니다.
+      </p>
 
       {error && (
         <p className="text-red-400 text-sm mb-4" role="alert">
@@ -121,6 +124,11 @@ export default function AccountLeavePage() {
                   key={r.id}
                   className="rounded-lg border border-slate-700/80 bg-space-900/50 px-3 py-2 text-sm text-slate-300"
                 >
+                  {r.source === "production_plan" ? (
+                    <span className="mr-1.5 rounded bg-violet-500/25 px-1.5 py-0.5 text-[10px] text-violet-200">
+                      생산계획
+                    </span>
+                  ) : null}
                   <span className="tabular-nums">{String(r.usage_date).slice(0, 10)}</span>
                   <span className="mx-2 text-slate-600">·</span>
                   <span className="tabular-nums">{Number(r.days).toLocaleString("ko-KR")}일</span>
