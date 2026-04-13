@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getProductionPlanPageData } from "@/features/production/plan/getProductionPlanPageData";
 import type { ProductionPlanRow } from "@/features/production/plan/types";
+import { getKoreanHolidayName, isKoreanPublicHoliday } from "@/features/production/planning/calculations";
 import { formatDateTimeKorea } from "@/lib/formatDateTimeKorea";
 import MobilePlanList from "./MobilePlanList";
 import AutoScrollToToday from "./AutoScrollToToday";
@@ -378,14 +379,22 @@ export default async function ProductionPlanPage({
                   const dayNum = dateKey ? Number(dateKey.slice(8, 10)) : null;
                   const isToday = dateKey === todayIso;
                   const wd = dateKey ? isoWeekdayKst(dateKey) : -1;
-                  const isWeekend = wd === 0 || wd === 6;
+                  const isSunday = wd === 0;
+                  const isSaturday = wd === 6;
+                  const isHoliday = dateKey ? isKoreanPublicHoliday(dateKey) : false;
+                  const holidayName = dateKey ? getKoreanHolidayName(dateKey) : null;
+                  const isWeekend = isSunday || isSaturday;
                   return (
                     <div
                       key={`${dateKey ?? "empty"}-${idx}`}
                       id={dateKey ? `plan-day-${dateKey}` : undefined}
                       data-plan-today={isToday ? "true" : undefined}
                       className={`min-h-[168px] border-r border-b border-slate-700/50 p-2 min-w-0 [&:nth-child(7n)]:border-r-0 ${
-                        isWeekend ? "bg-slate-900/35" : "bg-space-900/10"
+                        isHoliday || isSunday
+                          ? "bg-rose-950/20"
+                          : isSaturday
+                            ? "bg-sky-950/20"
+                            : "bg-space-900/10"
                       } ${isToday ? "ring-1 ring-inset ring-cyan-500/45 bg-cyan-950/[0.18]" : ""}`}
                     >
                       {dateKey ? (
@@ -393,7 +402,13 @@ export default async function ProductionPlanPage({
                           <div className="mb-1.5 flex items-baseline justify-between gap-1">
                             <span
                               className={`text-sm font-bold tabular-nums ${
-                                isToday ? "text-cyan-200" : "text-slate-200"
+                                isToday
+                                  ? "text-cyan-200"
+                                  : isHoliday || isSunday
+                                    ? "text-rose-300"
+                                    : isSaturday
+                                      ? "text-sky-300"
+                                      : "text-slate-200"
                               }`}
                             >
                               {dayNum}
@@ -404,6 +419,13 @@ export default async function ProductionPlanPage({
                               </span>
                             ) : null}
                           </div>
+                          {holidayName ? (
+                            <div className="mb-1.5">
+                              <div className="inline-flex rounded-md border border-rose-500/45 bg-rose-500/20 px-2 py-0.5 text-[10px] font-semibold leading-none text-rose-200">
+                                {holidayName}
+                              </div>
+                            </div>
+                          ) : null}
                           <div className="flex flex-col gap-1">
                             {dayRows.map((row) => (
                               <DesktopPlanEntry key={row.id} row={row} />
