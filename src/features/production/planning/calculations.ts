@@ -155,7 +155,6 @@ function stockByMaterialQty(params: {
     // 재고현황 페이지의 "재고수량(qty)" 기준을 그대로 사용한다. (이중 환산 금지)
     byItemCode.set(code, current + (Number(inv.qty) || 0));
   }
-  const byMaterial = new Map<string, number>();
   const codeByMaterial = new Map<string, Set<string>>();
   for (const m of materialRows) {
     const materialKey = canonicalMaterialName(m.material_name);
@@ -168,7 +167,15 @@ function stockByMaterialQty(params: {
     const codes = codeByMaterial.get(materialKey) ?? new Set<string>();
     codes.add(code);
     codeByMaterial.set(materialKey, codes);
-    byMaterial.set(materialKey, (byMaterial.get(materialKey) ?? 0) + (byItemCode.get(code) ?? 0));
+  }
+  /** 같은 표시명(캐논)으로 묶일 때 item_code는 한 번만 집계한다. 행마다 더하면 동일 코드 재고가 2배로 잡힌다. */
+  const byMaterial = new Map<string, number>();
+  for (const [materialKey, codes] of Array.from(codeByMaterial.entries())) {
+    let total = 0;
+    for (const code of Array.from(codes)) {
+      total += byItemCode.get(code) ?? 0;
+    }
+    byMaterial.set(materialKey, total);
   }
   return { stockByMaterial: byMaterial, codeByMaterial, inventoryCodeSet: new Set(byItemCode.keys()) };
 }
