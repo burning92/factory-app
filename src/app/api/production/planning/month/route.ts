@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { getPlanningMonthData } from "@/features/production/planning/getPlanningMonthData";
 import type { PlanningVersionType } from "@/features/production/planning/types";
+
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 function toVersion(v: string | null): PlanningVersionType {
   if (v === "draft") return "draft";
@@ -9,6 +14,31 @@ function toVersion(v: string | null): PlanningVersionType {
 }
 
 export async function GET(req: NextRequest) {
+  if (!serviceRoleKey) return NextResponse.json({ error: "server_config_error" }, { status: 500 });
+  const authHeader = req.headers.get("authorization") ?? "";
+  const accessToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+  const refreshToken = (req.headers.get("x-refresh-token") ?? "").trim();
+  if (!accessToken || !refreshToken) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  const anon = createClient(url, anonKey);
+  const {
+    data: { user },
+    error: sessionError,
+  } = await anon.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+  if (sessionError || !user) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  const admin = createClient(url, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+  const { data: me, error: meErr } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
+  if (meErr || !me || (me.role !== "admin" && me.role !== "manager")) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
   const sp = req.nextUrl.searchParams;
   const year = Number(sp.get("year"));
   const month = Number(sp.get("month"));

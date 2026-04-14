@@ -92,7 +92,7 @@ export async function getPlanningMonthData(year: number, month: number, version:
     supabase
       .from("ecount_inventory_current")
       .select("item_code,qty,box_weight_g,unit_weight_g")
-      .eq("inventory_type", "RAW"),
+      .not("item_code", "is", null),
     supabase.from("profiles").select("id,display_name,login_id").eq("is_active", true),
   ]);
   if (leavesRes.error) throw leavesRes.error;

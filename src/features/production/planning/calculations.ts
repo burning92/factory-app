@@ -123,38 +123,70 @@ function indexBomByProduct(rows: PlanningBomRow[]): Map<string, PlanningBomRow[]
   return map;
 }
 
-function qtyToG(qty: number, boxWeightG: number, unitWeightG: number): number {
-  if (unitWeightG > 0) return qty * unitWeightG;
-  if (boxWeightG > 0) return qty * boxWeightG;
-  return qty;
+function normalizeItemCode(code: string | null | undefined): string {
+  return String(code ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "");
 }
 
-function stockByMaterialG(params: {
+function canonicalMaterialName(name: string): string {
+  const n = String(name ?? "").trim();
+  if (!n) return n;
+  if (n.includes("토마토소스")) return "토마토소스";
+  if (n.includes("베샤멜소스")) return "베샤멜소스";
+  return n;
+}
+
+function stockByMaterialQty(params: {
   materialRows: PlanningMaterialRow[];
   inventoryRows: PlanningInventoryRow[];
-}): Map<string, number> {
+}): {
+  stockByMaterial: Map<string, number>;
+  codeByMaterial: Map<string, Set<string>>;
+  inventoryCodeSet: Set<string>;
+} {
   const { materialRows, inventoryRows } = params;
   const byItemCode = new Map<string, number>();
   for (const inv of inventoryRows) {
-    const current = byItemCode.get(inv.item_code) ?? 0;
-    byItemCode.set(inv.item_code, current + qtyToG(Number(inv.qty) || 0, Number(inv.box_weight_g) || 0, Number(inv.unit_weight_g) || 0));
+    const code = normalizeItemCode(inv.item_code);
+    if (!code) continue;
+    const current = byItemCode.get(code) ?? 0;
+    // 재고현황 페이지의 "재고수량(qty)" 기준을 그대로 사용한다. (이중 환산 금지)
+    byItemCode.set(code, current + (Number(inv.qty) || 0));
   }
   const byMaterial = new Map<string, number>();
+  const codeByMaterial = new Map<string, Set<string>>();
   for (const m of materialRows) {
-    const code = m.inventory_item_code?.trim();
-    if (!code) continue;
-    byMaterial.set(m.material_name, byItemCode.get(code) ?? 0);
+    const materialKey = canonicalMaterialName(m.material_name);
+    if (!materialKey) continue;
+    const code = normalizeItemCode(m.inventory_item_code);
+    if (!code) {
+      if (!codeByMaterial.has(materialKey)) codeByMaterial.set(materialKey, new Set());
+      continue;
+    }
+    const codes = codeByMaterial.get(materialKey) ?? new Set<string>();
+    codes.add(code);
+    codeByMaterial.set(materialKey, codes);
+    byMaterial.set(materialKey, (byMaterial.get(materialKey) ?? 0) + (byItemCode.get(code) ?? 0));
   }
-  return byMaterial;
+  return { stockByMaterial: byMaterial, codeByMaterial, inventoryCodeSet: new Set(byItemCode.keys()) };
 }
 
-function baseProductName(productNameSnapshot: string): string {
+/** 계획 행의 제품명에서 ` - 조건` 앞 베이스명만 추출 (집계·분류 공통) */
+export function baseProductName(productNameSnapshot: string): string {
   const name = productNameSnapshot.trim();
   const idx = name.indexOf(" - ");
   if (idx < 0) return name;
   return name.slice(0, idx).trim();
 }
 
+/**
+ * 월간(또는 기간) 필요 원료 합계.
+ * BOM 매칭 키는 **계획 행의 전체 스냅샷 문자열**(`product_name_snapshot`, 예: `마르게리따 - 일반`)이며
+ * `bom.product_name` 과 정확히 일치해야 한다. 베이스명만으로는 조회하지 않음 → BOM 미연결 시 필요량 0.
+ * 재고는 재고현황과 동일하게 `ecount_inventory_current.qty`를 item_code 기준 합산해 사용한다.
+ */
 export function computeMaterialRequirements(params: {
   entries: PlanningEntryRow[];
   bomRows: PlanningBomRow[];
@@ -171,17 +203,23 @@ export function computeMaterialRequirements(params: {
     if (entry.plan_date < startDate || entry.plan_date > endDate) continue;
     const bomList = bomByProduct.get(entry.product_name_snapshot.trim()) ?? [];
     for (const bom of bomList) {
-      const curr = requiredByMaterial.get(bom.material_name) ?? 0;
-      requiredByMaterial.set(bom.material_name, curr + entry.qty * bom.bom_g_per_ea);
+      const materialKey = canonicalMaterialName(bom.material_name);
+      if (!materialKey) continue;
+      const curr = requiredByMaterial.get(materialKey) ?? 0;
+      requiredByMaterial.set(materialKey, curr + entry.qty * bom.bom_g_per_ea);
     }
   }
 
-  const stockMap = stockByMaterialG({ materialRows, inventoryRows });
-  const allNames = new Set<string>([...Array.from(requiredByMaterial.keys()), ...Array.from(stockMap.keys())]);
+  const { stockByMaterial, codeByMaterial, inventoryCodeSet } = stockByMaterialQty({ materialRows, inventoryRows });
   const rows: MaterialRequirementRow[] = [];
-  for (const materialName of Array.from(allNames)) {
+  for (const materialName of Array.from(requiredByMaterial.keys())) {
     const required = requiredByMaterial.get(materialName) ?? 0;
-    const stock = stockMap.get(materialName) ?? 0;
+    const stock = stockByMaterial.get(materialName) ?? 0;
+    const mappedCodes = codeByMaterial.get(materialName) ?? new Set<string>();
+    let stockStatus: MaterialRequirementRow["stock_status"] = "ok";
+    if (mappedCodes.size === 0) stockStatus = "no_mapping";
+    else if (!Array.from(mappedCodes).some((code) => inventoryCodeSet.has(code))) stockStatus = "no_inventory_match";
+    else if (stock <= 0) stockStatus = "real_zero";
     const shortage = Math.max(0, required - stock);
     rows.push({
       material_name: materialName,
@@ -189,10 +227,11 @@ export function computeMaterialRequirements(params: {
       stock_g: Number(stock.toFixed(2)),
       shortage_g: Number(shortage.toFixed(2)),
       order_required_g: Number(shortage.toFixed(2)),
+      stock_status: stockStatus,
     });
   }
   return rows
-    .filter((r) => r.required_g > 0 || r.stock_g > 0)
+    .filter((r) => r.required_g > 0)
     .sort((a, b) => b.shortage_g - a.shortage_g || b.required_g - a.required_g || a.material_name.localeCompare(b.material_name));
 }
 

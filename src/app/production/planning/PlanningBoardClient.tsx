@@ -1,25 +1,24 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, Save, Copy, Plus, Trash2, Download } from "lucide-react";
+import { CalendarDays, Save, Copy, Plus, Trash2, Download, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   computeActualManpower,
   computeMaterialRequirements,
   computeMonthlySummary,
   computeProcessedRows,
-  getDateRange,
   isKoreanPublicHoliday,
   monthDays,
   weekdayOfFirstDay,
   ymd,
 } from "@/features/production/planning/calculations";
-import type {
-  MaterialRequirementRow,
-  PlanningDayEntryInput,
-  PlanningMonthData,
-  PlanningRangeMode,
-} from "@/features/production/planning/types";
+import { computeMonthlyCategoryTotals } from "@/features/production/planning/computeMonthlyCategoryTotals";
+import { computeMonthlyOperationalMetrics } from "@/features/production/planning/computeMonthlyOperationalMetrics";
+import { computeMonthlyProductTotals } from "@/features/production/planning/computeMonthlyProductTotals";
+import { categoryBadgeClassName, getPlanningEntryToneClass } from "@/features/production/planning/productClassification";
+import { listUnclassifiedProductBases } from "@/features/production/planning/listUnclassifiedProductBases";
+import type { MaterialRequirementRow, PlanningDayEntryInput, PlanningMonthData } from "@/features/production/planning/types";
 import { supabase } from "@/lib/supabase";
 
 type DayDraft = {
@@ -30,9 +29,9 @@ type DayDraft = {
     sort_order: number;
   }>;
   leaves: { leave_type: "annual" | "half"; person_name: string }[];
+  otherItems: { person_name: string; detail: string }[];
   notes: string[];
   noteInput: string;
-  otherCount: number;
 };
 
 const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"] as const;
@@ -70,18 +69,28 @@ function splitForDisplay(full: string): { base: string; kind: string } {
   return { base, kind };
 }
 
-function getPlanEntryClass(name: string): string {
-  const n = name.toLowerCase();
-  if (n.includes("파베이크")) return "bg-sky-500/20 text-sky-100 border border-sky-500/40";
-  if (n.includes("미니") || n.includes("판매용")) return "bg-emerald-500/20 text-emerald-100 border border-emerald-500/40";
-  return "bg-cyan-500/20 text-cyan-100 border border-cyan-500/40";
+const OTHER_NOTE_PREFIX = "[기타]";
+
+function encodeOtherAsNote(detail: string, personName: string): string {
+  return `${OTHER_NOTE_PREFIX}${detail.trim()} : ${personName.trim()}`;
+}
+
+function parseOtherNoteText(noteText: string): { detail: string; person_name: string } | null {
+  const t = noteText.trim();
+  if (!t.startsWith(OTHER_NOTE_PREFIX)) return null;
+  const body = t.slice(OTHER_NOTE_PREFIX.length).trim();
+  const idx = body.lastIndexOf(" : ");
+  if (idx <= 0) return null;
+  const detail = body.slice(0, idx).trim();
+  const person_name = body.slice(idx + 3).trim();
+  if (!detail || !person_name) return null;
+  return { detail, person_name };
 }
 
 export default function PlanningBoardClient() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
-  const [tab, setTab] = useState<"detail" | "materials" | "summary" | "processed">("detail");
   const [data, setData] = useState<PlanningMonthData | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -91,19 +100,21 @@ export default function PlanningBoardClient() {
   const [draft, setDraft] = useState<DayDraft>({
     entries: [],
     leaves: [],
+    otherItems: [],
     notes: [],
     noteInput: "",
-    otherCount: 0,
   });
   const [detailMode, setDetailMode] = useState<"production" | "leave">("production");
   const [originalSerialized, setOriginalSerialized] = useState("");
-  const [rangeMode, setRangeMode] = useState<PlanningRangeMode>("from_selected");
-  const [customStart, setCustomStart] = useState("");
-  const [customEnd, setCustomEnd] = useState("");
-  const [showOnlyShortage, setShowOnlyShortage] = useState(false);
+  /** 날짜 상세 입력은 Drawer에서만 */
+  const [dayDrawerOpen, setDayDrawerOpen] = useState(false);
+  /** G. 필요 원료: 발주 필요량이 있는 행만 */
+  const [materialShortageOnly, setMaterialShortageOnly] = useState(false);
+  const [showNoteInput, setShowNoteInput] = useState(false);
 
-  const { profile } = useAuth();
-  const canEdit = profile?.role === "admin" || profile?.role === "manager";
+  const { profile, loading: authLoading } = useAuth();
+  const canView = profile?.role === "admin" || profile?.role === "manager";
+  const canEdit = canView;
   const yearOptions = useMemo(() => {
     const start = 2026;
     const end = Math.max(2032, now.getFullYear() + 5);
@@ -114,13 +125,33 @@ export default function PlanningBoardClient() {
   const monthOptions = useMemo(() => Array.from({ length: 12 }, (_, i) => i + 1), []);
 
   const loadMonth = useCallback(async () => {
+    if (authLoading) return;
+    if (!canView) {
+      setData(null);
+      setLoading(false);
+      setError("월간 생산계획 보드는 관리자/매니저만 조회할 수 있습니다.");
+      return;
+    }
     setLoading(true);
     setError(null);
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session?.access_token || !session?.refresh_token) {
+      setLoading(false);
+      setError("로그인 세션이 없습니다.");
+      return;
+    }
     const qs = new URLSearchParams({
       year: String(year),
       month: String(month),
     });
-    const res = await fetch(`/api/production/planning/month?${qs.toString()}`);
+    const res = await fetch(`/api/production/planning/month?${qs.toString()}`, {
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        "x-refresh-token": session.refresh_token,
+      },
+    });
     const json = (await res.json()) as { ok?: boolean; data?: PlanningMonthData; error?: string; message?: string };
     setLoading(false);
     if (!res.ok || !json.ok || !json.data) {
@@ -131,11 +162,24 @@ export default function PlanningBoardClient() {
     const start = ymd(year, month, 1);
     const end = ymd(year, month, monthDays(year, month));
     setSelectedDate((prev) => (prev < start || prev > end ? start : prev));
-  }, [month, year]);
+  }, [authLoading, canView, month, year]);
 
   useEffect(() => {
     loadMonth();
   }, [loadMonth]);
+
+  useEffect(() => {
+    setDayDrawerOpen(false);
+  }, [year, month]);
+
+  useEffect(() => {
+    if (!dayDrawerOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDayDrawerOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [dayDrawerOpen]);
 
   const notesByDate = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -163,19 +207,6 @@ export default function PlanningBoardClient() {
     }
     return map;
   }, [data?.entries]);
-
-  const manpowerByDate = useMemo(() => {
-    const map = new Map<string, { annual: number; half: number; other: number; actual: number }>();
-    for (const m of data?.manpower ?? []) {
-      map.set(m.plan_date, {
-        annual: m.annual_leave_count,
-        half: m.half_day_count,
-        other: m.other_count,
-        actual: Number(m.actual_manpower ?? 0),
-      });
-    }
-    return map;
-  }, [data?.manpower]);
 
   const productOptionMap = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -207,8 +238,14 @@ export default function PlanningBoardClient() {
   useEffect(() => {
     if (!data) return;
     const dayEntries = entriesByDate.get(selectedDate) ?? [];
-    const notes = notesByDate.get(selectedDate) ?? [];
-    const mp = manpowerByDate.get(selectedDate) ?? { annual: 0, half: 0, other: 0, actual: 0 };
+    const rawNotes = notesByDate.get(selectedDate) ?? [];
+    const notes: string[] = [];
+    const otherItems: { person_name: string; detail: string }[] = [];
+    for (const note of rawNotes) {
+      const parsed = parseOtherNoteText(note);
+      if (parsed) otherItems.push(parsed);
+      else notes.push(note);
+    }
     const next: DayDraft = {
       entries: dayEntries.map((e, idx) => {
         const { base, kind } = splitProductName(e.product_name_snapshot);
@@ -220,14 +257,15 @@ export default function PlanningBoardClient() {
         };
       }),
       leaves: (leavesByDate.get(selectedDate) ?? []).map((l) => ({ ...l })),
+      otherItems,
       notes: notes.map((n) => String(n)),
       noteInput: "",
-      otherCount: mp.other,
     };
     const serialized = JSON.stringify(next);
     setDraft(next);
     setOriginalSerialized(serialized);
-  }, [data, entriesByDate, leavesByDate, manpowerByDate, notesByDate, selectedDate]);
+    setShowNoteInput(notes.length > 0);
+  }, [data, entriesByDate, leavesByDate, notesByDate, selectedDate]);
 
   const dirty = useMemo(() => JSON.stringify(draft) !== originalSerialized, [draft, originalSerialized]);
 
@@ -256,26 +294,50 @@ export default function PlanningBoardClient() {
     });
   }, [data, month, year]);
 
-  const materialRows = useMemo(() => {
+  /** 월간 보드: 해당 월 전체 기간 필요원료 (기존 computeMaterialRequirements 재사용) */
+  const monthlyMaterialRequirements = useMemo(() => {
     if (!data) return [] as MaterialRequirementRow[];
-    const range = getDateRange({
-      year,
-      month,
-      selectedDate,
-      mode: rangeMode,
-      customStart,
-      customEnd,
-    });
-    const rows = computeMaterialRequirements({
+    const startOfMonth = ymd(year, month, 1);
+    const end = ymd(year, month, monthDays(year, month));
+    const today = new Date();
+    const todayIso = ymd(today.getFullYear(), today.getMonth() + 1, today.getDate());
+    // 현재 월은 오늘 이후 생산분 기준으로만 필요원료를 본다.
+    const start = todayIso > startOfMonth && todayIso <= end ? todayIso : startOfMonth;
+    return computeMaterialRequirements({
       entries: data.entries,
       bomRows: data.bomRows,
       materialRows: data.materialRows,
       inventoryRows: data.inventoryRows,
-      startDate: range.start,
-      endDate: range.end,
+      startDate: start,
+      endDate: end,
     });
-    return showOnlyShortage ? rows.filter((r) => r.shortage_g > 0) : rows;
-  }, [customEnd, customStart, data, month, rangeMode, selectedDate, showOnlyShortage, year]);
+  }, [data, month, year]);
+
+  const displayedMaterialRequirements = useMemo(
+    () =>
+      materialShortageOnly ? monthlyMaterialRequirements.filter((r) => r.order_required_g > 0) : monthlyMaterialRequirements,
+    [materialShortageOnly, monthlyMaterialRequirements]
+  );
+
+  const unclassifiedBases = useMemo(
+    () => (data?.entries ? listUnclassifiedProductBases(data.entries) : []),
+    [data?.entries]
+  );
+
+  const categoryRollup = useMemo(() => (data ? computeMonthlyCategoryTotals(data.entries) : null), [data]);
+
+  const productTotals = useMemo(() => (data ? computeMonthlyProductTotals(data.entries) : []), [data]);
+
+  const operationalMetrics = useMemo(() => {
+    if (!data) return null;
+    return computeMonthlyOperationalMetrics({
+      year,
+      month,
+      entries: data.entries,
+      baselineHeadcount: Number(data.month.baseline_headcount) || 25,
+      totalMembers: data.totalMembers ?? 0,
+    });
+  }, [data, month, year]);
 
   const processedRows = useMemo(() => {
     if (!data) return [];
@@ -300,7 +362,7 @@ export default function PlanningBoardClient() {
     baselineHeadcount,
     annualCount,
     halfCount,
-    draft.otherCount
+    draft.otherItems.filter((x) => x.person_name.trim() && x.detail.trim()).length
   );
 
   const saveDay = async () => {
@@ -327,10 +389,15 @@ export default function PlanningBoardClient() {
       leaves: draft.leaves
         .map((l) => ({ leave_type: l.leave_type, person_name: l.person_name.trim() }))
         .filter((l) => l.person_name.length > 0),
-      notes: draft.notes.map((n) => n.trim()).filter(Boolean),
+      notes: [
+        ...draft.notes.map((n) => n.trim()).filter(Boolean),
+        ...draft.otherItems
+          .filter((x) => x.person_name.trim() && x.detail.trim())
+          .map((x) => encodeOtherAsNote(x.detail, x.person_name)),
+      ],
       annual_leave_count: annualCount,
       half_day_count: halfCount,
-      other_count: Number(draft.otherCount) || 0,
+      other_count: draft.otherItems.filter((x) => x.person_name.trim() && x.detail.trim()).length,
       baseline_headcount: baselineHeadcount,
     };
 
@@ -375,10 +442,15 @@ export default function PlanningBoardClient() {
       leaves: draft.leaves
         .map((l) => ({ leave_type: l.leave_type, person_name: l.person_name.trim() }))
         .filter((l) => l.person_name.length > 0),
-      notes: draft.notes.map((n) => n.trim()).filter(Boolean),
+      notes: [
+        ...draft.notes.map((n) => n.trim()).filter(Boolean),
+        ...draft.otherItems
+          .filter((x) => x.person_name.trim() && x.detail.trim())
+          .map((x) => encodeOtherAsNote(x.detail, x.person_name)),
+      ],
       annual_leave_count: annualCount,
       half_day_count: halfCount,
-      other_count: Number(draft.otherCount) || 0,
+      other_count: draft.otherItems.filter((x) => x.person_name.trim() && x.detail.trim()).length,
       baseline_headcount: baselineHeadcount,
     };
     const {
@@ -495,7 +567,9 @@ export default function PlanningBoardClient() {
                     key={`${dateKey ?? "empty"}-${idx}`}
                     disabled={!dateKey}
                     onClick={() => {
-                      if (dateKey) setSelectedDate(dateKey);
+                      if (!dateKey) return;
+                      setSelectedDate(dateKey);
+                      setDayDrawerOpen(true);
                     }}
                     className={`min-h-[176px] border-r border-b border-slate-700/50 p-2 text-left [&:nth-child(7n)]:border-r-0 ${
                       selected
@@ -531,7 +605,7 @@ export default function PlanningBoardClient() {
                             return (
                               <div
                                 key={`${p.product_name_snapshot}-${i}`}
-                                className={`rounded-md px-1.5 py-1 text-[10px] leading-snug ${getPlanEntryClass(p.product_name_snapshot)}`}
+                                className={`rounded-md px-1.5 py-1 text-[10px] leading-snug ${getPlanningEntryToneClass(p.product_name_snapshot)}`}
                               >
                                 <p className="font-medium break-words whitespace-normal leading-tight">{d.base}</p>
                                 <p className="text-[10px] opacity-90">{d.kind || "기본"}</p>
@@ -542,11 +616,21 @@ export default function PlanningBoardClient() {
                           {extraCount > 0 ? <p className="text-[10px] text-slate-500 px-1">외 {extraCount}개</p> : null}
                         </div>
                         <div className="mt-2 flex flex-wrap gap-1 text-[10px]">
-                          {(dateKey ? notesByDate.get(dateKey) ?? [] : []).map((note, ni) => (
-                            <span key={`${dateKey}-note-${ni}`} className="px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-100">
-                              비고: {note}
-                            </span>
-                          ))}
+                          {(dateKey ? notesByDate.get(dateKey) ?? [] : []).map((note, ni) => {
+                            const otherParsed = parseOtherNoteText(note);
+                            if (otherParsed) {
+                              return (
+                                <span key={`${dateKey}-other-${ni}`} className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-100">
+                                  {otherParsed.detail} : {otherParsed.person_name}
+                                </span>
+                              );
+                            }
+                            return (
+                              <span key={`${dateKey}-note-${ni}`} className="px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-100">
+                                비고: {note}
+                              </span>
+                            );
+                          })}
                           {dayLeaves.map((leave, li) => (
                             <span
                               key={`${dateKey}-leave-${li}-${leave.person_name}`}
@@ -568,457 +652,699 @@ export default function PlanningBoardClient() {
             </div>
           </section>
 
-          <aside className="rounded-xl border border-slate-700 bg-space-800/60 p-3 space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-100">{selectedDate}</h2>
-              {dirty ? <span className="text-[11px] text-amber-300">저장 안됨</span> : <span className="text-[11px] text-slate-500">저장됨</span>}
+          <aside className="flex min-h-0 flex-col rounded-xl border border-slate-700 bg-space-800/60 overflow-hidden">
+            <div className="shrink-0 border-b border-slate-700/80 bg-space-900/50 px-4 py-3">
+              <h2 className="text-sm font-semibold text-cyan-200/90">월간 운영 보드</h2>
+              <p className="text-[11px] text-slate-500 mt-0.5">{formatMonthTitle(year, month)} · 달력에서 날짜를 누르면 상세 입력이 열립니다</p>
             </div>
-
-            <div className="flex flex-wrap gap-1 text-xs">
-              <button onClick={() => setTab("detail")} className={`px-2 py-1 rounded ${tab === "detail" ? "bg-cyan-600 text-white" : "bg-slate-700 text-slate-200"}`}>
-                날짜 상세
-              </button>
-              <button onClick={() => setTab("materials")} className={`px-2 py-1 rounded ${tab === "materials" ? "bg-cyan-600 text-white" : "bg-slate-700 text-slate-200"}`}>
-                필요 원료
-              </button>
-              <button onClick={() => setTab("summary")} className={`px-2 py-1 rounded ${tab === "summary" ? "bg-cyan-600 text-white" : "bg-slate-700 text-slate-200"}`}>
-                월 요약
-              </button>
-              <button onClick={() => setTab("processed")} className={`px-2 py-1 rounded ${tab === "processed" ? "bg-cyan-600 text-white" : "bg-slate-700 text-slate-200"}`}>
-                가공 데이터
-              </button>
-            </div>
-
-            {tab === "detail" ? (
-              <div className="space-y-3">
-                <div className="flex gap-1 text-xs">
-                  <button
-                    onClick={() => setDetailMode("production")}
-                    className={`px-2 py-1 rounded ${detailMode === "production" ? "bg-cyan-600 text-white" : "bg-slate-700 text-slate-200"}`}
-                  >
-                    생산계획
-                  </button>
-                  <button
-                    onClick={() => setDetailMode("leave")}
-                    className={`px-2 py-1 rounded ${detailMode === "leave" ? "bg-violet-600 text-white" : "bg-slate-700 text-slate-200"}`}
-                  >
-                    연월차
-                  </button>
-                </div>
-
-                {detailMode === "production" ? (
-                  <>
-                <div className="flex items-center justify-between">
-                  <p className="text-xs text-slate-400">제품별 생산계획</p>
-                  {canEdit ? (
-                    <button className="inline-flex items-center gap-1 text-xs text-cyan-300 hover:text-cyan-200" onClick={addEntryRow}>
-                      <Plus className="w-3 h-3" /> 제품 추가
-                    </button>
-                  ) : null}
-                </div>
-                <div className="space-y-2 max-h-[240px] overflow-y-auto">
-                  {draft.entries.map((entry, idx) => (
-                    <div key={`entry-${idx}`} className="grid grid-cols-[1fr_132px_84px_20px] gap-1 items-center">
-                      <select
-                        value={entry.productBase}
-                        onChange={(e) =>
-                          setDraft((prev) => {
-                            const next = prev.entries.slice();
-                            const nextBase = e.target.value;
-                            const nextKind = productOptionMap.get(nextBase)?.[0] ?? "";
-                            next[idx] = { ...next[idx], productBase: nextBase, productKind: nextKind };
-                            return { ...prev, entries: next };
-                          })
-                        }
-                        disabled={!canEdit}
-                        className="px-2 py-1.5 rounded border border-slate-600 bg-space-900 text-xs text-slate-100"
-                      >
-                        <option value="">제품명</option>
-                        {baseProductOptions.map((base) => (
-                          <option key={base} value={base}>
-                            {base}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        value={entry.productKind}
-                        onChange={(e) =>
-                          setDraft((prev) => {
-                            const next = prev.entries.slice();
-                            next[idx] = { ...next[idx], productKind: e.target.value };
-                            return { ...prev, entries: next };
-                          })
-                        }
-                        disabled={!canEdit}
-                        className="px-2 py-1.5 rounded border border-slate-600 bg-space-900 text-xs text-slate-100"
-                      >
-                        <option value="">조건</option>
-                        {(productOptionMap.get(entry.productBase) ?? []).map((kind) => (
-                          <option key={`${entry.productBase}-${kind}`} value={kind}>
-                            {kind}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={entry.qtyText}
-                        onFocus={(e) => {
-                          if (e.currentTarget.value === "0") {
-                            setDraft((prev) => {
-                              const next = prev.entries.slice();
-                              next[idx] = { ...next[idx], qtyText: "" };
-                              return { ...prev, entries: next };
-                            });
-                          }
-                          e.currentTarget.select();
-                        }}
-                        onChange={(e) =>
-                          setDraft((prev) => {
-                            const next = prev.entries.slice();
-                            const raw = e.target.value.replace(/[^0-9.]/g, "");
-                            next[idx] = { ...next[idx], qtyText: raw };
-                            return { ...prev, entries: next };
-                          })
-                        }
-                        onBlur={() =>
-                          setDraft((prev) => {
-                            const next = prev.entries.slice();
-                            const n = toNumber(next[idx].qtyText);
-                            next[idx] = { ...next[idx], qtyText: n > 0 ? n.toLocaleString("ko-KR") : "0" };
-                            return { ...prev, entries: next };
-                          })
-                        }
-                        disabled={!canEdit}
-                        className="px-2 py-1.5 rounded border border-slate-600 bg-space-900 text-xs text-slate-100 text-right"
-                        placeholder="수량"
-                      />
-                      {canEdit ? (
-                        <button
-                          onClick={() =>
-                            setDraft((prev) => ({ ...prev, entries: prev.entries.filter((_, i) => i !== idx).map((x, i) => ({ ...x, sort_order: i })) }))
-                          }
-                          className="text-rose-400 hover:text-rose-300"
-                          title="행 삭제"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      ) : null}
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 space-y-5">
+              {operationalMetrics && categoryRollup && monthSummary ? (
+                <>
+                  <section className="space-y-2">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">A. 월 요약</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-lg border border-slate-600/80 bg-space-900/55 p-3">
+                        <p className="text-[10px] text-slate-500">총원(기준)</p>
+                        <p className="text-xl font-semibold tabular-nums text-slate-100">{operationalMetrics.baselineHeadcount.toLocaleString("ko-KR")}</p>
+                        <p className="text-[10px] text-slate-500 mt-1">활성 프로필 {operationalMetrics.totalMembers}명 (참고)</p>
+                      </div>
+                      <div className="rounded-lg border border-slate-600/80 bg-space-900/55 p-3">
+                        <p className="text-[10px] text-slate-500">총 가동일</p>
+                        <p className="text-xl font-semibold tabular-nums text-slate-100">{operationalMetrics.plannedOperationDayCount}</p>
+                        <p className="text-[10px] text-slate-500 mt-1">생산 수량이 1건 이상인 날짜 수</p>
+                      </div>
+                      <div className="rounded-lg border border-slate-600/80 bg-space-900/55 p-3 col-span-2">
+                        <p className="text-[10px] text-slate-500">주말 근무(토·일)</p>
+                        <p className="text-xl font-semibold tabular-nums text-sky-200/90">{operationalMetrics.weekendPlannedDayCount}회</p>
+                        <p className="text-[10px] text-amber-200/70 mt-1">
+                          TODO: 토·일 중 생산 계획이 있는 날만 집계. 휴무·연차만 있는 주말은 제외하지 않음.
+                        </p>
+                      </div>
                     </div>
-                  ))}
-                </div>
-                  </>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs text-slate-400">연차/반차 인원</p>
-                      {canEdit ? (
-                        <div className="flex gap-1">
-                          <button
-                            className="inline-flex items-center gap-1 text-xs text-violet-300 hover:text-violet-200"
-                            onClick={() =>
-                              setDraft((prev) => ({
-                                ...prev,
-                                leaves: [...prev.leaves, { leave_type: "annual", person_name: "" }],
-                              }))
-                            }
-                          >
-                            <Plus className="w-3 h-3" /> 연차인원추가
-                          </button>
-                          <button
-                            className="inline-flex items-center gap-1 text-xs text-violet-300 hover:text-violet-200"
-                            onClick={() =>
-                              setDraft((prev) => ({
-                                ...prev,
-                                leaves: [...prev.leaves, { leave_type: "half", person_name: "" }],
-                              }))
-                            }
-                          >
-                            <Plus className="w-3 h-3" /> 반차인원추가
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-                    <div className="space-y-1.5 max-h-[220px] overflow-y-auto">
-                      {draft.leaves.map((leave, idx) => (
-                        <div key={`leave-${idx}`} className="grid grid-cols-[72px_1fr_20px] gap-1 items-center">
-                          <select
-                            value={leave.leave_type}
-                            disabled={!canEdit}
-                            onChange={(e) =>
-                              setDraft((prev) => {
-                                const next = prev.leaves.slice();
-                                next[idx] = { ...next[idx], leave_type: e.target.value === "half" ? "half" : "annual" };
-                                return { ...prev, leaves: next };
-                              })
-                            }
-                            className="px-1 py-1 rounded border border-slate-600 bg-space-900 text-xs text-slate-100"
-                          >
-                            <option value="annual">연차</option>
-                            <option value="half">반차</option>
-                          </select>
-                          <input
-                            list="planning-people"
-                            value={leave.person_name}
-                            disabled={!canEdit}
-                            onChange={(e) =>
-                              setDraft((prev) => {
-                                const next = prev.leaves.slice();
-                                next[idx] = { ...next[idx], person_name: e.target.value };
-                                return { ...prev, leaves: next };
-                              })
-                            }
-                            className="px-2 py-1 rounded border border-slate-600 bg-space-900 text-xs text-slate-100"
-                            placeholder="이름 선택/입력"
-                          />
-                          {canEdit ? (
-                            <button
-                              className="text-rose-400 hover:text-rose-300"
-                              onClick={() => setDraft((prev) => ({ ...prev, leaves: prev.leaves.filter((_, i) => i !== idx) }))}
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          ) : null}
-                        </div>
-                      ))}
-                    </div>
-                    <datalist id="planning-people">
-                      {data.people.map((p) => (
-                        <option key={p.id} value={p.name} />
-                      ))}
-                    </datalist>
-                  </div>
-                )}
+                    <p className="text-[10px] text-slate-500">
+                      부족 원료 종류: <span className="text-amber-300/90 tabular-nums">{monthSummary.shortageMaterialsCount}</span>
+                    </p>
+                  </section>
 
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs text-slate-400">비고</label>
-                    {canEdit ? (
-                      <button
-                        className="inline-flex items-center gap-1 text-xs text-yellow-300 hover:text-yellow-200"
-                        onClick={() =>
-                          setDraft((prev) => {
-                            const text = prev.noteInput.trim();
-                            if (!text) return prev;
-                            return { ...prev, notes: [...prev.notes, text], noteInput: "" };
-                          })
-                        }
-                      >
-                        <Plus className="w-3 h-3" /> 비고추가
-                      </button>
+                  <section className="space-y-2">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">B. 전체 생산 합계</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-lg border border-cyan-500/25 bg-cyan-950/20 p-3">
+                        <p className="text-[10px] text-slate-500">피자</p>
+                        <p className="text-lg font-semibold tabular-nums text-cyan-100">{categoryRollup.pizzaQty.toLocaleString("ko-KR")}</p>
+                      </div>
+                      <div className="rounded-lg border border-violet-500/25 bg-violet-950/15 p-3">
+                        <p className="text-[10px] text-slate-500">파베이크</p>
+                        <p className="text-lg font-semibold tabular-nums text-violet-100">{categoryRollup.parbakeTotal.toLocaleString("ko-KR")}</p>
+                      </div>
+                      <div className="rounded-lg border border-amber-500/25 bg-amber-950/15 p-3">
+                        <p className="text-[10px] text-slate-500">브레드</p>
+                        <p className="text-lg font-semibold tabular-nums text-amber-100">{categoryRollup.breadQty.toLocaleString("ko-KR")}</p>
+                      </div>
+                      <div className="rounded-lg border border-slate-500/30 bg-space-900/70 p-3">
+                        <p className="text-[10px] text-slate-500">총 수량</p>
+                        <p className="text-lg font-semibold tabular-nums text-white">{categoryRollup.totalQty.toLocaleString("ko-KR")}</p>
+                      </div>
+                    </div>
+                    {categoryRollup.unclassifiedQty > 0 ? (
+                      <div className="rounded-lg border border-rose-500/30 bg-rose-950/20 px-3 py-2 space-y-1.5">
+                        <p className="text-[11px] text-rose-100/90">
+                          미분류 합계{" "}
+                          <span className="tabular-nums font-medium">{categoryRollup.unclassifiedQty.toLocaleString("ko-KR")}</span>
+                          <span className="text-rose-200/70">
+                            {" "}
+                            · 아래 베이스명을 <code className="text-rose-100/90">productClassification.ts</code>에 추가하면 월 요약에 반영됩니다.
+                          </span>
+                        </p>
+                        {unclassifiedBases.length > 0 ? (
+                          <ul className="text-[10px] text-rose-100/80 space-y-0.5 max-h-[120px] overflow-y-auto">
+                            {unclassifiedBases.map((u) => (
+                              <li key={u.base} className="flex justify-between gap-2 border-b border-rose-500/10 pb-0.5 last:border-0">
+                                <span className="break-words min-w-0">{u.base}</span>
+                                <span className="tabular-nums shrink-0 text-rose-200">{u.monthQty.toLocaleString("ko-KR")}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </div>
                     ) : null}
+                  </section>
+
+                  <section className="space-y-2">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">C. 피자 세부 합계</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-lg border border-slate-600/80 bg-space-900/50 p-2.5">
+                        <p className="text-[10px] text-slate-500">라이트</p>
+                        <p className="text-base font-semibold tabular-nums text-slate-100">{categoryRollup.pizzaLight.toLocaleString("ko-KR")}</p>
+                      </div>
+                      <div className="rounded-lg border border-slate-600/80 bg-space-900/50 p-2.5">
+                        <p className="text-[10px] text-slate-500">헤비</p>
+                        <p className="text-base font-semibold tabular-nums text-slate-100">{categoryRollup.pizzaHeavy.toLocaleString("ko-KR")}</p>
+                      </div>
+                      <div className="rounded-lg border border-slate-600/80 bg-space-900/50 p-2.5">
+                        <p className="text-[10px] text-slate-500">미니</p>
+                        <p className="text-base font-semibold tabular-nums text-slate-100">{categoryRollup.pizzaMini.toLocaleString("ko-KR")}</p>
+                      </div>
+                      <div className="rounded-lg border border-cyan-500/30 bg-cyan-950/25 p-2.5">
+                        <p className="text-[10px] text-slate-500">피자 계</p>
+                        <p className="text-base font-semibold tabular-nums text-cyan-100">{categoryRollup.pizzaSum.toLocaleString("ko-KR")}</p>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="space-y-2">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">D. 브레드 합계</h3>
+                    <div className="rounded-lg border border-amber-500/25 bg-amber-950/15 px-4 py-3">
+                      <p className="text-2xl font-semibold tabular-nums text-amber-100">{categoryRollup.breadQty.toLocaleString("ko-KR")}</p>
+                    </div>
+                  </section>
+
+                  <section className="space-y-2">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">E. 파베이크 합계</h3>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <div className="rounded-lg border border-sky-500/25 bg-sky-950/20 p-3">
+                        <p className="text-[10px] text-slate-500">보관용(우주인)</p>
+                        <p className="text-lg font-semibold tabular-nums text-sky-100">{categoryRollup.parbakeStorageQty.toLocaleString("ko-KR")}</p>
+                      </div>
+                      <div className="rounded-lg border border-emerald-500/25 bg-emerald-950/15 p-3">
+                        <p className="text-[10px] text-slate-500">판매용(선인)</p>
+                        <p className="text-lg font-semibold tabular-nums text-emerald-100">{categoryRollup.parbakeSaleQty.toLocaleString("ko-KR")}</p>
+                      </div>
+                      <div className="rounded-lg border border-violet-500/30 bg-violet-950/20 p-3 sm:col-span-1">
+                        <p className="text-[10px] text-slate-500">파베이크 계</p>
+                        <p className="text-lg font-semibold tabular-nums text-violet-100">{categoryRollup.parbakeTotal.toLocaleString("ko-KR")}</p>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="space-y-2">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">F. 제품별 월 생산 예정</h3>
+                    <div className="max-h-[220px] overflow-y-auto rounded-lg border border-slate-700">
+                      <table className="w-full text-[11px]">
+                        <thead className="sticky top-0 bg-space-900/95 text-slate-400 border-b border-slate-700">
+                          <tr>
+                            <th className="p-2 text-left font-medium">제품</th>
+                            <th className="p-2 text-left font-medium">구분</th>
+                            <th className="p-2 text-right font-medium">월 합계</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {productTotals.map((row) => (
+                            <tr key={row.productBase} className="border-t border-slate-800/90 text-slate-300">
+                              <td className="p-2 align-top">{row.displayName}</td>
+                              <td className="p-2 align-top">
+                                <span
+                                  className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-medium ${categoryBadgeClassName(row.classification)}`}
+                                >
+                                  {row.badgeLabel}
+                                </span>
+                              </td>
+                              <td className="p-2 text-right tabular-nums font-medium text-slate-100">{row.monthQty.toLocaleString("ko-KR")}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+
+                  <section className="space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">G. 필요 원료 / 재고 / 발주</h3>
+                      <label className="inline-flex cursor-pointer items-center gap-2 text-[11px] text-slate-400">
+                        <input
+                          type="checkbox"
+                          checked={materialShortageOnly}
+                          onChange={(e) => setMaterialShortageOnly(e.target.checked)}
+                          className="rounded border-slate-600 bg-space-800 text-cyan-500 focus:ring-cyan-500/40"
+                        />
+                        부족만 보기
+                      </label>
+                    </div>
+                    <p className="text-[10px] text-slate-500">
+                      해당 월 기준(현재 월은 오늘 이후) · 필요량 단위 g / 재고수량은 재고현황 qty 기준
+                    </p>
+                    <div className="max-h-[280px] overflow-y-auto rounded-lg border border-slate-700">
+                      <table className="w-full text-[11px]">
+                        <thead className="sticky top-0 z-[1] bg-space-900/95 text-slate-400 border-b border-slate-700">
+                          <tr>
+                            <th className="p-2 text-left font-medium">필요원료명</th>
+                            <th className="p-2 text-right font-medium">총 필요량</th>
+                            <th className="p-2 text-right font-medium">이카운트 재고</th>
+                            <th className="p-2 text-right font-medium">발주 필요</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {displayedMaterialRequirements.map((r) => (
+                            <tr key={r.material_name} className="border-t border-slate-800 text-slate-300">
+                              <td className="p-2 text-left">{r.material_name}</td>
+                              <td className="p-2 text-right tabular-nums text-slate-200">{r.required_g.toLocaleString("ko-KR")}</td>
+                              <td className="p-2 text-right tabular-nums text-slate-400">{r.stock_g.toLocaleString("ko-KR")}</td>
+                              <td
+                                className={`p-2 text-right tabular-nums font-medium ${
+                                  r.order_required_g > 0 ? "text-amber-300 bg-amber-500/10" : "text-slate-500"
+                                }`}
+                              >
+                                {r.order_required_g.toLocaleString("ko-KR")}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {materialShortageOnly && displayedMaterialRequirements.length === 0 ? (
+                        <p className="p-3 text-center text-[11px] text-slate-500">발주 필요량이 0보다 큰 원료가 없습니다.</p>
+                      ) : null}
+                    </div>
+                  </section>
+
+                  <section className="space-y-2 border-t border-slate-700/80 pt-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-semibold text-slate-400">가공 데이터 (가공 시트 연동 행)</h3>
+                      <button
+                        type="button"
+                        onClick={downloadProcessedCsv}
+                        className="inline-flex items-center gap-1 text-xs text-cyan-300 hover:text-cyan-200"
+                      >
+                        <Download className="w-3 h-3" /> CSV
+                      </button>
+                    </div>
+                    <div className="max-h-[200px] overflow-y-auto rounded-lg border border-slate-700/80">
+                      <table className="w-full text-[11px]">
+                        <thead className="sticky top-0 bg-space-900/95 text-slate-500">
+                          <tr>
+                            <th className="p-1.5 text-left">날짜</th>
+                            <th className="p-1.5 text-left">제품명</th>
+                            <th className="p-1.5 text-right">수량</th>
+                            <th className="p-1.5 text-right">투입</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {processedRows.slice(0, 80).map((r, idx) => (
+                            <tr key={`${r.plan_date}-${r.product_name}-${idx}`} className="border-t border-slate-800/80 text-slate-400">
+                              <td className="p-1.5">{r.plan_date}</td>
+                              <td className="p-1.5">{r.product_name}</td>
+                              <td className="p-1.5 text-right tabular-nums">{r.qty.toLocaleString("ko-KR")}</td>
+                              <td className="p-1.5 text-right tabular-nums">{r.manpower.toLocaleString("ko-KR")}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {processedRows.length > 80 ? (
+                        <p className="p-2 text-[10px] text-slate-500 text-center">… 외 {processedRows.length - 80}행 · 전체는 CSV</p>
+                      ) : null}
+                    </div>
+                  </section>
+                </>
+              ) : null}
+            </div>
+          </aside>
+
+          {dayDrawerOpen && data ? (
+            <>
+              <button
+                type="button"
+                aria-label="닫기"
+                className="fixed inset-0 z-[300] bg-black/55"
+                onClick={() => setDayDrawerOpen(false)}
+              />
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="planning-day-drawer-title"
+                className="fixed inset-y-0 right-0 z-[310] flex h-[100dvh] max-h-[100dvh] w-full min-w-0 max-w-[min(100vw,28rem)] flex-col border-l border-slate-600 bg-space-900 shadow-2xl shadow-black/50"
+              >
+                <div className="sticky top-0 z-[1] flex shrink-0 items-center justify-between gap-2 border-b border-slate-700 bg-space-900/95 px-4 py-3 backdrop-blur-sm">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-slate-500">날짜 상세</p>
+                    <p id="planning-day-drawer-title" className="text-lg font-semibold text-cyan-100">
+                      {selectedDate}
+                    </p>
                   </div>
-                  <div className="space-y-1 max-h-[120px] overflow-y-auto">
-                    {draft.notes.map((note, idx) => (
-                      <div key={`note-${idx}`} className="grid grid-cols-[1fr_20px] gap-1 items-center">
-                        <div className="px-2 py-1 rounded border border-slate-700 bg-space-900/50 text-xs text-yellow-100">{note}</div>
+                  <div className="flex items-center gap-2">
+                    {dirty ? <span className="text-[11px] text-amber-300">저장 안됨</span> : <span className="text-[11px] text-slate-500">저장됨</span>}
+                    <button
+                      type="button"
+                      onClick={() => setDayDrawerOpen(false)}
+                      className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-4 pb-2">
+                  <div className="flex gap-1 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setDetailMode("production")}
+                      className={`flex-1 rounded px-2 py-2 ${detailMode === "production" ? "bg-cyan-600 text-white" : "bg-slate-700 text-slate-200"}`}
+                    >
+                      생산계획
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDetailMode("leave")}
+                      className={`flex-1 rounded px-2 py-2 ${detailMode === "leave" ? "bg-violet-600 text-white" : "bg-slate-700 text-slate-200"}`}
+                    >
+                      연월차
+                    </button>
+                  </div>
+
+                  {detailMode === "production" ? (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-slate-400">제품별 생산계획</p>
                         {canEdit ? (
-                          <button
-                            className="text-rose-400 hover:text-rose-300"
-                            onClick={() => setDraft((prev) => ({ ...prev, notes: prev.notes.filter((_, i) => i !== idx) }))}
-                          >
-                            <Trash2 className="w-3 h-3" />
+                          <button type="button" className="inline-flex items-center gap-1 text-xs text-cyan-300 hover:text-cyan-200" onClick={addEntryRow}>
+                            <Plus className="w-3 h-3" /> 제품 추가
                           </button>
                         ) : null}
                       </div>
-                    ))}
-                  </div>
-                  <input
-                    value={draft.noteInput}
-                    onChange={(e) => setDraft((prev) => ({ ...prev, noteInput: e.target.value }))}
-                    disabled={!canEdit}
-                    placeholder="비고 입력 후 비고추가"
-                    className="w-full px-2 py-1.5 rounded border border-slate-600 bg-space-900 text-xs text-slate-100"
-                  />
-                </div>
+                      <div className="grid grid-cols-[minmax(0,1fr)_110px_76px_28px] items-center gap-1.5 px-1 text-[10px] font-medium text-slate-500">
+                        <span>제품명</span>
+                        <span>조건</span>
+                        <span className="text-right">수량</span>
+                        <span />
+                      </div>
+                      <div className="space-y-2 max-h-[min(40vh,320px)] overflow-y-auto pr-1">
+                        {draft.entries.map((entry, idx) => (
+                          <div key={`entry-${idx}`} className="grid grid-cols-[minmax(0,1fr)_110px_76px_28px] gap-1.5 items-center">
+                            <select
+                              value={entry.productBase}
+                              onChange={(e) =>
+                                setDraft((prev) => {
+                                  const next = prev.entries.slice();
+                                  const nextBase = e.target.value;
+                                  const nextKind = productOptionMap.get(nextBase)?.[0] ?? "";
+                                  next[idx] = { ...next[idx], productBase: nextBase, productKind: nextKind };
+                                  return { ...prev, entries: next };
+                                })
+                              }
+                              disabled={!canEdit}
+                              className="min-w-0 px-2 py-2 rounded-lg border border-slate-600 bg-space-800 text-xs text-slate-100"
+                            >
+                              <option value="">제품명</option>
+                              {baseProductOptions.map((base) => (
+                                <option key={base} value={base}>
+                                  {base}
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              value={entry.productKind}
+                              onChange={(e) =>
+                                setDraft((prev) => {
+                                  const next = prev.entries.slice();
+                                  next[idx] = { ...next[idx], productKind: e.target.value };
+                                  return { ...prev, entries: next };
+                                })
+                              }
+                              disabled={!canEdit}
+                              className="min-w-0 px-2 py-2 rounded-lg border border-slate-600 bg-space-800 text-xs text-slate-100"
+                            >
+                              <option value="">조건</option>
+                              {(productOptionMap.get(entry.productBase) ?? []).map((kind) => (
+                                <option key={`${entry.productBase}-${kind}`} value={kind}>
+                                  {kind}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={entry.qtyText}
+                              onFocus={(e) => {
+                                if (e.currentTarget.value === "0") {
+                                  setDraft((prev) => {
+                                    const next = prev.entries.slice();
+                                    next[idx] = { ...next[idx], qtyText: "" };
+                                    return { ...prev, entries: next };
+                                  });
+                                }
+                                e.currentTarget.select();
+                              }}
+                              onChange={(e) =>
+                                setDraft((prev) => {
+                                  const next = prev.entries.slice();
+                                  const raw = e.target.value.replace(/[^0-9.]/g, "");
+                                  next[idx] = { ...next[idx], qtyText: raw };
+                                  return { ...prev, entries: next };
+                                })
+                              }
+                              onBlur={() =>
+                                setDraft((prev) => {
+                                  const next = prev.entries.slice();
+                                  const n = toNumber(next[idx].qtyText);
+                                  next[idx] = { ...next[idx], qtyText: n > 0 ? n.toLocaleString("ko-KR") : "0" };
+                                  return { ...prev, entries: next };
+                                })
+                              }
+                              disabled={!canEdit}
+                              className="min-w-0 px-2 py-2 rounded-lg border border-slate-600 bg-space-800 text-xs text-slate-100 text-right"
+                              placeholder="수량"
+                            />
+                            {canEdit ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setDraft((prev) => ({
+                                    ...prev,
+                                    entries: prev.entries.filter((_, i) => i !== idx).map((x, i) => ({ ...x, sort_order: i })),
+                                  }))
+                                }
+                                className="text-rose-400 hover:text-rose-300"
+                                title="행 삭제"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            ) : (
+                              <span />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-slate-400">연차/반차/기타 인원</p>
+                        {canEdit ? (
+                          <div className="flex gap-1">
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 text-xs text-violet-300 hover:text-violet-200"
+                              onClick={() =>
+                                setDraft((prev) => ({
+                                  ...prev,
+                                  leaves: [...prev.leaves, { leave_type: "annual", person_name: "" }],
+                                }))
+                              }
+                            >
+                              <Plus className="w-3 h-3" /> 연차
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 text-xs text-violet-300 hover:text-violet-200"
+                              onClick={() =>
+                                setDraft((prev) => ({
+                                  ...prev,
+                                  leaves: [...prev.leaves, { leave_type: "half", person_name: "" }],
+                                }))
+                              }
+                            >
+                              <Plus className="w-3 h-3" /> 반차
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 text-xs text-amber-300 hover:text-amber-200"
+                              onClick={() =>
+                                setDraft((prev) => ({
+                                  ...prev,
+                                  otherItems: [...prev.otherItems, { person_name: "", detail: "" }],
+                                }))
+                              }
+                            >
+                              <Plus className="w-3 h-3" /> 기타
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="space-y-1.5 max-h-[min(32vh,260px)] overflow-y-auto">
+                        {draft.leaves.map((leave, idx) => (
+                          <div key={`leave-${idx}`} className="grid grid-cols-[72px_1fr_28px] gap-1.5 items-center">
+                            <select
+                              value={leave.leave_type}
+                              disabled={!canEdit}
+                              onChange={(e) =>
+                                setDraft((prev) => {
+                                  const next = prev.leaves.slice();
+                                  next[idx] = { ...next[idx], leave_type: e.target.value === "half" ? "half" : "annual" };
+                                  return { ...prev, leaves: next };
+                                })
+                              }
+                              className="px-1 py-2 rounded-lg border border-slate-600 bg-space-800 text-xs text-slate-100"
+                            >
+                              <option value="annual">연차</option>
+                              <option value="half">반차</option>
+                            </select>
+                            <input
+                              list="planning-people-drawer"
+                              value={leave.person_name}
+                              disabled={!canEdit}
+                              onChange={(e) =>
+                                setDraft((prev) => {
+                                  const next = prev.leaves.slice();
+                                  next[idx] = { ...next[idx], person_name: e.target.value };
+                                  return { ...prev, leaves: next };
+                                })
+                              }
+                              className="px-2 py-2 rounded-lg border border-slate-600 bg-space-800 text-xs text-slate-100"
+                              placeholder="이름"
+                            />
+                            {canEdit ? (
+                              <button
+                                type="button"
+                                className="text-rose-400 hover:text-rose-300"
+                                onClick={() => setDraft((prev) => ({ ...prev, leaves: prev.leaves.filter((_, i) => i !== idx) }))}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                      <datalist id="planning-people-drawer">
+                        {data.people.map((p) => (
+                          <option key={p.id} value={p.name} />
+                        ))}
+                      </datalist>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[10px] text-slate-500">기타</label>
-                    <input
-                      type="number"
-                      value={draft.otherCount}
-                      onChange={(e) => setDraft((prev) => ({ ...prev, otherCount: toNumber(e.target.value) }))}
-                      disabled={!canEdit}
-                      className="mt-0.5 w-full px-2 py-1 rounded border border-slate-600 bg-space-900 text-xs text-slate-100"
-                    />
-                  </div>
-                </div>
+                      <div className="space-y-1.5">
+                        <p className="text-[11px] text-slate-500">기타(내용 : 이름)</p>
+                        {draft.otherItems.map((item, idx) => (
+                          <div key={`other-${idx}`} className="grid grid-cols-[1fr_1fr_28px] gap-1.5 items-center">
+                            <input
+                              value={item.detail}
+                              disabled={!canEdit}
+                              onChange={(e) =>
+                                setDraft((prev) => {
+                                  const next = prev.otherItems.slice();
+                                  next[idx] = { ...next[idx], detail: e.target.value };
+                                  return { ...prev, otherItems: next };
+                                })
+                              }
+                              className="px-2 py-2 rounded-lg border border-slate-600 bg-space-800 text-xs text-slate-100"
+                              placeholder="내용(예: 외근)"
+                            />
+                            <input
+                              list="planning-people-drawer"
+                              value={item.person_name}
+                              disabled={!canEdit}
+                              onChange={(e) =>
+                                setDraft((prev) => {
+                                  const next = prev.otherItems.slice();
+                                  next[idx] = { ...next[idx], person_name: e.target.value };
+                                  return { ...prev, otherItems: next };
+                                })
+                              }
+                              className="px-2 py-2 rounded-lg border border-slate-600 bg-space-800 text-xs text-slate-100"
+                              placeholder="이름"
+                            />
+                            {canEdit ? (
+                              <button
+                                type="button"
+                                className="text-rose-400 hover:text-rose-300"
+                                onClick={() =>
+                                  setDraft((prev) => ({ ...prev, otherItems: prev.otherItems.filter((_, i) => i !== idx) }))
+                                }
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            ) : (
+                              <span />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-                <div className="rounded-lg border border-slate-700 bg-space-900/40 p-2 text-xs space-y-1">
-                  <p className="text-slate-400">
-                    총 생산량 <span className="text-slate-200 tabular-nums">{selectedDayTotal.toLocaleString("ko-KR")}</span>
-                  </p>
-                  <p className="text-slate-400">
-                    실투입인원(자동){" "}
-                    <span className="text-cyan-200 tabular-nums">
-                      {selectedActualManpower.toLocaleString("ko-KR")}
-                    </span>
-                    <span className="text-slate-500"> (기준 인원 {baselineHeadcount})</span>
-                  </p>
-                  <p className="text-slate-500">연차 {annualCount}명 · 반차 {halfCount}명</p>
-                </div>
-                <div className="rounded-lg border border-slate-700 bg-space-900/40 p-2 text-xs">
-                  <p className="text-slate-400 mb-1">당일 표시 미리보기</p>
-                  <div className="space-y-1">
-                    {draft.entries
-                      .filter((e) => e.productBase.trim() && toNumber(e.qtyText) > 0)
-                      .slice(0, 3)
-                      .map((e, i) => (
-                        <p key={`preview-entry-${i}`} className="text-slate-200 truncate">
-                          {composeProductName(e.productBase, e.productKind)} · {toNumber(e.qtyText).toLocaleString("ko-KR")}
+                  {detailMode === "production" ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs text-slate-400">비고</label>
+                        {canEdit ? (
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 text-xs text-yellow-300 hover:text-yellow-200"
+                            onClick={() => setShowNoteInput((prev) => !prev)}
+                          >
+                            <Plus className="w-3 h-3" /> 비고추가
+                          </button>
+                        ) : null}
+                      </div>
+                      <div className="space-y-1 max-h-[100px] overflow-y-auto">
+                        {draft.notes.map((note, idx) => (
+                          <div key={`note-${idx}`} className="grid grid-cols-[1fr_28px] gap-1 items-center">
+                            <div className="px-2 py-1.5 rounded-lg border border-slate-700 bg-space-800/50 text-xs text-yellow-100">{note}</div>
+                            {canEdit ? (
+                              <button
+                                type="button"
+                                className="text-rose-400 hover:text-rose-300"
+                                onClick={() => setDraft((prev) => ({ ...prev, notes: prev.notes.filter((_, i) => i !== idx) }))}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                      {showNoteInput || draft.notes.length > 0 ? (
+                        <div className="flex gap-1.5">
+                          <input
+                            value={draft.noteInput}
+                            onChange={(e) => setDraft((prev) => ({ ...prev, noteInput: e.target.value }))}
+                            disabled={!canEdit}
+                            placeholder="비고 입력"
+                            className="w-full px-3 py-2 rounded-lg border border-slate-600 bg-space-800 text-xs text-slate-100"
+                          />
+                          {canEdit ? (
+                            <button
+                              type="button"
+                              className="px-2.5 py-2 rounded-lg border border-rose-600/60 text-rose-200 hover:bg-rose-500/10 text-xs"
+                              onClick={() => {
+                                setDraft((prev) => ({ ...prev, noteInput: "" }));
+                                if (draft.notes.length === 0) setShowNoteInput(false);
+                              }}
+                            >
+                              삭제
+                            </button>
+                          ) : null}
+                          {canEdit ? (
+                            <button
+                              type="button"
+                              className="px-2.5 py-2 rounded-lg border border-yellow-600/60 text-yellow-200 hover:bg-yellow-500/10 text-xs"
+                              onClick={() =>
+                                setDraft((prev) => {
+                                  const text = prev.noteInput.trim();
+                                  if (!text) return prev;
+                                  return { ...prev, notes: [...prev.notes, text], noteInput: "" };
+                                })
+                              }
+                            >
+                              추가
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  <div className="rounded-lg border border-slate-700 bg-space-800/60 p-3 text-xs space-y-1">
+                    <p className="text-slate-400">
+                      당일 총 생산량 <span className="text-slate-100 tabular-nums font-medium">{selectedDayTotal.toLocaleString("ko-KR")}</span>
+                    </p>
+                    <p className="text-slate-400">
+                      실투입인원(자동){" "}
+                      <span className="text-cyan-200 tabular-nums font-medium">{selectedActualManpower.toLocaleString("ko-KR")}</span>
+                      <span className="text-slate-500"> (기준 {baselineHeadcount})</span>
+                    </p>
+                    <p className="text-slate-500">연차 {annualCount} · 반차 {halfCount}</p>
+                  </div>
+
+                  <div className="rounded-lg border border-slate-700 bg-space-800/40 p-3 text-xs">
+                    <p className="text-slate-500 mb-1">미리보기</p>
+                    <div className="space-y-1">
+                      {draft.entries
+                        .filter((e) => e.productBase.trim() && toNumber(e.qtyText) > 0)
+                        .slice(0, 4)
+                        .map((e, i) => (
+                          <p key={`preview-entry-${i}`} className="text-slate-200 truncate">
+                            {composeProductName(e.productBase, e.productKind)} · {toNumber(e.qtyText).toLocaleString("ko-KR")}
+                          </p>
+                        ))}
+                      {draft.leaves.filter((l) => l.person_name.trim()).length > 0 ? (
+                        <p className="text-violet-200">
+                          휴무{" "}
+                          {draft.leaves
+                            .filter((l) => l.person_name.trim())
+                            .map((l) => `${l.person_name}(${l.leave_type === "half" ? "반" : "연"})`)
+                            .join(", ")}
                         </p>
-                      ))}
-                    {draft.leaves.filter((l) => l.person_name.trim()).length > 0 ? (
-                      <p className="text-violet-200">
-                        휴무{" "}
-                        {draft.leaves
-                          .filter((l) => l.person_name.trim())
-                          .map((l) => `${l.person_name}(${l.leave_type === "half" ? "반" : "연"})`)
-                          .join(", ")}
-                      </p>
-                    ) : null}
+                      ) : null}
+                      {draft.otherItems
+                        .filter((x) => x.person_name.trim() && x.detail.trim())
+                        .slice(0, 3)
+                        .map((x, i) => (
+                          <p key={`preview-other-${i}`} className="text-amber-200 truncate">
+                            {x.detail.trim()} : {x.person_name.trim()}
+                          </p>
+                        ))}
+                    </div>
+                  </div>
+
+                </div>
+                <div className="shrink-0 border-t border-slate-700 bg-space-900/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={saveDay}
+                      disabled={!canEdit || saving}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-3 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-sm font-medium"
+                    >
+                      <Save className="w-4 h-4" /> {saving ? "저장 중..." : "저장"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={duplicateToAnotherDate}
+                      disabled={!canEdit}
+                      className="px-4 py-3 rounded-lg border border-slate-600 text-slate-200 hover:bg-slate-800 text-sm inline-flex items-center gap-1 shrink-0"
+                    >
+                      <Copy className="w-4 h-4" /> 복제
+                    </button>
                   </div>
                 </div>
-
-                <div className="flex gap-2">
-                  <button
-                    onClick={saveDay}
-                    disabled={!canEdit || saving}
-                    className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 rounded bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-xs"
-                  >
-                    <Save className="w-3 h-3" /> {saving ? "저장 중..." : "저장"}
-                  </button>
-                  <button
-                    onClick={duplicateToAnotherDate}
-                    disabled={!canEdit}
-                    className="px-3 py-2 rounded border border-slate-600 text-slate-200 hover:bg-slate-700/50 text-xs inline-flex items-center gap-1"
-                  >
-                    <Copy className="w-3 h-3" /> 날짜복제
-                  </button>
-                </div>
               </div>
-            ) : null}
-
-            {tab === "materials" ? (
-              <div className="space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <select
-                    value={rangeMode}
-                    onChange={(e) => setRangeMode((e.target.value as PlanningRangeMode) ?? "from_selected")}
-                    className="px-2 py-1.5 rounded border border-slate-600 bg-space-900 text-xs text-slate-100"
-                  >
-                    <option value="day">당일만</option>
-                    <option value="from_selected">선택일 이후 월말</option>
-                    <option value="from_today">오늘 이후 월말</option>
-                    <option value="custom">사용자 지정</option>
-                  </select>
-                  <label className="flex items-center gap-1 text-xs text-slate-300">
-                    <input type="checkbox" checked={showOnlyShortage} onChange={(e) => setShowOnlyShortage(e.target.checked)} />
-                    부족만 보기
-                  </label>
-                </div>
-                {rangeMode === "custom" ? (
-                  <div className="grid grid-cols-2 gap-2">
-                    <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} className="px-2 py-1 rounded border border-slate-600 bg-space-900 text-xs text-slate-100" />
-                    <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} className="px-2 py-1 rounded border border-slate-600 bg-space-900 text-xs text-slate-100" />
-                  </div>
-                ) : null}
-                <div className="max-h-[410px] overflow-y-auto rounded border border-slate-700">
-                  <table className="w-full text-[11px]">
-                    <thead className="bg-space-900/70 text-slate-400 sticky top-0">
-                      <tr>
-                        <th className="p-1 text-left">원료</th>
-                        <th className="p-1 text-right">필요(g)</th>
-                        <th className="p-1 text-right">재고(g)</th>
-                        <th className="p-1 text-right">부족(g)</th>
-                        <th className="p-1 text-right">발주(g)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {materialRows.map((r) => (
-                        <tr key={r.material_name} className="border-t border-slate-800 text-slate-300">
-                          <td className="p-1">{r.material_name}</td>
-                          <td className="p-1 text-right tabular-nums">{r.required_g.toLocaleString("ko-KR")}</td>
-                          <td className="p-1 text-right tabular-nums">{r.stock_g.toLocaleString("ko-KR")}</td>
-                          <td className={`p-1 text-right tabular-nums ${r.shortage_g > 0 ? "text-amber-300" : "text-slate-500"}`}>
-                            {r.shortage_g.toLocaleString("ko-KR")}
-                          </td>
-                          <td className="p-1 text-right tabular-nums">{r.order_required_g.toLocaleString("ko-KR")}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ) : null}
-
-            {tab === "summary" && monthSummary ? (
-              <div className="space-y-2 text-xs">
-                <div className="rounded border border-slate-700 p-2 space-y-1 text-slate-300">
-                  <p>월 총 생산량: <span className="text-cyan-200 tabular-nums">{monthSummary.totalQty.toLocaleString("ko-KR")}</span></p>
-                  <p>총 계획 일수: <span className="tabular-nums">{monthSummary.plannedDays}</span>일</p>
-                  <p>메모 있는 일수: <span className="tabular-nums">{monthSummary.noteDays}</span>일</p>
-                  <p>부족 예상 원료 수: <span className="tabular-nums text-amber-300">{monthSummary.shortageMaterialsCount}</span></p>
-                </div>
-                <div className="rounded border border-slate-700 p-2">
-                  <p className="text-slate-400 mb-1">제품별 TOP 5</p>
-                  <ul className="space-y-1 text-slate-200">
-                    {monthSummary.topProducts.map((p) => (
-                      <li key={p.productName} className="flex justify-between">
-                        <span>{p.productName}</span>
-                        <span className="tabular-nums">{p.qty.toLocaleString("ko-KR")}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="rounded border border-slate-700 p-2">
-                  <p className="text-slate-400 mb-1">필요 원료 TOP 5</p>
-                  <ul className="space-y-1 text-slate-200">
-                    {monthSummary.topMaterials.map((m) => (
-                      <li key={m.materialName} className="flex justify-between">
-                        <span>{m.materialName}</span>
-                        <span className="tabular-nums">{m.requiredG.toLocaleString("ko-KR")}g</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            ) : null}
-
-            {tab === "processed" ? (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs text-slate-400">날짜 / 제품명 / 수량 / 투입인원 / 비고</p>
-                  <button onClick={downloadProcessedCsv} className="inline-flex items-center gap-1 text-xs text-cyan-300 hover:text-cyan-200">
-                    <Download className="w-3 h-3" /> CSV
-                  </button>
-                </div>
-                <div className="max-h-[400px] overflow-y-auto rounded border border-slate-700">
-                  <table className="w-full text-[11px]">
-                    <thead className="bg-space-900/70 text-slate-400 sticky top-0">
-                      <tr>
-                        <th className="p-1 text-left">날짜</th>
-                        <th className="p-1 text-left">제품명</th>
-                        <th className="p-1 text-right">수량</th>
-                        <th className="p-1 text-right">투입</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {processedRows.map((r, idx) => (
-                        <tr key={`${r.plan_date}-${r.product_name}-${idx}`} className="border-t border-slate-800 text-slate-300">
-                          <td className="p-1">{r.plan_date}</td>
-                          <td className="p-1">{r.product_name}</td>
-                          <td className="p-1 text-right tabular-nums">{r.qty.toLocaleString("ko-KR")}</td>
-                          <td className="p-1 text-right tabular-nums">{r.manpower.toLocaleString("ko-KR")}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ) : null}
-          </aside>
+            </>
+          ) : null}
         </div>
       )}
     </div>

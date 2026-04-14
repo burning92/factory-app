@@ -93,6 +93,7 @@ export interface MaterialRequirementRow {
   stock_g: number;
   shortage_g: number;
   order_required_g: number;
+  stock_status: "ok" | "real_zero" | "no_mapping" | "no_inventory_match";
 }
 
 export interface PlanningMonthData {
