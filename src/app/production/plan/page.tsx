@@ -66,6 +66,11 @@ function getDisplayName(category: string | null, productName: string, note: stri
   return productName;
 }
 
+function baseProductName(productName: string): string {
+  const idx = productName.indexOf(" - ");
+  return idx >= 0 ? productName.slice(0, idx).trim() : productName;
+}
+
 /** 시트 수식과 비슷한 읽기 순서: 공휴일 → 생산 → 메모 → 연차 → 반차 → 기타 */
 const DESKTOP_ROW_ORDER: Record<string, number> = {
   공휴일: 0,
@@ -108,7 +113,7 @@ function DesktopPlanEntry({ row }: { row: ProductionPlanRow }) {
       <div
         className={`rounded-lg px-2 py-1.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] ${getRowClass(row.category, row.product_name)}`}
       >
-        <p className="text-[12px] font-medium leading-snug tracking-tight text-white/95">{row.product_name}</p>
+        <p className="text-[12px] font-medium leading-snug tracking-tight text-white/95">{baseProductName(label)}</p>
         {row.qty != null && Number.isFinite(row.qty) ? (
           <p className="mt-0.5 text-[10px] tabular-nums text-white/50">수량 {formatQty(row.qty)}</p>
         ) : null}
