@@ -108,8 +108,10 @@ export default function PlanningBoardClient() {
   const [originalSerialized, setOriginalSerialized] = useState("");
   /** 날짜 상세 입력은 Drawer에서만 */
   const [dayDrawerOpen, setDayDrawerOpen] = useState(false);
-  /** G. 필요 원료: 발주 필요량이 있는 행만 */
-  const [materialShortageOnly, setMaterialShortageOnly] = useState(false);
+  /** 원료 탭: shortage = 발주 필요 > 0 만, all = 필요량 > 0 전체(계산 결과 전체) */
+  const [materialViewMode, setMaterialViewMode] = useState<"shortage" | "all">("shortage");
+  const [rightPanelTab, setRightPanelTab] = useState<"summary" | "products" | "materials" | "processed">("summary");
+  const [productPlanExpanded, setProductPlanExpanded] = useState(false);
   const [showNoteInput, setShowNoteInput] = useState(false);
 
   const { profile, loading: authLoading } = useAuth();
@@ -170,6 +172,12 @@ export default function PlanningBoardClient() {
 
   useEffect(() => {
     setDayDrawerOpen(false);
+  }, [year, month]);
+
+  useEffect(() => {
+    setRightPanelTab("summary");
+    setProductPlanExpanded(false);
+    setMaterialViewMode("shortage");
   }, [year, month]);
 
   useEffect(() => {
@@ -313,10 +321,14 @@ export default function PlanningBoardClient() {
     });
   }, [data, month, year]);
 
+  const shortageMaterialRows = useMemo(
+    () => monthlyMaterialRequirements.filter((r) => r.order_required_g > 0),
+    [monthlyMaterialRequirements]
+  );
+
   const displayedMaterialRequirements = useMemo(
-    () =>
-      materialShortageOnly ? monthlyMaterialRequirements.filter((r) => r.order_required_g > 0) : monthlyMaterialRequirements,
-    [materialShortageOnly, monthlyMaterialRequirements]
+    () => (materialViewMode === "shortage" ? shortageMaterialRows : monthlyMaterialRequirements),
+    [materialViewMode, monthlyMaterialRequirements, shortageMaterialRows]
   );
 
   const unclassifiedBases = useMemo(
@@ -327,6 +339,11 @@ export default function PlanningBoardClient() {
   const categoryRollup = useMemo(() => (data ? computeMonthlyCategoryTotals(data.entries) : null), [data]);
 
   const productTotals = useMemo(() => (data ? computeMonthlyProductTotals(data.entries) : []), [data]);
+
+  const productRowsForPanel = useMemo(
+    () => (productPlanExpanded ? productTotals : productTotals.slice(0, 5)),
+    [productPlanExpanded, productTotals]
+  );
 
   const operationalMetrics = useMemo(() => {
     if (!data) return null;
@@ -536,7 +553,37 @@ export default function PlanningBoardClient() {
       {loading || !data ? (
         <div className="rounded-xl border border-slate-700 bg-space-800/60 p-8 text-slate-400 text-sm">월간 계획을 불러오는 중...</div>
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-[7fr_3fr] gap-4">
+        <div className="space-y-4">
+          {categoryRollup ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-xl border border-slate-500/40 bg-gradient-to-br from-slate-800/90 to-space-900/80 px-4 py-4 shadow-lg shadow-black/20">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">총 수량</p>
+                <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight text-white sm:text-3xl">
+                  {categoryRollup.totalQty.toLocaleString("ko-KR")}
+                </p>
+              </div>
+              <div className="rounded-xl border border-cyan-500/35 bg-gradient-to-br from-cyan-950/50 to-space-900/80 px-4 py-4 shadow-lg shadow-black/20">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-cyan-200/80">피자</p>
+                <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight text-cyan-100 sm:text-3xl">
+                  {categoryRollup.pizzaQty.toLocaleString("ko-KR")}
+                </p>
+              </div>
+              <div className="rounded-xl border border-amber-500/35 bg-gradient-to-br from-amber-950/45 to-space-900/80 px-4 py-4 shadow-lg shadow-black/20">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-amber-200/80">브레드</p>
+                <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight text-amber-100 sm:text-3xl">
+                  {categoryRollup.breadQty.toLocaleString("ko-KR")}
+                </p>
+              </div>
+              <div className="rounded-xl border border-violet-500/35 bg-gradient-to-br from-violet-950/45 to-space-900/80 px-4 py-4 shadow-lg shadow-black/20">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-violet-200/80">파베이크</p>
+                <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight text-violet-100 sm:text-3xl">
+                  {categoryRollup.parbakeTotal.toLocaleString("ko-KR")}
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="grid grid-cols-1 xl:grid-cols-[7fr_3fr] gap-4">
           <section className="rounded-xl border border-slate-700 bg-space-800/50 overflow-hidden">
             <div className="grid grid-cols-7 border-b border-slate-700/80 bg-space-900/30">
               {WEEKDAY_LABELS.map((w, i) => (
@@ -555,8 +602,8 @@ export default function PlanningBoardClient() {
                 const dayEntries = dateKey ? entriesByDate.get(dateKey) ?? [] : [];
                 const dayLeaves = dateKey ? leavesByDate.get(dateKey) ?? [] : [];
                 const total = dayEntries.reduce((s, e) => s + e.qty, 0);
-                const topProducts = dayEntries.slice().sort((a, b) => b.qty - a.qty).slice(0, 3);
-                const extraCount = Math.max(0, dayEntries.length - 3);
+                const topProducts = dayEntries.slice().sort((a, b) => b.qty - a.qty).slice(0, 2);
+                const extraCount = Math.max(0, dayEntries.length - 2);
                 const selected = dateKey === selectedDate;
                 const weekday = idx % 7;
                 const isHoliday = dateKey ? isKoreanPublicHoliday(dateKey) : false;
@@ -571,7 +618,7 @@ export default function PlanningBoardClient() {
                       setSelectedDate(dateKey);
                       setDayDrawerOpen(true);
                     }}
-                    className={`min-h-[176px] border-r border-b border-slate-700/50 p-2 text-left [&:nth-child(7n)]:border-r-0 ${
+                    className={`min-h-[150px] border-r border-b border-slate-700/50 p-2 text-left [&:nth-child(7n)]:border-r-0 ${
                       selected
                         ? "bg-cyan-950/[0.2] ring-1 ring-inset ring-cyan-500/40"
                         : isSunday
@@ -613,7 +660,9 @@ export default function PlanningBoardClient() {
                               </div>
                             );
                           })}
-                          {extraCount > 0 ? <p className="text-[10px] text-slate-500 px-1">외 {extraCount}개</p> : null}
+                          {extraCount > 0 ? (
+                            <p className="text-[10px] text-cyan-300/90 px-1 font-medium">+{extraCount}개 더보기</p>
+                          ) : null}
                         </div>
                         <div className="mt-2 flex flex-wrap gap-1 text-[10px]">
                           {(dateKey ? notesByDate.get(dateKey) ?? [] : []).map((note, ni) => {
@@ -652,251 +701,325 @@ export default function PlanningBoardClient() {
             </div>
           </section>
 
-          <aside className="flex min-h-0 flex-col rounded-xl border border-slate-700 bg-space-800/60 overflow-hidden">
+          <aside className="flex min-h-[min(70vh,52rem)] min-h-0 flex-col rounded-xl border border-slate-700 bg-space-800/60 overflow-hidden xl:max-h-[calc(100vh-12rem)]">
             <div className="shrink-0 border-b border-slate-700/80 bg-space-900/50 px-4 py-3">
-              <h2 className="text-sm font-semibold text-cyan-200/90">월간 운영 보드</h2>
-              <p className="text-[11px] text-slate-500 mt-0.5">{formatMonthTitle(year, month)} · 달력에서 날짜를 누르면 상세 입력이 열립니다</p>
+              <h2 className="text-sm font-semibold text-cyan-200/90">월간 운영 패널</h2>
+              <p className="text-[11px] text-slate-500 mt-0.5">{formatMonthTitle(year, month)} · 달력에서 날짜를 누르면 상세 입력</p>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 space-y-5">
+
+            <div className="sticky top-0 z-[2] shrink-0 border-b border-slate-700/80 bg-space-900/95 px-2 py-2 backdrop-blur-sm">
+              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                {(
+                  [
+                    { id: "summary" as const, label: "월 요약" },
+                    { id: "products" as const, label: "제품 계획" },
+                    { id: "materials" as const, label: "원료 / 발주" },
+                    { id: "processed" as const, label: "가공 데이터" },
+                  ] as const
+                ).map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setRightPanelTab(t.id)}
+                    className={`rounded-lg px-2 py-2.5 text-center text-[11px] font-semibold leading-tight transition ${
+                      rightPanelTab === t.id
+                        ? "bg-cyan-600 text-white shadow-md shadow-cyan-900/40"
+                        : "border border-slate-700/90 bg-space-900/70 text-slate-400 hover:border-slate-600 hover:text-slate-200"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
               {operationalMetrics && categoryRollup && monthSummary ? (
                 <>
-                  <section className="space-y-2">
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">A. 월 요약</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="rounded-lg border border-slate-600/80 bg-space-900/55 p-3">
-                        <p className="text-[10px] text-slate-500">총원(기준)</p>
-                        <p className="text-xl font-semibold tabular-nums text-slate-100">{operationalMetrics.baselineHeadcount.toLocaleString("ko-KR")}</p>
-                        <p className="text-[10px] text-slate-500 mt-1">활성 프로필 {operationalMetrics.totalMembers}명 (참고)</p>
-                      </div>
-                      <div className="rounded-lg border border-slate-600/80 bg-space-900/55 p-3">
-                        <p className="text-[10px] text-slate-500">총 가동일</p>
-                        <p className="text-xl font-semibold tabular-nums text-slate-100">{operationalMetrics.plannedOperationDayCount}</p>
-                        <p className="text-[10px] text-slate-500 mt-1">생산 수량이 1건 이상인 날짜 수</p>
-                      </div>
-                      <div className="rounded-lg border border-slate-600/80 bg-space-900/55 p-3 col-span-2">
-                        <p className="text-[10px] text-slate-500">주말 근무(토·일)</p>
-                        <p className="text-xl font-semibold tabular-nums text-sky-200/90">{operationalMetrics.weekendPlannedDayCount}회</p>
-                        <p className="text-[10px] text-amber-200/70 mt-1">
-                          TODO: 토·일 중 생산 계획이 있는 날만 집계. 휴무·연차만 있는 주말은 제외하지 않음.
+                  {rightPanelTab === "summary" ? (
+                    <div className="space-y-6">
+                      <div>
+                        <h3 className="text-sm font-semibold text-slate-100">운영 지표</h3>
+                        <div className="mt-3 grid grid-cols-2 gap-3">
+                          <div className="rounded-xl border border-slate-600/70 bg-space-900/55 p-3">
+                            <p className="text-[10px] font-medium text-slate-500">기준 인원</p>
+                            <p className="mt-1 text-xl font-semibold tabular-nums text-slate-100">
+                              {operationalMetrics.baselineHeadcount.toLocaleString("ko-KR")}
+                            </p>
+                            <p className="text-[10px] text-slate-500 mt-1">활성 프로필 {operationalMetrics.totalMembers}명 (참고)</p>
+                          </div>
+                          <div className="rounded-xl border border-slate-600/70 bg-space-900/55 p-3">
+                            <p className="text-[10px] font-medium text-slate-500">총 가동일</p>
+                            <p className="mt-1 text-xl font-semibold tabular-nums text-slate-100">{operationalMetrics.plannedOperationDayCount}</p>
+                            <p className="text-[10px] text-slate-500 mt-1">생산 1건 이상인 날</p>
+                          </div>
+                          <div className="rounded-xl border border-slate-600/70 bg-space-900/55 p-3 col-span-2">
+                            <p className="text-[10px] font-medium text-slate-500">주말 근무 (토·일)</p>
+                            <p className="mt-1 text-xl font-semibold tabular-nums text-sky-200/90">{operationalMetrics.weekendPlannedDayCount}회</p>
+                            <p className="text-[10px] text-slate-500 mt-1">토·일 중 생산 계획이 있는 날만 집계 (연차만인 날은 미제외)</p>
+                          </div>
+                        </div>
+                        <p className="mt-3 text-[11px] text-slate-500">
+                          부족 원료 종류: <span className="text-amber-300/90 tabular-nums">{monthSummary.shortageMaterialsCount}</span>
                         </p>
                       </div>
-                    </div>
-                    <p className="text-[10px] text-slate-500">
-                      부족 원료 종류: <span className="text-amber-300/90 tabular-nums">{monthSummary.shortageMaterialsCount}</span>
-                    </p>
-                  </section>
 
-                  <section className="space-y-2">
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">B. 전체 생산 합계</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="rounded-lg border border-cyan-500/25 bg-cyan-950/20 p-3">
-                        <p className="text-[10px] text-slate-500">피자</p>
-                        <p className="text-lg font-semibold tabular-nums text-cyan-100">{categoryRollup.pizzaQty.toLocaleString("ko-KR")}</p>
-                      </div>
-                      <div className="rounded-lg border border-violet-500/25 bg-violet-950/15 p-3">
-                        <p className="text-[10px] text-slate-500">파베이크</p>
-                        <p className="text-lg font-semibold tabular-nums text-violet-100">{categoryRollup.parbakeTotal.toLocaleString("ko-KR")}</p>
-                      </div>
-                      <div className="rounded-lg border border-amber-500/25 bg-amber-950/15 p-3">
-                        <p className="text-[10px] text-slate-500">브레드</p>
-                        <p className="text-lg font-semibold tabular-nums text-amber-100">{categoryRollup.breadQty.toLocaleString("ko-KR")}</p>
-                      </div>
-                      <div className="rounded-lg border border-slate-500/30 bg-space-900/70 p-3">
-                        <p className="text-[10px] text-slate-500">총 수량</p>
-                        <p className="text-lg font-semibold tabular-nums text-white">{categoryRollup.totalQty.toLocaleString("ko-KR")}</p>
-                      </div>
-                    </div>
-                    {categoryRollup.unclassifiedQty > 0 ? (
-                      <div className="rounded-lg border border-rose-500/30 bg-rose-950/20 px-3 py-2 space-y-1.5">
-                        <p className="text-[11px] text-rose-100/90">
-                          미분류 합계{" "}
-                          <span className="tabular-nums font-medium">{categoryRollup.unclassifiedQty.toLocaleString("ko-KR")}</span>
-                          <span className="text-rose-200/70">
-                            {" "}
-                            · 아래 베이스명을 <code className="text-rose-100/90">productClassification.ts</code>에 추가하면 월 요약에 반영됩니다.
-                          </span>
-                        </p>
-                        {unclassifiedBases.length > 0 ? (
-                          <ul className="text-[10px] text-rose-100/80 space-y-0.5 max-h-[120px] overflow-y-auto">
-                            {unclassifiedBases.map((u) => (
-                              <li key={u.base} className="flex justify-between gap-2 border-b border-rose-500/10 pb-0.5 last:border-0">
-                                <span className="break-words min-w-0">{u.base}</span>
-                                <span className="tabular-nums shrink-0 text-rose-200">{u.monthQty.toLocaleString("ko-KR")}</span>
-                              </li>
-                            ))}
-                          </ul>
+                      <div>
+                        <h3 className="text-sm font-semibold text-slate-100">대분류 생산 합계</h3>
+                        <p className="text-[10px] text-slate-500 mt-0.5">상단 KPI와 동일 수치</p>
+                        <div className="mt-3 grid grid-cols-2 gap-3">
+                          <div className="rounded-xl border border-cyan-500/30 bg-cyan-950/25 p-3">
+                            <p className="text-[10px] text-cyan-200/80">피자</p>
+                            <p className="text-lg font-semibold tabular-nums text-cyan-100">{categoryRollup.pizzaQty.toLocaleString("ko-KR")}</p>
+                          </div>
+                          <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3">
+                            <p className="text-[10px] text-amber-200/80">브레드</p>
+                            <p className="text-lg font-semibold tabular-nums text-amber-100">{categoryRollup.breadQty.toLocaleString("ko-KR")}</p>
+                          </div>
+                          <div className="rounded-xl border border-violet-500/30 bg-violet-950/25 p-3">
+                            <p className="text-[10px] text-violet-200/80">파베이크</p>
+                            <p className="text-lg font-semibold tabular-nums text-violet-100">{categoryRollup.parbakeTotal.toLocaleString("ko-KR")}</p>
+                          </div>
+                          <div className="rounded-xl border border-slate-500/40 bg-space-900/80 p-3">
+                            <p className="text-[10px] text-slate-500">총 수량</p>
+                            <p className="text-lg font-semibold tabular-nums text-white">{categoryRollup.totalQty.toLocaleString("ko-KR")}</p>
+                          </div>
+                        </div>
+                        {categoryRollup.unclassifiedQty > 0 ? (
+                          <div className="mt-3 rounded-xl border border-rose-500/30 bg-rose-950/20 px-3 py-2 space-y-1.5">
+                            <p className="text-[11px] text-rose-100/90">
+                              미분류 합계{" "}
+                              <span className="tabular-nums font-medium">{categoryRollup.unclassifiedQty.toLocaleString("ko-KR")}</span>
+                              <span className="text-rose-200/70">
+                                {" "}
+                                · <code className="text-rose-100/90">productClassification.ts</code>에 베이스명 추가 시 반영
+                              </span>
+                            </p>
+                            {unclassifiedBases.length > 0 ? (
+                              <ul className="text-[10px] text-rose-100/80 space-y-0.5 max-h-[120px] overflow-y-auto">
+                                {unclassifiedBases.map((u) => (
+                                  <li key={u.base} className="flex justify-between gap-2 border-b border-rose-500/10 pb-0.5 last:border-0">
+                                    <span className="break-words min-w-0">{u.base}</span>
+                                    <span className="tabular-nums shrink-0 text-rose-200">{u.monthQty.toLocaleString("ko-KR")}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : null}
+                          </div>
                         ) : null}
                       </div>
-                    ) : null}
-                  </section>
 
-                  <section className="space-y-2">
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">C. 피자 세부 합계</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="rounded-lg border border-slate-600/80 bg-space-900/50 p-2.5">
-                        <p className="text-[10px] text-slate-500">라이트</p>
-                        <p className="text-base font-semibold tabular-nums text-slate-100">{categoryRollup.pizzaLight.toLocaleString("ko-KR")}</p>
+                      <div>
+                        <h3 className="text-sm font-semibold text-slate-100">피자 세부</h3>
+                        <div className="mt-3 grid grid-cols-2 gap-2">
+                          <div className="rounded-lg border border-slate-600/80 bg-space-900/50 p-2.5">
+                            <p className="text-[10px] text-slate-500">라이트</p>
+                            <p className="text-base font-semibold tabular-nums text-slate-100">{categoryRollup.pizzaLight.toLocaleString("ko-KR")}</p>
+                          </div>
+                          <div className="rounded-lg border border-slate-600/80 bg-space-900/50 p-2.5">
+                            <p className="text-[10px] text-slate-500">헤비</p>
+                            <p className="text-base font-semibold tabular-nums text-slate-100">{categoryRollup.pizzaHeavy.toLocaleString("ko-KR")}</p>
+                          </div>
+                          <div className="rounded-lg border border-slate-600/80 bg-space-900/50 p-2.5">
+                            <p className="text-[10px] text-slate-500">미니</p>
+                            <p className="text-base font-semibold tabular-nums text-slate-100">{categoryRollup.pizzaMini.toLocaleString("ko-KR")}</p>
+                          </div>
+                          <div className="rounded-lg border border-cyan-500/30 bg-cyan-950/25 p-2.5">
+                            <p className="text-[10px] text-slate-500">피자 계</p>
+                            <p className="text-base font-semibold tabular-nums text-cyan-100">{categoryRollup.pizzaSum.toLocaleString("ko-KR")}</p>
+                          </div>
+                        </div>
                       </div>
-                      <div className="rounded-lg border border-slate-600/80 bg-space-900/50 p-2.5">
-                        <p className="text-[10px] text-slate-500">헤비</p>
-                        <p className="text-base font-semibold tabular-nums text-slate-100">{categoryRollup.pizzaHeavy.toLocaleString("ko-KR")}</p>
+
+                      <div>
+                        <h3 className="text-sm font-semibold text-slate-100">브레드</h3>
+                        <div className="mt-3 rounded-xl border border-amber-500/25 bg-amber-950/15 px-4 py-4">
+                          <p className="text-2xl font-semibold tabular-nums text-amber-100">{categoryRollup.breadQty.toLocaleString("ko-KR")}</p>
+                        </div>
                       </div>
-                      <div className="rounded-lg border border-slate-600/80 bg-space-900/50 p-2.5">
-                        <p className="text-[10px] text-slate-500">미니</p>
-                        <p className="text-base font-semibold tabular-nums text-slate-100">{categoryRollup.pizzaMini.toLocaleString("ko-KR")}</p>
-                      </div>
-                      <div className="rounded-lg border border-cyan-500/30 bg-cyan-950/25 p-2.5">
-                        <p className="text-[10px] text-slate-500">피자 계</p>
-                        <p className="text-base font-semibold tabular-nums text-cyan-100">{categoryRollup.pizzaSum.toLocaleString("ko-KR")}</p>
+
+                      <div>
+                        <h3 className="text-sm font-semibold text-slate-100">파베이크</h3>
+                        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                          <div className="rounded-lg border border-sky-500/25 bg-sky-950/20 p-3">
+                            <p className="text-[10px] text-slate-500">보관용(우주인)</p>
+                            <p className="text-lg font-semibold tabular-nums text-sky-100">{categoryRollup.parbakeStorageQty.toLocaleString("ko-KR")}</p>
+                          </div>
+                          <div className="rounded-lg border border-emerald-500/25 bg-emerald-950/15 p-3">
+                            <p className="text-[10px] text-slate-500">판매용(선인)</p>
+                            <p className="text-lg font-semibold tabular-nums text-emerald-100">{categoryRollup.parbakeSaleQty.toLocaleString("ko-KR")}</p>
+                          </div>
+                          <div className="rounded-lg border border-violet-500/30 bg-violet-950/20 p-3 sm:col-span-1">
+                            <p className="text-[10px] text-slate-500">파베이크 계</p>
+                            <p className="text-lg font-semibold tabular-nums text-violet-100">{categoryRollup.parbakeTotal.toLocaleString("ko-KR")}</p>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </section>
+                  ) : null}
 
-                  <section className="space-y-2">
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">D. 브레드 합계</h3>
-                    <div className="rounded-lg border border-amber-500/25 bg-amber-950/15 px-4 py-3">
-                      <p className="text-2xl font-semibold tabular-nums text-amber-100">{categoryRollup.breadQty.toLocaleString("ko-KR")}</p>
+                  {rightPanelTab === "products" ? (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-end justify-between gap-2">
+                        <div>
+                          <h3 className="text-sm font-semibold text-slate-100">제품별 월 생산 예정</h3>
+                          <p className="text-[10px] text-slate-500 mt-0.5">수량 상위 기준 · 기본 5개만 표시</p>
+                        </div>
+                        {productTotals.length > 5 ? (
+                          <button
+                            type="button"
+                            onClick={() => setProductPlanExpanded((v) => !v)}
+                            className="shrink-0 rounded-lg border border-slate-600 px-2.5 py-1.5 text-[11px] font-medium text-cyan-200 hover:bg-slate-800"
+                          >
+                            {productPlanExpanded ? "접기" : "전체 보기"}
+                          </button>
+                        ) : null}
+                      </div>
+                      <div className="max-h-[min(52vh,28rem)] overflow-y-auto rounded-xl border border-slate-700">
+                        <table className="w-full text-[11px]">
+                          <thead className="sticky top-0 z-[1] bg-space-900/98 text-slate-400 border-b border-slate-700">
+                            <tr>
+                              <th className="p-2.5 text-left font-medium">제품명</th>
+                              <th className="p-2.5 text-left font-medium">구분</th>
+                              <th className="p-2.5 text-right font-medium">월 합계</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {productRowsForPanel.map((row) => (
+                              <tr key={row.productBase} className="border-t border-slate-800/90 text-slate-300">
+                                <td className="p-2.5 align-top font-medium text-slate-200">{row.displayName}</td>
+                                <td className="p-2.5 align-top">
+                                  <span
+                                    className={`inline-block rounded-md border px-2 py-0.5 text-[10px] font-semibold ${categoryBadgeClassName(row.classification)}`}
+                                  >
+                                    {row.badgeLabel}
+                                  </span>
+                                </td>
+                                <td className="p-2.5 text-right tabular-nums font-semibold text-slate-100">{row.monthQty.toLocaleString("ko-KR")}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                  </section>
+                  ) : null}
 
-                  <section className="space-y-2">
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">E. 파베이크 합계</h3>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                      <div className="rounded-lg border border-sky-500/25 bg-sky-950/20 p-3">
-                        <p className="text-[10px] text-slate-500">보관용(우주인)</p>
-                        <p className="text-lg font-semibold tabular-nums text-sky-100">{categoryRollup.parbakeStorageQty.toLocaleString("ko-KR")}</p>
+                  {rightPanelTab === "materials" ? (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <h3 className="text-sm font-semibold text-slate-100">원료 / 재고 / 발주</h3>
+                          <p className="text-[10px] text-slate-500 mt-0.5">현재 월은 오늘 이후 구간 · 단위 g · 재고는 재고현황 qty</p>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setMaterialViewMode("shortage")}
+                            className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold ${
+                              materialViewMode === "shortage"
+                                ? "bg-amber-600/90 text-white"
+                                : "border border-slate-600 text-slate-400 hover:bg-slate-800"
+                            }`}
+                          >
+                            부족 원료
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMaterialViewMode("all")}
+                            className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold ${
+                              materialViewMode === "all"
+                                ? "bg-slate-600 text-white"
+                                : "border border-slate-600 text-slate-400 hover:bg-slate-800"
+                            }`}
+                          >
+                            전체 필요 원료
+                          </button>
+                        </div>
                       </div>
-                      <div className="rounded-lg border border-emerald-500/25 bg-emerald-950/15 p-3">
-                        <p className="text-[10px] text-slate-500">판매용(선인)</p>
-                        <p className="text-lg font-semibold tabular-nums text-emerald-100">{categoryRollup.parbakeSaleQty.toLocaleString("ko-KR")}</p>
-                      </div>
-                      <div className="rounded-lg border border-violet-500/30 bg-violet-950/20 p-3 sm:col-span-1">
-                        <p className="text-[10px] text-slate-500">파베이크 계</p>
-                        <p className="text-lg font-semibold tabular-nums text-violet-100">{categoryRollup.parbakeTotal.toLocaleString("ko-KR")}</p>
-                      </div>
-                    </div>
-                  </section>
-
-                  <section className="space-y-2">
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">F. 제품별 월 생산 예정</h3>
-                    <div className="max-h-[220px] overflow-y-auto rounded-lg border border-slate-700">
-                      <table className="w-full text-[11px]">
-                        <thead className="sticky top-0 bg-space-900/95 text-slate-400 border-b border-slate-700">
-                          <tr>
-                            <th className="p-2 text-left font-medium">제품</th>
-                            <th className="p-2 text-left font-medium">구분</th>
-                            <th className="p-2 text-right font-medium">월 합계</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {productTotals.map((row) => (
-                            <tr key={row.productBase} className="border-t border-slate-800/90 text-slate-300">
-                              <td className="p-2 align-top">{row.displayName}</td>
-                              <td className="p-2 align-top">
-                                <span
-                                  className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-medium ${categoryBadgeClassName(row.classification)}`}
+                      <div className="max-h-[min(52vh,28rem)] overflow-y-auto rounded-xl border border-slate-700">
+                        <table className="w-full text-[11px]">
+                          <thead className="sticky top-0 z-[1] bg-space-900/98 text-slate-400 border-b border-slate-700">
+                            <tr>
+                              <th className="p-2.5 text-left font-medium">필요원료명</th>
+                              <th className="p-2.5 text-right font-medium">총 필요량</th>
+                              <th className="p-2.5 text-right font-medium">이카운트 재고</th>
+                              <th className="p-2.5 text-right font-medium">발주 필요</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {displayedMaterialRequirements.map((r) => (
+                              <tr key={r.material_name} className="border-t border-slate-800 text-slate-300">
+                                <td className="p-2.5 text-left">{r.material_name}</td>
+                                <td className="p-2.5 text-right tabular-nums text-slate-200">{r.required_g.toLocaleString("ko-KR")}</td>
+                                <td className="p-2.5 text-right tabular-nums text-slate-400">{r.stock_g.toLocaleString("ko-KR")}</td>
+                                <td
+                                  className={`p-2.5 text-right tabular-nums font-semibold ${
+                                    r.order_required_g > 0 ? "text-amber-200 bg-amber-500/15" : "text-slate-500"
+                                  }`}
                                 >
-                                  {row.badgeLabel}
-                                </span>
-                              </td>
-                              <td className="p-2 text-right tabular-nums font-medium text-slate-100">{row.monthQty.toLocaleString("ko-KR")}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                                  {r.order_required_g.toLocaleString("ko-KR")}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {materialViewMode === "shortage" && shortageMaterialRows.length === 0 ? (
+                          <p className="p-6 text-center text-sm text-emerald-200/90">이번 달 부족 원료 없음</p>
+                        ) : null}
+                        {materialViewMode === "all" && displayedMaterialRequirements.length === 0 ? (
+                          <p className="p-6 text-center text-[11px] text-slate-500">표시할 필요 원료가 없습니다.</p>
+                        ) : null}
+                      </div>
                     </div>
-                  </section>
+                  ) : null}
 
-                  <section className="space-y-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">G. 필요 원료 / 재고 / 발주</h3>
-                      <label className="inline-flex cursor-pointer items-center gap-2 text-[11px] text-slate-400">
-                        <input
-                          type="checkbox"
-                          checked={materialShortageOnly}
-                          onChange={(e) => setMaterialShortageOnly(e.target.checked)}
-                          className="rounded border-slate-600 bg-space-800 text-cyan-500 focus:ring-cyan-500/40"
-                        />
-                        부족만 보기
-                      </label>
-                    </div>
-                    <p className="text-[10px] text-slate-500">
-                      해당 월 기준(현재 월은 오늘 이후) · 필요량 단위 g / 재고수량은 재고현황 qty 기준
-                    </p>
-                    <div className="max-h-[280px] overflow-y-auto rounded-lg border border-slate-700">
-                      <table className="w-full text-[11px]">
-                        <thead className="sticky top-0 z-[1] bg-space-900/95 text-slate-400 border-b border-slate-700">
-                          <tr>
-                            <th className="p-2 text-left font-medium">필요원료명</th>
-                            <th className="p-2 text-right font-medium">총 필요량</th>
-                            <th className="p-2 text-right font-medium">이카운트 재고</th>
-                            <th className="p-2 text-right font-medium">발주 필요</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {displayedMaterialRequirements.map((r) => (
-                            <tr key={r.material_name} className="border-t border-slate-800 text-slate-300">
-                              <td className="p-2 text-left">{r.material_name}</td>
-                              <td className="p-2 text-right tabular-nums text-slate-200">{r.required_g.toLocaleString("ko-KR")}</td>
-                              <td className="p-2 text-right tabular-nums text-slate-400">{r.stock_g.toLocaleString("ko-KR")}</td>
-                              <td
-                                className={`p-2 text-right tabular-nums font-medium ${
-                                  r.order_required_g > 0 ? "text-amber-300 bg-amber-500/10" : "text-slate-500"
-                                }`}
-                              >
-                                {r.order_required_g.toLocaleString("ko-KR")}
-                              </td>
+                  {rightPanelTab === "processed" ? (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <h3 className="text-sm font-semibold text-slate-100">가공 데이터</h3>
+                          <p className="text-[10px] text-slate-500 mt-0.5">가공 시트 연동 행 · 스크롤 또는 CSV</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={downloadProcessedCsv}
+                          className="inline-flex items-center gap-1 rounded-lg border border-cyan-500/40 bg-cyan-950/30 px-2.5 py-1.5 text-[11px] font-medium text-cyan-200 hover:bg-cyan-950/50"
+                        >
+                          <Download className="w-3 h-3" /> CSV 내려받기
+                        </button>
+                      </div>
+                      <div className="max-h-[min(52vh,28rem)] overflow-y-auto rounded-xl border border-slate-700/80">
+                        <table className="w-full text-[11px]">
+                          <thead className="sticky top-0 z-[1] bg-space-900/98 text-slate-500 border-b border-slate-700/80">
+                            <tr>
+                              <th className="p-2 text-left">날짜</th>
+                              <th className="p-2 text-left">제품명</th>
+                              <th className="p-2 text-right">수량</th>
+                              <th className="p-2 text-right">투입 인원</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      {materialShortageOnly && displayedMaterialRequirements.length === 0 ? (
-                        <p className="p-3 text-center text-[11px] text-slate-500">발주 필요량이 0보다 큰 원료가 없습니다.</p>
-                      ) : null}
+                          </thead>
+                          <tbody>
+                            {processedRows.map((r, idx) => (
+                              <tr key={`${r.plan_date}-${r.product_name}-${idx}`} className="border-t border-slate-800/80 text-slate-400">
+                                <td className="p-2 whitespace-nowrap">{r.plan_date}</td>
+                                <td className="p-2">{r.product_name}</td>
+                                <td className="p-2 text-right tabular-nums">{r.qty.toLocaleString("ko-KR")}</td>
+                                <td className="p-2 text-right tabular-nums">{r.manpower.toLocaleString("ko-KR")}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {processedRows.length === 0 ? (
+                          <p className="p-6 text-center text-[11px] text-slate-500">가공 데이터 행이 없습니다.</p>
+                        ) : null}
+                      </div>
                     </div>
-                  </section>
-
-                  <section className="space-y-2 border-t border-slate-700/80 pt-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-semibold text-slate-400">가공 데이터 (가공 시트 연동 행)</h3>
-                      <button
-                        type="button"
-                        onClick={downloadProcessedCsv}
-                        className="inline-flex items-center gap-1 text-xs text-cyan-300 hover:text-cyan-200"
-                      >
-                        <Download className="w-3 h-3" /> CSV
-                      </button>
-                    </div>
-                    <div className="max-h-[200px] overflow-y-auto rounded-lg border border-slate-700/80">
-                      <table className="w-full text-[11px]">
-                        <thead className="sticky top-0 bg-space-900/95 text-slate-500">
-                          <tr>
-                            <th className="p-1.5 text-left">날짜</th>
-                            <th className="p-1.5 text-left">제품명</th>
-                            <th className="p-1.5 text-right">수량</th>
-                            <th className="p-1.5 text-right">투입</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {processedRows.slice(0, 80).map((r, idx) => (
-                            <tr key={`${r.plan_date}-${r.product_name}-${idx}`} className="border-t border-slate-800/80 text-slate-400">
-                              <td className="p-1.5">{r.plan_date}</td>
-                              <td className="p-1.5">{r.product_name}</td>
-                              <td className="p-1.5 text-right tabular-nums">{r.qty.toLocaleString("ko-KR")}</td>
-                              <td className="p-1.5 text-right tabular-nums">{r.manpower.toLocaleString("ko-KR")}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      {processedRows.length > 80 ? (
-                        <p className="p-2 text-[10px] text-slate-500 text-center">… 외 {processedRows.length - 80}행 · 전체는 CSV</p>
-                      ) : null}
-                    </div>
-                  </section>
+                  ) : null}
                 </>
               ) : null}
             </div>
           </aside>
+        </div>
 
           {dayDrawerOpen && data ? (
             <>
