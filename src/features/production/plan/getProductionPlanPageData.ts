@@ -1,8 +1,8 @@
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
 import type { ProductionPlanPageData, ProductionPlanRow } from "./types";
+import { shouldShowOnlyPlanningBoardInPlanView } from "./planningMirrorPolicy";
 
 const SYNC_NAME = "production_plan";
-const PLANNING_CUTOVER_DATE = "2026-05-01";
 
 export async function getProductionPlanPageData(): Promise<ProductionPlanPageData> {
   const supabase = getSupabaseAdmin();
@@ -47,7 +47,7 @@ export async function getProductionPlanPageData(): Promise<ProductionPlanPageDat
     updated_at: r.updated_at ? String(r.updated_at) : "",
   }));
   const rows = rowsRaw.filter((r) => {
-    if (r.plan_date >= PLANNING_CUTOVER_DATE) {
+    if (shouldShowOnlyPlanningBoardInPlanView(r.plan_date)) {
       return (r.source_sheet_name ?? "") === "planning_board";
     }
     return true;

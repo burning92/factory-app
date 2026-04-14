@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { computeActualManpower } from "@/features/production/planning/calculations";
 import type { PlanningDayPayload } from "@/features/production/planning/types";
+import { shouldMirrorPlanningToProductionPlanRows } from "@/features/production/plan/planningMirrorPolicy";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const PLANNING_CUTOVER_DATE = "2026-05-01";
 
 type Body = {
   access_token?: string;
@@ -181,7 +181,7 @@ export async function POST(request: Request) {
     if (manpowerErr) throw manpowerErr;
 
     // planning 입력값을 기존 조회용 production_plan_rows에도 반영 (뷰 전용 화면 유지)
-    if (planDate >= PLANNING_CUTOVER_DATE) {
+    if (shouldMirrorPlanningToProductionPlanRows(planDate)) {
       const { error: delMirrorErr } = await admin
         .from("production_plan_rows")
         .delete()
