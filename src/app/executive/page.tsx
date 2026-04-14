@@ -23,7 +23,6 @@ import {
   type WasteRollupFromDayRows,
 } from "@/features/dashboard/wasteDetailMockData";
 import {
-  loadPlanActualDashboardMetrics,
   planActualSparklineWindowMonths,
 } from "@/features/dashboard/planVsActual";
 import { loadClimateDashboardWindows, loadEquipmentIssues } from "@/features/dashboard/climateAndEquipment";
@@ -32,17 +31,18 @@ import {
   type ExecutiveEquipmentUnitSnapshot,
 } from "@/features/equipment/executiveEquipmentHistory";
 import {
-  loadManpowerUtilizationMonthSummary,
-  DEFAULT_DASHBOARD_BASELINE_HEADCOUNT,
   formatMonthlyOperatingDays,
 } from "@/features/dashboard/manpowerUtilization";
+import {
+  getPlanningVsActualMetrics,
+  type PlanningVsActualMetrics,
+} from "@/features/dashboard/getPlanningVsActualMetrics";
+import { getManpowerKpis, type ManpowerKpis } from "@/features/dashboard/getManpowerKpis";
 import { AlertTriangle, CheckCircle2, Droplets, Info, LayoutDashboard, Thermometer } from "lucide-react";
 import { ExecutivePortalTooltip } from "./ExecutivePortalTooltip";
 import { executiveTooltipHostRowClass } from "./executiveTooltipStyles";
 import type { ProductionBundle } from "@/features/dashboard/loadProductionBundle";
-import type { PlanActualDashboardMetrics } from "@/features/dashboard/planVsActual";
 import type { ClimateDashboardWindows } from "@/features/dashboard/climateAndEquipment";
-import type { ManpowerMonthSummary } from "@/features/dashboard/manpowerUtilization";
 
 function equipmentDashboardUnitMeta(s: ExecutiveEquipmentUnitSnapshot): string {
   if (s.statusLabel === "이력 없음") return "고장 이력 없음 · 이력 등록 시 여기에 반영됩니다.";
@@ -322,17 +322,14 @@ export default function ExecutiveDashboardPage() {
 
   const [loadError, setLoadError] = useState<string | null>(null);
   const [bundle, setBundle] = useState<ProductionBundle | null>(null);
-  const [planDashboard, setPlanDashboard] = useState<PlanActualDashboardMetrics | null>(null);
-  /** 스파크라인: 이번 달이 속한 4개월 창 중, 이번 달 이하 월만 집계(상세 페이지와 동일 API) */
-  const [planSparklineAchievementByMonth, setPlanSparklineAchievementByMonth] = useState<
-    Record<number, number | null>
-  >({});
+  const [planDashboard, setPlanDashboard] = useState<PlanningVsActualMetrics | null>(null);
+  const [planSparklineAchievementByMonth, setPlanSparklineAchievementByMonth] = useState<Record<number, number | null>>({});
   const [climateWindows, setClimateWindows] = useState<ClimateDashboardWindows | null>(null);
   const [equipment, setEquipment] = useState<{
     issueCount: number;
     majorStats: { 화덕: ExecutiveEquipmentUnitSnapshot[]; 호이스트: ExecutiveEquipmentUnitSnapshot[] } | null;
   } | null>(null);
-  const [manpower, setManpower] = useState<ManpowerMonthSummary | null>(null);
+  const [manpower, setManpower] = useState<ManpowerKpis | null>(null);
   /** 수동 JSONL 병합 후 올해 폐기 누적(상세 페이지와 동일 소스) */
   const [wasteMergedRollup, setWasteMergedRollup] = useState<WasteRollupFromDayRows | null>(null);
   const [wasteYoy, setWasteYoy] = useState<WasteYoySamePeriodResult | null>(null);
@@ -422,27 +419,11 @@ export default function ExecutiveDashboardPage() {
             setWasteYoy(null);
           }
         }
-        const sparkMonths = planActualSparklineWindowMonths(calendarMonth.m);
-        const monthsToLoad = Array.from(
-          new Set(sparkMonths.filter((m) => m <= calendarMonth.m))
-        ).sort((a, b) => a - b);
-        const planResults = await Promise.all(
-          monthsToLoad.map((m) => loadPlanActualDashboardMetrics(supabase, calendarMonth.y, m))
-        );
+        const planMetrics = await getPlanningVsActualMetrics(supabase, calendarMonth.y, calendarMonth.m);
         if (cancelled) return;
-        const byMonth: Record<number, number | null> = {};
-        monthsToLoad.forEach((m, i) => {
-          byMonth[m] = planResults[i]!.achievementPct;
-        });
-        setPlanSparklineAchievementByMonth(byMonth);
-        const curIdx = monthsToLoad.indexOf(calendarMonth.m);
-        setPlanDashboard(curIdx >= 0 ? planResults[curIdx]! : null);
-        const mp = await loadManpowerUtilizationMonthSummary(
-          supabase,
-          calendarMonth.y,
-          calendarMonth.m,
-          DEFAULT_DASHBOARD_BASELINE_HEADCOUNT
-        );
+        setPlanSparklineAchievementByMonth(planMetrics.sparklineAchievementByMonth);
+        setPlanDashboard(planMetrics);
+        const mp = await getManpowerKpis(supabase, calendarMonth.y, calendarMonth.m);
         if (cancelled) return;
         setManpower(mp);
       }
@@ -490,39 +471,6 @@ export default function ExecutiveDashboardPage() {
   const mainBarMax =
     y != null ? Math.max(y.lightPizza, y.heavyPizza, y.bread, 1) : 1;
   const barPct = (v: number) => `${Math.min(100, (v / mainBarMax) * 100)}%`;
-
-  /**
-   * 인력 카드 — 1인당 일평균 생산성(완제품 개/일·인)
-   * 계산식: 이번 달 총 생산량 / 이번 달 가동일 / 이번 달 평균 투입 인원
-   * (이번 달 총 생산량은 대시보드 생산량 카드와 동일하게 `bundle.days`의 해당 월 `totalFinishedQty` 합)
-   */
-  const manpowerProductivityUnitsPerPersonDay = useMemo(() => {
-    if (
-      !manpower?.hasProcessedPlanData ||
-      manpower.avgDailyManpower == null ||
-      manpower.avgDailyUtilizationPct == null
-    ) {
-      return null;
-    }
-    const opDays = manpower.daysWithManpower;
-    const avgHead = manpower.avgDailyManpower;
-    if (opDays <= 0 || avgHead <= 0) return null;
-    if (bundle?.days == null) return null;
-    const prefix = `${calendarMonth.y}-${String(calendarMonth.m).padStart(2, "0")}`;
-    let monthTotalProd = 0;
-    for (const d of bundle.days) {
-      if (d.date.startsWith(prefix)) monthTotalProd += d.totalFinishedQty;
-    }
-    return monthTotalProd / opDays / avgHead;
-  }, [
-    bundle?.days,
-    manpower?.hasProcessedPlanData,
-    manpower?.daysWithManpower,
-    manpower?.avgDailyManpower,
-    manpower?.avgDailyUtilizationPct,
-    calendarMonth.y,
-    calendarMonth.m,
-  ]);
 
   const climateDashboardCard = useMemo(() => {
     if (!climateWindows || climateWindows.current.dayCount <= 0) return null;
@@ -763,27 +711,27 @@ export default function ExecutiveDashboardPage() {
                   </button>
                 }
               >
-                이번 달 평균 투입 인원을 총원과 비교한 수치입니다. 생산성은 1인당 하루 평균 생산량입니다.
+                이번 달 평균 투입 인원을 기준 총원(baseline headcount)과 비교한 수치입니다. 활성 프로필 수는 보조값입니다. 생산성은 1인당 하루 평균 생산량입니다.
               </ExecutivePortalTooltip>
             </div>
-            {manpowerProductivityUnitsPerPersonDay != null && (
+            {manpower?.productivityPerPersonDay != null && (
               <p
                 className={`shrink-0 text-right ${dashMutedMeta} tabular-nums`}
                 title="이번 달 완제품 합계·가동일·평균 투입 인원 기준"
               >
                 생산성{" "}
                 <span className="text-slate-300">
-                  {Math.round(manpowerProductivityUnitsPerPersonDay).toLocaleString("ko-KR")}개/인·일
+                  {Math.round(manpower.productivityPerPersonDay).toLocaleString("ko-KR")}개/인·일
                 </span>
               </p>
             )}
           </div>
 
-          {manpower?.hasProcessedPlanData && manpower.avgDailyUtilizationPct != null ? (
+          {manpower?.hasData && manpower.avgUtilizationThisMonth != null ? (
             <div className="mt-6 flex flex-1 flex-col">
               {(() => {
-                const monthU = manpower.avgDailyUtilizationPct;
-                const ytdU = manpower.ytdAvgDailyUtilizationPct;
+                const monthU = manpower.avgUtilizationThisMonth;
+                const ytdU = manpower.yearlyAvgUtilization;
                 const deltaUtilVsYtd =
                   monthU != null &&
                   ytdU != null &&
@@ -814,12 +762,13 @@ export default function ExecutiveDashboardPage() {
 
                     <div className={`mt-8 border-t border-slate-700/35 pt-5 ${dashMutedMeta} leading-relaxed`}>
                       <p className="tabular-nums">
-                        평균 투입 인원 {manpower.avgDailyManpower?.toFixed(1) ?? "—"}명 · 총원{" "}
+                        평균 투입 인원 {manpower.avgActualManpowerThisMonth?.toFixed(1) ?? "—"}명 · 기준 총원{" "}
                         {manpower.baselineHeadcount}명
+                        <span className="text-slate-500"> (활성 프로필 {manpower.totalMembers}명)</span>
                       </p>
                       <p className="mt-2 flex flex-wrap items-center gap-x-1 tabular-nums text-slate-400">
                         <span>
-                          가동일 이번 달 {manpower.daysWithManpower}일 · 올해 {manpower.ytdOperatingDays}일
+                          가동일 이번 달 {manpower.operatingDaysThisMonth}일 · 올해 {manpower.operatingDaysYearToDate}일
                         </span>
                         {manpower.monthlyOperatingDays.length > 0 && (
                           <ExecutivePortalTooltip
