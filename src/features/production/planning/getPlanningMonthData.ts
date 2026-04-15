@@ -9,6 +9,7 @@ import type {
   PlanningMonthData,
   PlanningMonthRow,
   PlanningNoteRow,
+  PlanningSubmaterialRow,
   PlanningVersionType,
 } from "./types";
 
@@ -59,7 +60,7 @@ export async function getPlanningMonthData(year: number, month: number, version:
   const supabase = getSupabaseAdmin();
   const monthRow = await ensureMonth(year, month, version);
 
-  const [entriesRes, notesRes, manpowerRes, leavesRes, monthsRes, bomRes, materialsRes, inventoryRes, profilesRes] = await Promise.all([
+  const [entriesRes, notesRes, manpowerRes, leavesRes, monthsRes, bomRes, submaterialsRes, materialsRes, submaterialItemsRes, inventoryRes, profilesRes] = await Promise.all([
     supabase
       .from("production_plan_entries")
       .select("id,month_id,plan_date,product_name_snapshot,qty,sort_order")
@@ -88,7 +89,9 @@ export async function getPlanningMonthData(year: number, month: number, version:
       .eq("plan_year", year)
       .eq("plan_month", month),
     supabase.from("bom").select("product_name,material_name,bom_g_per_ea"),
+    supabase.from("planning_submaterials").select("id,product_name_snapshot,material_name,qty_g_per_ea,active").eq("active", true),
     supabase.from("materials").select("material_name,inventory_item_code"),
+    supabase.from("planning_submaterial_items").select("submaterial_name,inventory_item_code").eq("active", true),
     supabase
       .from("ecount_inventory_current")
       .select("item_code,qty,box_weight_g,unit_weight_g")
@@ -102,7 +105,9 @@ export async function getPlanningMonthData(year: number, month: number, version:
   if (manpowerRes.error) throw manpowerRes.error;
   if (monthsRes.error) throw monthsRes.error;
   if (bomRes.error) throw bomRes.error;
+  if (submaterialsRes.error) throw submaterialsRes.error;
   if (materialsRes.error) throw materialsRes.error;
+  if (submaterialItemsRes.error) throw submaterialItemsRes.error;
   if (inventoryRes.error) throw inventoryRes.error;
   if (profilesRes.error) throw profilesRes.error;
 
@@ -147,8 +152,20 @@ export async function getPlanningMonthData(year: number, month: number, version:
     bom_g_per_ea: Number(r.bom_g_per_ea) || 0,
   })) as PlanningBomRow[];
 
+  const submaterialRows = ((submaterialsRes.data ?? []) as Record<string, unknown>[]).map((r) => ({
+    id: String(r.id ?? ""),
+    product_name_snapshot: String(r.product_name_snapshot ?? ""),
+    material_name: String(r.material_name ?? ""),
+    qty_g_per_ea: Number(r.qty_g_per_ea) || 0,
+    active: r.active !== false,
+  })) as PlanningSubmaterialRow[];
+
   const materialRows = ((materialsRes.data ?? []) as Record<string, unknown>[]).map((r) => ({
     material_name: String(r.material_name ?? ""),
+    inventory_item_code: r.inventory_item_code != null ? String(r.inventory_item_code) : null,
+  })) as PlanningMaterialRow[];
+  const submaterialMasterRows = ((submaterialItemsRes.data ?? []) as Record<string, unknown>[]).map((r) => ({
+    material_name: String(r.submaterial_name ?? ""),
     inventory_item_code: r.inventory_item_code != null ? String(r.inventory_item_code) : null,
   })) as PlanningMaterialRow[];
 
@@ -183,8 +200,9 @@ export async function getPlanningMonthData(year: number, month: number, version:
     products,
     people,
     versions: versions.length > 0 ? versions : [version],
-    materialRows,
+    materialRows: [...materialRows, ...submaterialMasterRows],
     bomRows,
+    submaterialRows,
     inventoryRows,
     totalMembers: (profilesRes.data ?? []).length,
   };

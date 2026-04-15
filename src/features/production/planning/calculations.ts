@@ -8,6 +8,7 @@ import type {
   PlanningNoteRow,
   PlanningProcessedRow,
   PlanningRangeMode,
+  PlanningSubmaterialRow,
 } from "./types";
 
 export function ymd(year: number, month: number, day: number): string {
@@ -219,18 +220,31 @@ export function rollupQtyForPlanning(productNameSnapshot: string, rawQty: number
 export function computeMaterialRequirements(params: {
   entries: PlanningEntryRow[];
   bomRows: PlanningBomRow[];
+  submaterialRows: PlanningSubmaterialRow[];
   materialRows: PlanningMaterialRow[];
   inventoryRows: PlanningInventoryRow[];
   startDate: string;
   endDate: string;
 }): MaterialRequirementRow[] {
-  const { entries, bomRows, materialRows, inventoryRows, startDate, endDate } = params;
+  const { entries, bomRows, submaterialRows, materialRows, inventoryRows, startDate, endDate } = params;
   const bomByProduct = indexBomByProduct(bomRows);
+  const subByProduct = new Map<string, PlanningSubmaterialRow[]>();
+  for (const s of submaterialRows) {
+    if (!s.active) continue;
+    if (!s.product_name_snapshot.trim()) continue;
+    if ((Number(s.qty_g_per_ea) || 0) <= 0) continue;
+    const key = s.product_name_snapshot.trim();
+    const list = subByProduct.get(key) ?? [];
+    list.push(s);
+    subByProduct.set(key, list);
+  }
   const requiredByMaterial = new Map<string, number>();
 
   for (const entry of entries) {
     if (entry.plan_date < startDate || entry.plan_date > endDate) continue;
-    const bomList = bomByProduct.get(entry.product_name_snapshot.trim()) ?? [];
+    const snap = entry.product_name_snapshot.trim();
+    const bomList = bomByProduct.get(snap) ?? [];
+    const subList = subByProduct.get(snap) ?? [];
     const rollupQty = rollupQtyForPlanning(entry.product_name_snapshot, entry.qty);
     if (rollupQty <= 0) continue;
     for (const bom of bomList) {
@@ -238,6 +252,12 @@ export function computeMaterialRequirements(params: {
       if (!materialKey) continue;
       const curr = requiredByMaterial.get(materialKey) ?? 0;
       requiredByMaterial.set(materialKey, curr + rollupQty * bom.bom_g_per_ea);
+    }
+    for (const sub of subList) {
+      const materialKey = canonicalMaterialName(sub.material_name);
+      if (!materialKey) continue;
+      const curr = requiredByMaterial.get(materialKey) ?? 0;
+      requiredByMaterial.set(materialKey, curr + rollupQty * (Number(sub.qty_g_per_ea) || 0));
     }
   }
 
@@ -273,6 +293,7 @@ export function computeMonthlySummary(params: {
   notes: PlanningNoteRow[];
   materialRows: PlanningMaterialRow[];
   bomRows: PlanningBomRow[];
+  submaterialRows: PlanningSubmaterialRow[];
   inventoryRows: PlanningInventoryRow[];
 }): {
   totalQty: number;
@@ -282,7 +303,7 @@ export function computeMonthlySummary(params: {
   shortageMaterialsCount: number;
   topMaterials: { materialName: string; requiredG: number }[];
 } {
-  const { year, month, entries, notes, materialRows, bomRows, inventoryRows } = params;
+  const { year, month, entries, notes, materialRows, bomRows, submaterialRows, inventoryRows } = params;
   const byProduct = new Map<string, number>();
   let totalQty = 0;
   const daySet = new Set<string>();
@@ -293,11 +314,14 @@ export function computeMonthlySummary(params: {
     byProduct.set(baseName, (byProduct.get(baseName) ?? 0) + e.qty);
   }
   const noteDays = new Set(notes.map((n) => n.plan_date)).size;
-  const start = ymd(year, month, 1);
+  const today = new Date();
+  const todayIso = ymd(today.getFullYear(), today.getMonth() + 1, today.getDate());
+  const start = todayIso;
   const end = ymd(year, month, monthDays(year, month));
   const materialRowsResult = computeMaterialRequirements({
     entries,
     bomRows,
+    submaterialRows,
     materialRows,
     inventoryRows,
     startDate: start,

@@ -87,6 +87,14 @@ export interface PlanningBomRow {
   bom_g_per_ea: number;
 }
 
+export interface PlanningSubmaterialRow {
+  id: string;
+  product_name_snapshot: string;
+  material_name: string;
+  qty_g_per_ea: number;
+  active: boolean;
+}
+
 export interface MaterialRequirementRow {
   material_name: string;
   required_g: number;
@@ -107,6 +115,7 @@ export interface PlanningMonthData {
   versions: PlanningVersionType[];
   materialRows: PlanningMaterialRow[];
   bomRows: PlanningBomRow[];
+  submaterialRows: PlanningSubmaterialRow[];
   inventoryRows: PlanningInventoryRow[];
   totalMembers: number;
 }

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Material, BomRow } from "@/lib/mockData";
+import type { Material, BomRow, PlanningSubmaterialRow, PlanningSubmaterialItem } from "@/lib/mockData";
 import { supabase } from "@/lib/supabase";
 
 /** Supabase/PostgrestError 등에서 사용자에게 보여줄 에러 문구 추출 (message / details / hint 또는 JSON) */
@@ -96,7 +96,7 @@ export interface ProductionLog {
   dough_data?: DoughProcessData;
 }
 
-type SavingKind = "" | "materials" | "bom" | "doughBom" | "logs";
+type SavingKind = "" | "materials" | "bom" | "planningSubmaterial" | "doughBom" | "logs";
 
 /** 도우 BOM: 밀가루 1kg 기준 부재료(g). 1포대당 생산 수량으로 권장 포대 수 계산 */
 export interface DoughBom {
@@ -175,7 +175,9 @@ export interface ProductionHistoryDateStateRow {
 
 interface MasterState {
   materials: Material[];
+  planningSubmaterialItems: PlanningSubmaterialItem[];
   bomList: BomRow[];
+  planningSubmaterials: PlanningSubmaterialRow[];
   /** 도우 BOM 목록 (반죽사용량 입력 페이지 드롭다운·배합 비율 계산) */
   doughBoms: DoughBom[];
   productionLogs: ProductionLog[];
@@ -187,7 +189,9 @@ interface MasterState {
   usageCalculationsLoading: boolean;
 
   materialsLoading: boolean;
+  planningSubmaterialItemsLoading: boolean;
   bomLoading: boolean;
+  planningSubmaterialsLoading: boolean;
   doughBomsLoading: boolean;
   productionLogsLoading: boolean;
   lastUsedDatesLoading: boolean;
@@ -196,7 +200,15 @@ interface MasterState {
   error: string | null;
 
   fetchMaterials: () => Promise<void>;
+  fetchPlanningSubmaterialItems: () => Promise<void>;
+  addPlanningSubmaterialItem: (row: Omit<PlanningSubmaterialItem, "id">) => Promise<void>;
+  updatePlanningSubmaterialItem: (id: string, patch: Partial<Omit<PlanningSubmaterialItem, "id">>) => Promise<void>;
+  deletePlanningSubmaterialItem: (id: string) => Promise<void>;
   fetchBom: () => Promise<void>;
+  fetchPlanningSubmaterials: () => Promise<void>;
+  addPlanningSubmaterialRows: (rows: Omit<PlanningSubmaterialRow, "id">[]) => Promise<void>;
+  updatePlanningSubmaterialRow: (id: string, patch: Partial<Omit<PlanningSubmaterialRow, "id">>) => Promise<void>;
+  deletePlanningSubmaterialRow: (id: string) => Promise<void>;
   fetchDoughBoms: () => Promise<void>;
   addDoughBom: (row: Omit<DoughBom, "id">) => Promise<void>;
   updateDoughBom: (id: string, patch: Partial<Omit<DoughBom, "id">>) => Promise<void>;
@@ -297,6 +309,40 @@ function mapBomFromDb(row: { id: string; product_name: string; material_name: st
     materialName: row.material_name,
     bomGPerEa: row.bom_g_per_ea ?? 0,
     basis: row.basis,
+  };
+}
+
+function mapPlanningSubmaterialFromDb(row: {
+  id: string | number;
+  product_name_snapshot: string;
+  material_name: string;
+  qty_g_per_ea: number;
+  active: boolean;
+}): PlanningSubmaterialRow {
+  return {
+    id: String(row.id),
+    productNameSnapshot: String(row.product_name_snapshot ?? ""),
+    materialName: String(row.material_name ?? ""),
+    qtyGPerEa: Number(row.qty_g_per_ea) || 0,
+    active: row.active !== false,
+  };
+}
+
+function mapPlanningSubmaterialItemFromDb(row: {
+  id: string | number;
+  submaterial_name: string;
+  box_weight_g: number;
+  unit_weight_g: number;
+  inventory_item_code?: string | null;
+  active: boolean;
+}): PlanningSubmaterialItem {
+  return {
+    id: String(row.id),
+    submaterialName: String(row.submaterial_name ?? ""),
+    boxWeightG: Number(row.box_weight_g) || 0,
+    unitWeightG: Number(row.unit_weight_g) || 0,
+    inventoryItemCode: row.inventory_item_code?.trim() || undefined,
+    active: row.active !== false,
   };
 }
 
@@ -482,7 +528,9 @@ function buildDoughLogDbPayload(usageDateKey: string, data: DoughLogRecord) {
 
 export const useMasterStore = create<MasterState>((set, get) => ({
   materials: [],
+  planningSubmaterialItems: [],
   bomList: [],
+  planningSubmaterials: [],
   doughBoms: [],
   productionLogs: [],
   lastUsedDates: {},
@@ -493,7 +541,9 @@ export const useMasterStore = create<MasterState>((set, get) => ({
   productionHistoryDateStatesLoading: false,
 
   materialsLoading: false,
+  planningSubmaterialItemsLoading: false,
   bomLoading: false,
+  planningSubmaterialsLoading: false,
   doughBomsLoading: false,
   productionLogsLoading: false,
   lastUsedDatesLoading: false,
@@ -518,6 +568,100 @@ export const useMasterStore = create<MasterState>((set, get) => ({
     }
   },
 
+  fetchPlanningSubmaterialItems: async () => {
+    set({ planningSubmaterialItemsLoading: true, error: null });
+    try {
+      const { data, error: e } = await supabase
+        .from("planning_submaterial_items")
+        .select("id, submaterial_name, box_weight_g, unit_weight_g, inventory_item_code, active")
+        .order("submaterial_name");
+      if (e) throw e;
+      set({
+        planningSubmaterialItems: (data ?? []).map(mapPlanningSubmaterialItemFromDb),
+        planningSubmaterialItemsLoading: false,
+      });
+    } catch (err) {
+      set({
+        planningSubmaterialItemsLoading: false,
+        error: err instanceof Error ? err.message : "부자재 목록을 불러오지 못했습니다.",
+      });
+    }
+  },
+
+  addPlanningSubmaterialItem: async (row) => {
+    set({ saving: "planningSubmaterial", error: null });
+    try {
+      const { data, error: e } = await supabase
+        .from("planning_submaterial_items")
+        .insert({
+          submaterial_name: row.submaterialName,
+          box_weight_g: row.boxWeightG,
+          unit_weight_g: row.unitWeightG,
+          inventory_item_code: row.inventoryItemCode?.trim() || null,
+          active: row.active,
+        })
+        .select("id, submaterial_name, box_weight_g, unit_weight_g, inventory_item_code, active")
+        .single();
+      if (e) throw e;
+      set((state) => ({
+        planningSubmaterialItems: [...state.planningSubmaterialItems, mapPlanningSubmaterialItemFromDb(data)],
+        saving: "",
+      }));
+    } catch (err) {
+      set({
+        saving: "",
+        error: err instanceof Error ? err.message : "부자재 등록에 실패했습니다.",
+      });
+      throw err;
+    }
+  },
+
+  updatePlanningSubmaterialItem: async (id, patch) => {
+    set({ saving: "planningSubmaterial", error: null });
+    try {
+      const payload: Record<string, unknown> = {};
+      if (patch.submaterialName != null) payload.submaterial_name = patch.submaterialName;
+      if (patch.boxWeightG != null) payload.box_weight_g = patch.boxWeightG;
+      if (patch.unitWeightG != null) payload.unit_weight_g = patch.unitWeightG;
+      if (patch.inventoryItemCode != null) payload.inventory_item_code = patch.inventoryItemCode.trim() || null;
+      if (patch.active != null) payload.active = patch.active;
+      const idNum = parseInt(id, 10);
+      const idForDb = Number.isNaN(idNum) ? id : idNum;
+      const { error: e } = await supabase.from("planning_submaterial_items").update(payload).eq("id", idForDb);
+      if (e) throw e;
+      set((state) => ({
+        planningSubmaterialItems: state.planningSubmaterialItems.map((x) => (x.id === id ? { ...x, ...patch } : x)),
+        saving: "",
+      }));
+    } catch (err) {
+      set({
+        saving: "",
+        error: err instanceof Error ? err.message : "부자재 수정에 실패했습니다.",
+      });
+      throw err;
+    }
+  },
+
+  deletePlanningSubmaterialItem: async (id) => {
+    set({ saving: "planningSubmaterial", error: null });
+    try {
+      const idNum = parseInt(id, 10);
+      const idForDb = Number.isNaN(idNum) ? id : idNum;
+      const { error: e } = await supabase.from("planning_submaterial_items").delete().eq("id", idForDb);
+      if (e) throw e;
+      set((state) => ({
+        planningSubmaterialItems: state.planningSubmaterialItems.filter((x) => x.id !== id),
+        saving: "",
+      }));
+    } catch (err) {
+      set({
+        saving: "",
+        error: err instanceof Error ? err.message : "부자재 삭제에 실패했습니다.",
+      });
+      throw err;
+    }
+  },
+
   fetchBom: async () => {
     set({ bomLoading: true, error: null });
     try {
@@ -529,6 +673,100 @@ export const useMasterStore = create<MasterState>((set, get) => ({
         bomLoading: false,
         error: err instanceof Error ? err.message : "BOM 목록을 불러오지 못했습니다.",
       });
+    }
+  },
+
+  fetchPlanningSubmaterials: async () => {
+    set({ planningSubmaterialsLoading: true, error: null });
+    try {
+      const { data, error: e } = await supabase
+        .from("planning_submaterials")
+        .select("id, product_name_snapshot, material_name, qty_g_per_ea, active")
+        .order("product_name_snapshot")
+        .order("material_name");
+      if (e) throw e;
+      set({
+        planningSubmaterials: (data ?? []).map(mapPlanningSubmaterialFromDb),
+        planningSubmaterialsLoading: false,
+      });
+    } catch (err) {
+      set({
+        planningSubmaterialsLoading: false,
+        error: err instanceof Error ? err.message : "플래닝 부자재 목록을 불러오지 못했습니다.",
+      });
+    }
+  },
+
+  addPlanningSubmaterialRows: async (rows) => {
+    set({ saving: "planningSubmaterial", error: null });
+    try {
+      const inserts = rows.map((r) => ({
+        product_name_snapshot: r.productNameSnapshot,
+        material_name: r.materialName,
+        qty_g_per_ea: r.qtyGPerEa,
+        active: r.active,
+      }));
+      const { data, error: e } = await supabase
+        .from("planning_submaterials")
+        .insert(inserts)
+        .select("id, product_name_snapshot, material_name, qty_g_per_ea, active");
+      if (e) throw e;
+      const newRows = (data ?? []).map(mapPlanningSubmaterialFromDb);
+      set((state) => ({
+        planningSubmaterials: [...state.planningSubmaterials, ...newRows],
+        saving: "",
+      }));
+    } catch (err) {
+      set({
+        saving: "",
+        error: err instanceof Error ? err.message : "플래닝 부자재 등록에 실패했습니다.",
+      });
+      throw err;
+    }
+  },
+
+  updatePlanningSubmaterialRow: async (id, patch) => {
+    set({ saving: "planningSubmaterial", error: null });
+    try {
+      const payload: Record<string, unknown> = {};
+      if (patch.productNameSnapshot != null) payload.product_name_snapshot = patch.productNameSnapshot;
+      if (patch.materialName != null) payload.material_name = patch.materialName;
+      if (patch.qtyGPerEa != null) payload.qty_g_per_ea = patch.qtyGPerEa;
+      if (patch.active != null) payload.active = patch.active;
+      const idNum = parseInt(id, 10);
+      const idForDb = Number.isNaN(idNum) ? id : idNum;
+      const { error: e } = await supabase.from("planning_submaterials").update(payload).eq("id", idForDb);
+      if (e) throw e;
+      set((state) => ({
+        planningSubmaterials: state.planningSubmaterials.map((x) => (x.id === id ? { ...x, ...patch } : x)),
+        saving: "",
+      }));
+    } catch (err) {
+      set({
+        saving: "",
+        error: err instanceof Error ? err.message : "플래닝 부자재 수정에 실패했습니다.",
+      });
+      throw err;
+    }
+  },
+
+  deletePlanningSubmaterialRow: async (id) => {
+    set({ saving: "planningSubmaterial", error: null });
+    try {
+      const idNum = parseInt(id, 10);
+      const idForDb = Number.isNaN(idNum) ? id : idNum;
+      const { error: e } = await supabase.from("planning_submaterials").delete().eq("id", idForDb);
+      if (e) throw e;
+      set((state) => ({
+        planningSubmaterials: state.planningSubmaterials.filter((x) => x.id !== id),
+        saving: "",
+      }));
+    } catch (err) {
+      set({
+        saving: "",
+        error: err instanceof Error ? err.message : "플래닝 부자재 삭제에 실패했습니다.",
+      });
+      throw err;
     }
   },
 

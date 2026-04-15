@@ -19,6 +19,23 @@ export interface BomRow {
   basis: "완제품" | "도우";
 }
 
+export interface PlanningSubmaterialRow {
+  id: string;
+  productNameSnapshot: string;
+  materialName: string;
+  qtyGPerEa: number;
+  active: boolean;
+}
+
+export interface PlanningSubmaterialItem {
+  id: string;
+  submaterialName: string;
+  boxWeightG: number;
+  unitWeightG: number;
+  inventoryItemCode?: string;
+  active: boolean;
+}
+
 export const INITIAL_MATERIALS: Material[] = [
   { id: "m1", materialName: "AG-91", boxWeightG: 10000, unitWeightG: 2500 },
   { id: "m2", materialName: "레드체다치즈", boxWeightG: 10000, unitWeightG: 2500 },

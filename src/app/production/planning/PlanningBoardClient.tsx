@@ -350,6 +350,7 @@ export default function PlanningBoardClient() {
       notes: data.notes,
       materialRows: data.materialRows,
       bomRows: data.bomRows,
+      submaterialRows: data.submaterialRows,
       inventoryRows: data.inventoryRows,
     });
   }, [data, month, year]);
@@ -357,15 +358,15 @@ export default function PlanningBoardClient() {
   /** 월간 보드: 해당 월 전체 기간 필요원료 (기존 computeMaterialRequirements 재사용) */
   const monthlyMaterialRequirements = useMemo(() => {
     if (!data) return [] as MaterialRequirementRow[];
-    const startOfMonth = ymd(year, month, 1);
     const end = ymd(year, month, monthDays(year, month));
     const today = new Date();
     const todayIso = ymd(today.getFullYear(), today.getMonth() + 1, today.getDate());
-    // 현재 월은 오늘 이후 생산분 기준으로만 필요원료를 본다.
-    const start = todayIso > startOfMonth && todayIso <= end ? todayIso : startOfMonth;
+    // 정책: 항상 오늘~선택월 말 범위만 계산한다.
+    const start = todayIso;
     return computeMaterialRequirements({
       entries: data.entries,
       bomRows: data.bomRows,
+      submaterialRows: data.submaterialRows,
       materialRows: data.materialRows,
       inventoryRows: data.inventoryRows,
       startDate: start,
