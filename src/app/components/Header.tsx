@@ -96,7 +96,6 @@ export default function Header() {
   const desktopNavItems = viewIsHarang
     ? [
         { href: "/", label: "홈" },
-        { href: "/harang", label: "하랑운영" },
         { href: "/harang/inbound", label: "입고관리" },
         { href: "/harang/inventory", label: "재고현황" },
         ...(isAdmin ? [{ href: "/harang/admin", label: "마스터관리" }] : []),
@@ -112,7 +111,7 @@ export default function Header() {
   /**
    * 데스크탑 상단 카테고리 메뉴 노출 범위
    * - 100 보기: 허브 + 관련 작업 경로에서도 유지
-   * - 200 보기: 기존처럼 최소 메뉴(홈/계정)만 유지
+   * - 200 보기: 홈·입고·재고·(관리자)마스터·계정
    */
   const showDesktopCategoryMenu = viewIsHarang
     ? pathname === "/" || pathname.startsWith("/account") || pathname.startsWith("/harang")

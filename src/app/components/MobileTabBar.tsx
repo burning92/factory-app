@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, LayoutDashboard, Package, Boxes, CalendarDays, User } from "lucide-react";
+import { Home, LayoutDashboard, Package, Boxes, CalendarDays, User, Inbox } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 const TAB_HOME = { href: "/", label: "홈", Icon: Home };
@@ -12,7 +12,8 @@ const TAB_DAILY = { href: "/daily", label: "데일리", Icon: CalendarDays };
 /** 임원 대시보드 (/executive 및 하위 상세) — 100 조직 보기 시 전원 */
 const TAB_EXECUTIVE = { href: "/executive", label: "대시보드", Icon: LayoutDashboard };
 const TAB_ACCOUNT = { href: "/account", label: "계정", Icon: User };
-const TAB_HARANG = { href: "/harang", label: "하랑", Icon: Package };
+/** 하랑 보기: 허브(/harang) 대신 입고관리로 바로 이동 */
+const TAB_HARANG_INBOUND = { href: "/harang/inbound", label: "입고", Icon: Inbox };
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
@@ -25,7 +26,7 @@ export default function MobileTabBar() {
   const viewIsHarang = viewOrganizationCode === "200";
 
   const tabs = viewIsHarang
-    ? [TAB_HOME, TAB_HARANG, TAB_ACCOUNT]
+    ? [TAB_HOME, TAB_HARANG_INBOUND, TAB_ACCOUNT]
     : [TAB_HOME, TAB_PRODUCTION, TAB_MATERIALS, TAB_DAILY, TAB_EXECUTIVE, TAB_ACCOUNT];
 
   return (
