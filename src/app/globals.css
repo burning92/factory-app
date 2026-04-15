@@ -190,11 +190,7 @@ input:focus, select:focus, textarea:focus {
   opacity: 0.7;
 }
 .planning-a3-cell-head {
-  position: relative;
   min-height: 5.2mm;
-}
-.planning-a3-cell-head .date {
-  position: relative;
 }
 .planning-a3-cell-head .date {
   font-size: 5mm;
@@ -206,16 +202,6 @@ input:focus, select:focus, textarea:focus {
 }
 .planning-a3-cell-head .date.sat {
   color: #2563eb;
-}
-.planning-a3-cell-head .total {
-  position: absolute;
-  right: 0;
-  top: 0;
-  font-size: 2.8mm;
-  color: #1f2937;
-  font-weight: 600;
-  text-align: right;
-  white-space: nowrap;
 }
 .planning-a3-holiday {
   font-size: 3mm;
@@ -265,11 +251,29 @@ input:focus, select:focus, textarea:focus {
   align-items: center;
   gap: 4px;
 }
-.planning-a3-meta.leave {
-  color: #b91c1c;
-}
+/* 휴무/반차: 🟥/🟨·라벨만 색, 이름만 검정 */
+.planning-a3-meta.leave,
 .planning-a3-meta.half {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.planning-a3-meta.leave .planning-a3-meta-label {
+  color: #b91c1c;
+  flex-shrink: 0;
+}
+.planning-a3-meta.leave .planning-a3-meta-names {
+  color: #0f172a;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.planning-a3-meta.half .planning-a3-meta-label {
   color: #a16207;
+  flex-shrink: 0;
+}
+.planning-a3-meta.half .planning-a3-meta-names {
+  color: #0f172a;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .planning-a3-meta-list p.note {
   color: #1e293b;
@@ -320,15 +324,6 @@ input:focus, select:focus, textarea:focus {
 }
 .planning-a3-product-row.pizza {
   border-left-color: #333333;
-}
-.planning-a3-footer {
-  margin-top: 3.5mm;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 3mm;
-  font-size: 2.6mm;
-  color: #1f2937;
-  font-weight: 600;
 }
 
 @media print {

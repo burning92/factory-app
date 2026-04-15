@@ -8,7 +8,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { getKoreanHolidayName, isKoreanPublicHoliday, monthDays, weekdayOfFirstDay, ymd } from "@/features/production/planning/calculations";
 import { computeMonthlyCategoryTotals } from "@/features/production/planning/computeMonthlyCategoryTotals";
-import { classifyProductBaseName } from "@/features/production/planning/productClassification";
 import type { PlanningMonthData } from "@/features/production/planning/types";
 
 type LeaveTag = { type: "annual" | "half"; person: string };
@@ -31,6 +30,8 @@ function normalizedPrintName(base: string): string {
   if (n.includes("파베이크") && !n.includes("우주인")) {
     n = n.replaceAll("선인", "판매용");
   }
+  // 인쇄 전용: 브랜드명 축약 (포노부오노 시그니처/바질&허니/리코타&허니 등 공통)
+  n = n.replaceAll("포노부오노", "포노");
   return n;
 }
 
@@ -42,16 +43,12 @@ function cleanupCategorySuffix(name: string): string {
   return name.replace(/\((브레드|피자|파베이크)\)/g, "").replace(/\s{2,}/g, " ").trim();
 }
 
+/** 인쇄용: 제품명·수량만 (일반/브레드/파베이크사용 등 조건 문구는 생략) */
 function formatPrintProductLine(productSnapshot: string, qty: number): { name: string; qtyText: string } {
   const sp = splitProductName(productSnapshot);
   const base = cleanupCategorySuffix(normalizedPrintName(sp.base));
-  const c = classifyProductBaseName(base);
-  const keepKind = c.major === "pizza";
-  const kind = sp.kind.trim();
-  const normalizedKind = keepKind ? kind : "";
-  const kindPart = normalizedKind ? ` (${normalizedKind})` : "";
   return {
-    name: `${base}${kindPart}`,
+    name: base,
     qtyText: qty.toLocaleString("ko-KR"),
   };
 }
@@ -230,13 +227,11 @@ export default function PlanningPrintPage() {
               const list = entriesByDate.get(dateKey) ?? [];
               const dayLeaves = leavesByDate.get(dateKey) ?? [];
               const dayNotes = notesByDate.get(dateKey) ?? [];
-              const total = list.reduce((s, x) => s + x.qty, 0);
               const holidayName = isKoreanPublicHoliday(dateKey) ? getKoreanHolidayName(dateKey) : null;
               const weekday = idx % 7;
               const isSunday = weekday === 0;
               const isSaturday = weekday === 6;
               const isWeekend = isSunday || isSaturday;
-              const productRows = isWeekend ? list.slice(0, 2) : list.slice(0, 4);
               return (
                 <div key={dateKey} className={`planning-a3-cell ${isWeekend ? "weekend" : "weekday"}`}>
                   <div className="planning-a3-cell-head">
@@ -245,12 +240,11 @@ export default function PlanningPrintPage() {
                     >
                       {Number(dateKey.slice(8, 10))}
                     </span>
-                    <span className="total">합계 {total.toLocaleString("ko-KR")}</span>
                   </div>
                   <div className="planning-a3-cell-main">
                     {holidayName ? <p className="planning-a3-holiday">🔴 {holidayName}</p> : null}
                     <div className="planning-a3-products">
-                      {productRows.map((row, i) => {
+                      {list.map((row, i) => {
                         const qty = adjustedQty(row.product, row.qty);
                         const line = formatPrintProductLine(row.product, qty);
                         const tone = productToneClass(line.name);
@@ -265,10 +259,20 @@ export default function PlanningPrintPage() {
                   </div>
                   <div className="planning-a3-cell-meta">
                     {dayLeaves.filter((x) => x.type === "annual").length > 0 ? (
-                      <p className="planning-a3-meta leave">🟥휴무: {dayLeaves.filter((x) => x.type === "annual").map((x) => x.person).join(", ")}</p>
+                      <p className="planning-a3-meta leave">
+                        <span className="planning-a3-meta-label">🟥휴무:</span>
+                        <span className="planning-a3-meta-names">
+                          {dayLeaves.filter((x) => x.type === "annual").map((x) => x.person).join(", ")}
+                        </span>
+                      </p>
                     ) : null}
                     {dayLeaves.filter((x) => x.type === "half").length > 0 ? (
-                      <p className="planning-a3-meta half">🟨반차: {dayLeaves.filter((x) => x.type === "half").map((x) => x.person).join(", ")}</p>
+                      <p className="planning-a3-meta half">
+                        <span className="planning-a3-meta-label">🟨반차:</span>
+                        <span className="planning-a3-meta-names">
+                          {dayLeaves.filter((x) => x.type === "half").map((x) => x.person).join(", ")}
+                        </span>
+                      </p>
                     ) : null}
                     {dayNotes.length > 0 ? (
                       <div className="planning-a3-meta-list">
@@ -287,12 +291,6 @@ export default function PlanningPrintPage() {
               );
             })}
           </section>
-
-          <footer className="planning-a3-footer">
-            <span>기준 총원: {data.month.baseline_headcount}명</span>
-            <span>보관용 파베이크: {rollup.parbakeStorageQty.toLocaleString("ko-KR")}</span>
-            <span>판매용 파베이크: {rollup.parbakeSaleQty.toLocaleString("ko-KR")}</span>
-          </footer>
         </main>
       ) : null}
     </div>
