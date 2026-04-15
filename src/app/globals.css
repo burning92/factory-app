@@ -22,6 +22,30 @@ input:focus, select:focus, textarea:focus {
   --tw-ring-color: rgba(34, 211, 238, 0.5);
 }
 
+/* 하랑 BOM 편집용 select 옵션 가독성 보정 */
+.harang-bom-select,
+.harang-bom-select option {
+  color: #0f172a;
+  background-color: #ffffff;
+}
+
+/* 하랑 라이트 테마: 폼 컨트롤 가독성 통합 보정 */
+.harang-theme input,
+.harang-theme select,
+.harang-theme textarea {
+  color: #0f172a;
+}
+
+.harang-theme input::placeholder,
+.harang-theme textarea::placeholder {
+  color: #94a3b8;
+}
+
+.harang-theme select option {
+  color: #0f172a;
+  background-color: #ffffff;
+}
+
 /* 관리일지 인쇄: A4 세로, 화이트 배경, 네비/버튼 숨김 */
 @media print {
   body {

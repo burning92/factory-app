@@ -24,6 +24,7 @@ function shouldTrackAccessPath(pathname: string): boolean {
   if (pathname.startsWith("/production/")) return true;
   if (pathname.startsWith("/materials/")) return true;
   if (pathname.startsWith("/admin/equipment")) return true;
+  if (pathname === "/harang" || pathname.startsWith("/harang/")) return true;
   return false;
 }
 
@@ -147,6 +148,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     router.replace("/");
     return null;
   }
+  if (pathname === "/harang" || pathname.startsWith("/harang/")) {
+    if (viewOrganizationCode !== "200") {
+      router.replace("/");
+      return null;
+    }
+    if ((pathname === "/harang/admin" || pathname.startsWith("/harang/admin/")) && profile?.role !== "admin") {
+      router.replace("/harang");
+      return null;
+    }
+  }
 
   const isManagePage = pathname === "/manage";
   if (isManagePage && profile?.role !== "admin") {
@@ -170,11 +181,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   const showTabBar = true;
+  const mainClassName =
+    pathname === "/harang" || pathname.startsWith("/harang/")
+      ? "harang-theme relative z-0 flex-1 w-full bg-slate-50 pb-16 md:pb-0 print:pb-0"
+      : "relative z-0 flex-1 w-full bg-space-900 pb-16 md:pb-0 print:pb-0";
 
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      <main className="relative z-0 flex-1 w-full bg-space-900 pb-16 md:pb-0 print:pb-0">
+      <main className={mainClassName}>
         {children}
       </main>
       {showTabBar && <MobileTabBar />}

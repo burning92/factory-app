@@ -92,10 +92,14 @@ export default function Header() {
   const showExecutiveLink = !viewIsHarang;
 
 
-  /** 데스크탑 상단 카테고리: 100 = 생산/원부자재/데일리/계정, 200 = 홈/계정만 */
+  /** 데스크탑 상단 카테고리: 100 = 기존, 200 = 하랑 운영 메뉴 */
   const desktopNavItems = viewIsHarang
     ? [
         { href: "/", label: "홈" },
+        { href: "/harang", label: "하랑운영" },
+        { href: "/harang/inbound", label: "입고관리" },
+        { href: "/harang/inventory", label: "재고현황" },
+        ...(isAdmin ? [{ href: "/harang/admin", label: "마스터관리" }] : []),
         { href: "/account", label: "계정" },
       ]
     : [
@@ -111,7 +115,7 @@ export default function Header() {
    * - 200 보기: 기존처럼 최소 메뉴(홈/계정)만 유지
    */
   const showDesktopCategoryMenu = viewIsHarang
-    ? pathname === "/" || pathname.startsWith("/account")
+    ? pathname === "/" || pathname.startsWith("/account") || pathname.startsWith("/harang")
     : pathname === "/" ||
       ["/production", "/materials", "/daily", "/account", "/inventory", "/manage", "/executive", "/admin"].some(
         (prefix) => pathname === prefix || pathname.startsWith(prefix + "/")
