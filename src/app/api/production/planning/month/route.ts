@@ -18,16 +18,25 @@ export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization") ?? "";
   const accessToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
   const refreshToken = (req.headers.get("x-refresh-token") ?? "").trim();
-  if (!accessToken || !refreshToken) {
+  if (!accessToken) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
   const anon = createClient(url, anonKey);
+  // 로컬/세션 환경에 따라 refresh_token이 없을 수 있으므로 access token 단독 검증을 우선 사용한다.
   const {
-    data: { user },
-    error: sessionError,
-  } = await anon.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
-  if (sessionError || !user) {
+    data: { user: userFromAccess },
+    error: userErr,
+  } = await anon.auth.getUser(accessToken);
+  let user = userFromAccess ?? null;
+  if (!user && refreshToken) {
+    const {
+      data: { user: userFromSession },
+      error: sessionError,
+    } = await anon.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+    if (!sessionError) user = userFromSession ?? null;
+  }
+  if (userErr || !user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

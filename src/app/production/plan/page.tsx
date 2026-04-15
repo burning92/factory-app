@@ -315,6 +315,16 @@ export default async function ProductionPlanPage({
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5">
+                  {monthKey ? (
+                    <Link
+                      href={`/production/planning/print?year=${monthKey.slice(0, 4)}&month=${Number(monthKey.slice(5, 7))}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2 py-1 rounded-md text-xs border border-cyan-500/60 bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/25"
+                    >
+                      A3 출력
+                    </Link>
+                  ) : null}
                   {monthKeys.map((m) => (
                     <Link
                       key={m}

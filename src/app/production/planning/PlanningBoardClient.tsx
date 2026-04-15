@@ -546,6 +546,13 @@ export default function PlanningBoardClient() {
             ))}
           </select>
           <span className="px-2 py-1 rounded bg-slate-800 text-slate-300">{formatMonthTitle(year, month)}</span>
+          <button
+            type="button"
+            onClick={() => window.open(`/production/planning/print?year=${year}&month=${month}`, "_blank", "noopener,noreferrer")}
+            className="px-2 py-1 rounded border border-cyan-500/40 bg-cyan-950/30 text-cyan-200 hover:bg-cyan-950/50"
+          >
+            A3 인쇄 보기
+          </button>
         </div>
       </div>
 
