@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { CalendarDays, Save, Copy, Plus, Trash2, Download, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -1028,76 +1029,88 @@ export default function PlanningBoardClient() {
           </aside>
         </div>
 
-          {dayDrawerOpen && data ? (
-            <>
-              <button
-                type="button"
-                aria-label="닫기"
-                className="fixed inset-0 z-[300] bg-black/55"
-                onClick={() => setDayDrawerOpen(false)}
-              />
-              <div
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="planning-day-drawer-title"
-                className="fixed inset-y-0 right-0 z-[310] flex h-[100dvh] max-h-[100dvh] w-full min-w-0 max-w-[min(100vw,28rem)] flex-col border-l border-slate-600 bg-space-900 shadow-2xl shadow-black/50"
-              >
-                <div className="sticky top-0 z-[1] flex shrink-0 items-center justify-between gap-2 border-b border-slate-700 bg-space-900/95 px-4 py-3 backdrop-blur-sm">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wide text-slate-500">날짜 상세</p>
-                    <p id="planning-day-drawer-title" className="text-lg font-semibold text-cyan-100">
-                      {selectedDate}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {dirty ? <span className="text-[11px] text-amber-300">저장 안됨</span> : <span className="text-[11px] text-slate-500">저장됨</span>}
-                    <button
-                      type="button"
-                      onClick={() => setDayDrawerOpen(false)}
-                      className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-4 pb-2">
-                  <div className="flex gap-1 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => setDetailMode("production")}
-                      className={`flex-1 rounded px-2 py-2 ${detailMode === "production" ? "bg-cyan-600 text-white" : "bg-slate-700 text-slate-200"}`}
-                    >
-                      생산계획
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDetailMode("leave")}
-                      className={`flex-1 rounded px-2 py-2 ${detailMode === "leave" ? "bg-violet-600 text-white" : "bg-slate-700 text-slate-200"}`}
-                    >
-                      연월차
-                    </button>
-                  </div>
+          {dayDrawerOpen && data
+            ? createPortal(
+                <>
+                  <button
+                    type="button"
+                    aria-label="닫기"
+                    className="fixed inset-0 z-[300] bg-black/55"
+                    onClick={() => setDayDrawerOpen(false)}
+                  />
+                  <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="planning-day-drawer-title"
+                    className="fixed inset-y-0 right-0 z-[310] box-border flex h-[100dvh] max-h-[100dvh] w-full min-w-0 max-w-[min(100vw,28rem)] flex-col overflow-x-hidden border-l border-slate-600 bg-space-900 pt-[env(safe-area-inset-top,0px)] shadow-2xl shadow-black/50"
+                  >
+                    <div className="sticky top-0 z-[1] flex shrink-0 items-start justify-between gap-3 overflow-visible border-b border-slate-700 bg-space-900/95 px-4 pb-4 pt-4 backdrop-blur-sm sm:px-5 sm:pb-5 sm:pt-5">
+                      <div className="min-w-0 pt-0.5">
+                        <p className="text-xs uppercase tracking-wide text-slate-500">날짜 상세</p>
+                        <p
+                          id="planning-day-drawer-title"
+                          className="mt-1 text-xl font-semibold leading-normal tracking-tight text-cyan-100 sm:text-2xl"
+                        >
+                          {selectedDate}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2 pt-1">
+                        {dirty ? (
+                          <span className="text-sm text-amber-300">저장 안됨</span>
+                        ) : (
+                          <span className="text-sm text-slate-500">저장됨</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setDayDrawerOpen(false)}
+                          className="rounded-lg p-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                        >
+                          <X className="h-5 w-5" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-5 pb-3 sm:px-5">
+                      <div className="flex gap-2 text-sm">
+                        <button
+                          type="button"
+                          onClick={() => setDetailMode("production")}
+                          className={`flex-1 rounded-lg px-3 py-3 font-medium ${detailMode === "production" ? "bg-cyan-600 text-white" : "bg-slate-700 text-slate-200"}`}
+                        >
+                          생산계획
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDetailMode("leave")}
+                          className={`flex-1 rounded-lg px-3 py-3 font-medium ${detailMode === "leave" ? "bg-violet-600 text-white" : "bg-slate-700 text-slate-200"}`}
+                        >
+                          연월차
+                        </button>
+                      </div>
 
-                  {detailMode === "production" ? (
-                    <>
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-slate-400">제품별 생산계획</p>
-                        {canEdit ? (
-                          <button type="button" className="inline-flex items-center gap-1 text-xs text-cyan-300 hover:text-cyan-200" onClick={addEntryRow}>
-                            <Plus className="w-3 h-3" /> 제품 추가
-                          </button>
-                        ) : null}
-                      </div>
-                      <div className="grid grid-cols-[minmax(0,1fr)_110px_76px_28px] items-center gap-1.5 px-1 text-[10px] font-medium text-slate-500">
-                        <span>제품명</span>
-                        <span>조건</span>
-                        <span className="text-right">수량</span>
-                        <span />
-                      </div>
-                      <div className="space-y-2 max-h-[min(40vh,320px)] overflow-y-auto pr-1">
-                        {draft.entries.map((entry, idx) => (
-                          <div key={`entry-${idx}`} className="grid grid-cols-[minmax(0,1fr)_110px_76px_28px] gap-1.5 items-center">
-                            <select
+                      {detailMode === "production" ? (
+                        <>
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-medium text-slate-300">제품별 생산계획</p>
+                            {canEdit ? (
+                              <button
+                                type="button"
+                                className="inline-flex items-center gap-1 text-sm text-cyan-300 hover:text-cyan-200"
+                                onClick={addEntryRow}
+                              >
+                                <Plus className="h-4 w-4" /> 제품 추가
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className="grid grid-cols-[minmax(0,1fr)_minmax(5.5rem,7rem)_minmax(4rem,5rem)_2rem] items-center gap-2 px-0.5 text-xs font-medium text-slate-500 sm:text-sm">
+                            <span>제품명</span>
+                            <span>조건</span>
+                            <span className="text-right">수량</span>
+                            <span />
+                          </div>
+                          <div className="max-h-[min(42vh,360px)] space-y-2.5 overflow-y-auto pr-1">
+                            {draft.entries.map((entry, idx) => (
+                              <div key={`entry-${idx}`} className="grid grid-cols-[minmax(0,1fr)_minmax(5.5rem,7rem)_minmax(4rem,5rem)_2rem] items-center gap-2">
+                                <select
                               value={entry.productBase}
                               onChange={(e) =>
                                 setDraft((prev) => {
@@ -1109,7 +1122,7 @@ export default function PlanningBoardClient() {
                                 })
                               }
                               disabled={!canEdit}
-                              className="min-w-0 px-2 py-2 rounded-lg border border-slate-600 bg-space-800 text-xs text-slate-100"
+                              className="min-w-0 rounded-lg border border-slate-600 bg-space-800 px-3 py-2.5 text-sm text-slate-100"
                             >
                               <option value="">제품명</option>
                               {baseProductOptions.map((base) => (
@@ -1128,7 +1141,7 @@ export default function PlanningBoardClient() {
                                 })
                               }
                               disabled={!canEdit}
-                              className="min-w-0 px-2 py-2 rounded-lg border border-slate-600 bg-space-800 text-xs text-slate-100"
+                              className="min-w-0 rounded-lg border border-slate-600 bg-space-800 px-3 py-2.5 text-sm text-slate-100"
                             >
                               <option value="">조건</option>
                               {(productOptionMap.get(entry.productBase) ?? []).map((kind) => (
@@ -1168,7 +1181,7 @@ export default function PlanningBoardClient() {
                                 })
                               }
                               disabled={!canEdit}
-                              className="min-w-0 px-2 py-2 rounded-lg border border-slate-600 bg-space-800 text-xs text-slate-100 text-right"
+                              className="min-w-0 rounded-lg border border-slate-600 bg-space-800 px-3 py-2.5 text-right text-sm text-slate-100"
                               placeholder="수량"
                             />
                             {canEdit ? (
@@ -1183,7 +1196,7 @@ export default function PlanningBoardClient() {
                                 className="text-rose-400 hover:text-rose-300"
                                 title="행 삭제"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <Trash2 className="h-5 w-5" />
                               </button>
                             ) : (
                               <span />
@@ -1193,14 +1206,14 @@ export default function PlanningBoardClient() {
                       </div>
                     </>
                   ) : (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-slate-400">연차/반차/기타 인원</p>
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-medium text-slate-300">연차/반차/기타 인원</p>
                         {canEdit ? (
-                          <div className="flex gap-1">
+                          <div className="flex flex-wrap justify-end gap-1.5">
                             <button
                               type="button"
-                              className="inline-flex items-center gap-1 text-xs text-violet-300 hover:text-violet-200"
+                              className="inline-flex items-center gap-1 rounded-md text-sm text-violet-300 hover:text-violet-200"
                               onClick={() =>
                                 setDraft((prev) => ({
                                   ...prev,
@@ -1208,11 +1221,11 @@ export default function PlanningBoardClient() {
                                 }))
                               }
                             >
-                              <Plus className="w-3 h-3" /> 연차
+                              <Plus className="h-4 w-4" /> 연차
                             </button>
                             <button
                               type="button"
-                              className="inline-flex items-center gap-1 text-xs text-violet-300 hover:text-violet-200"
+                              className="inline-flex items-center gap-1 rounded-md text-sm text-violet-300 hover:text-violet-200"
                               onClick={() =>
                                 setDraft((prev) => ({
                                   ...prev,
@@ -1220,11 +1233,11 @@ export default function PlanningBoardClient() {
                                 }))
                               }
                             >
-                              <Plus className="w-3 h-3" /> 반차
+                              <Plus className="h-4 w-4" /> 반차
                             </button>
                             <button
                               type="button"
-                              className="inline-flex items-center gap-1 text-xs text-amber-300 hover:text-amber-200"
+                              className="inline-flex items-center gap-1 rounded-md text-sm text-amber-300 hover:text-amber-200"
                               onClick={() =>
                                 setDraft((prev) => ({
                                   ...prev,
@@ -1232,14 +1245,14 @@ export default function PlanningBoardClient() {
                                 }))
                               }
                             >
-                              <Plus className="w-3 h-3" /> 기타
+                              <Plus className="h-4 w-4" /> 기타
                             </button>
                           </div>
                         ) : null}
                       </div>
-                      <div className="space-y-1.5 max-h-[min(32vh,260px)] overflow-y-auto">
+                      <div className="max-h-[min(34vh,300px)] space-y-2 overflow-y-auto">
                         {draft.leaves.map((leave, idx) => (
-                          <div key={`leave-${idx}`} className="grid grid-cols-[72px_1fr_28px] gap-1.5 items-center">
+                          <div key={`leave-${idx}`} className="grid grid-cols-[5rem_1fr_2rem] items-center gap-2">
                             <select
                               value={leave.leave_type}
                               disabled={!canEdit}
@@ -1250,7 +1263,7 @@ export default function PlanningBoardClient() {
                                   return { ...prev, leaves: next };
                                 })
                               }
-                              className="px-1 py-2 rounded-lg border border-slate-600 bg-space-800 text-xs text-slate-100"
+                              className="rounded-lg border border-slate-600 bg-space-800 px-2 py-2.5 text-sm text-slate-100"
                             >
                               <option value="annual">연차</option>
                               <option value="half">반차</option>
@@ -1266,7 +1279,7 @@ export default function PlanningBoardClient() {
                                   return { ...prev, leaves: next };
                                 })
                               }
-                              className="px-2 py-2 rounded-lg border border-slate-600 bg-space-800 text-xs text-slate-100"
+                              className="rounded-lg border border-slate-600 bg-space-800 px-3 py-2.5 text-sm text-slate-100"
                               placeholder="이름"
                             />
                             {canEdit ? (
@@ -1275,7 +1288,7 @@ export default function PlanningBoardClient() {
                                 className="text-rose-400 hover:text-rose-300"
                                 onClick={() => setDraft((prev) => ({ ...prev, leaves: prev.leaves.filter((_, i) => i !== idx) }))}
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <Trash2 className="h-5 w-5" />
                               </button>
                             ) : null}
                           </div>
@@ -1287,10 +1300,10 @@ export default function PlanningBoardClient() {
                         ))}
                       </datalist>
 
-                      <div className="space-y-1.5">
-                        <p className="text-[11px] text-slate-500">기타(내용 : 이름)</p>
+                      <div className="space-y-2">
+                        <p className="text-sm text-slate-500">기타(내용 : 이름)</p>
                         {draft.otherItems.map((item, idx) => (
-                          <div key={`other-${idx}`} className="grid grid-cols-[1fr_1fr_28px] gap-1.5 items-center">
+                          <div key={`other-${idx}`} className="grid grid-cols-[1fr_1fr_2rem] items-center gap-2">
                             <input
                               value={item.detail}
                               disabled={!canEdit}
@@ -1301,7 +1314,7 @@ export default function PlanningBoardClient() {
                                   return { ...prev, otherItems: next };
                                 })
                               }
-                              className="px-2 py-2 rounded-lg border border-slate-600 bg-space-800 text-xs text-slate-100"
+                              className="rounded-lg border border-slate-600 bg-space-800 px-3 py-2.5 text-sm text-slate-100"
                               placeholder="내용(예: 외근)"
                             />
                             <input
@@ -1315,7 +1328,7 @@ export default function PlanningBoardClient() {
                                   return { ...prev, otherItems: next };
                                 })
                               }
-                              className="px-2 py-2 rounded-lg border border-slate-600 bg-space-800 text-xs text-slate-100"
+                              className="rounded-lg border border-slate-600 bg-space-800 px-3 py-2.5 text-sm text-slate-100"
                               placeholder="이름"
                             />
                             {canEdit ? (
@@ -1326,7 +1339,7 @@ export default function PlanningBoardClient() {
                                   setDraft((prev) => ({ ...prev, otherItems: prev.otherItems.filter((_, i) => i !== idx) }))
                                 }
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <Trash2 className="h-5 w-5" />
                               </button>
                             ) : (
                               <span />
@@ -1338,48 +1351,48 @@ export default function PlanningBoardClient() {
                   )}
 
                   {detailMode === "production" ? (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs text-slate-400">비고</label>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <label className="text-sm font-medium text-slate-300">비고</label>
                         {canEdit ? (
                           <button
                             type="button"
-                            className="inline-flex items-center gap-1 text-xs text-yellow-300 hover:text-yellow-200"
+                            className="inline-flex items-center gap-1 text-sm text-yellow-300 hover:text-yellow-200"
                             onClick={() => setShowNoteInput((prev) => !prev)}
                           >
-                            <Plus className="w-3 h-3" /> 비고추가
+                            <Plus className="h-4 w-4" /> 비고추가
                           </button>
                         ) : null}
                       </div>
-                      <div className="space-y-1 max-h-[100px] overflow-y-auto">
+                      <div className="max-h-[120px] space-y-2 overflow-y-auto">
                         {draft.notes.map((note, idx) => (
-                          <div key={`note-${idx}`} className="grid grid-cols-[1fr_28px] gap-1 items-center">
-                            <div className="px-2 py-1.5 rounded-lg border border-slate-700 bg-space-800/50 text-xs text-yellow-100">{note}</div>
+                          <div key={`note-${idx}`} className="grid grid-cols-[1fr_2rem] items-center gap-2">
+                            <div className="rounded-lg border border-slate-700 bg-space-800/50 px-3 py-2 text-sm text-yellow-100">{note}</div>
                             {canEdit ? (
                               <button
                                 type="button"
                                 className="text-rose-400 hover:text-rose-300"
                                 onClick={() => setDraft((prev) => ({ ...prev, notes: prev.notes.filter((_, i) => i !== idx) }))}
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <Trash2 className="h-5 w-5" />
                               </button>
                             ) : null}
                           </div>
                         ))}
                       </div>
                       {showNoteInput || draft.notes.length > 0 ? (
-                        <div className="flex gap-1.5">
+                        <div className="flex flex-wrap gap-2">
                           <input
                             value={draft.noteInput}
                             onChange={(e) => setDraft((prev) => ({ ...prev, noteInput: e.target.value }))}
                             disabled={!canEdit}
                             placeholder="비고 입력"
-                            className="w-full px-3 py-2 rounded-lg border border-slate-600 bg-space-800 text-xs text-slate-100"
+                            className="min-w-0 flex-1 rounded-lg border border-slate-600 bg-space-800 px-3 py-2.5 text-sm text-slate-100"
                           />
                           {canEdit ? (
                             <button
                               type="button"
-                              className="px-2.5 py-2 rounded-lg border border-rose-600/60 text-rose-200 hover:bg-rose-500/10 text-xs"
+                              className="rounded-lg border border-rose-600/60 px-3 py-2.5 text-sm text-rose-200 hover:bg-rose-500/10"
                               onClick={() => {
                                 setDraft((prev) => ({ ...prev, noteInput: "" }));
                                 if (draft.notes.length === 0) setShowNoteInput(false);
@@ -1391,7 +1404,7 @@ export default function PlanningBoardClient() {
                           {canEdit ? (
                             <button
                               type="button"
-                              className="px-2.5 py-2 rounded-lg border border-yellow-600/60 text-yellow-200 hover:bg-yellow-500/10 text-xs"
+                              className="rounded-lg border border-yellow-600/60 px-3 py-2.5 text-sm text-yellow-200 hover:bg-yellow-500/10"
                               onClick={() =>
                                 setDraft((prev) => {
                                   const text = prev.noteInput.trim();
@@ -1408,26 +1421,27 @@ export default function PlanningBoardClient() {
                     </div>
                   ) : null}
 
-                  <div className="rounded-lg border border-slate-700 bg-space-800/60 p-3 text-xs space-y-1">
-                    <p className="text-slate-400">
-                      당일 총 생산량 <span className="text-slate-100 tabular-nums font-medium">{selectedDayTotal.toLocaleString("ko-KR")}</span>
+                  <div className="space-y-2 rounded-lg border border-slate-700 bg-space-800/60 p-4 text-sm">
+                    <p className="text-slate-300">
+                      당일 총 생산량{" "}
+                      <span className="tabular-nums text-base font-semibold text-slate-100">{selectedDayTotal.toLocaleString("ko-KR")}</span>
                     </p>
-                    <p className="text-slate-400">
+                    <p className="text-slate-300">
                       실투입인원(자동){" "}
-                      <span className="text-cyan-200 tabular-nums font-medium">{selectedActualManpower.toLocaleString("ko-KR")}</span>
+                      <span className="tabular-nums text-base font-semibold text-cyan-200">{selectedActualManpower.toLocaleString("ko-KR")}</span>
                       <span className="text-slate-500"> (기준 {baselineHeadcount})</span>
                     </p>
-                    <p className="text-slate-500">연차 {annualCount} · 반차 {halfCount}</p>
+                    <p className="text-slate-400">연차 {annualCount} · 반차 {halfCount}</p>
                   </div>
 
-                  <div className="rounded-lg border border-slate-700 bg-space-800/40 p-3 text-xs">
-                    <p className="text-slate-500 mb-1">미리보기</p>
-                    <div className="space-y-1">
+                  <div className="rounded-lg border border-slate-700 bg-space-800/40 p-4 text-sm">
+                    <p className="mb-2 text-slate-400">미리보기</p>
+                    <div className="space-y-1.5">
                       {draft.entries
                         .filter((e) => e.productBase.trim() && toNumber(e.qtyText) > 0)
                         .slice(0, 4)
                         .map((e, i) => (
-                          <p key={`preview-entry-${i}`} className="text-slate-200 truncate">
+                          <p key={`preview-entry-${i}`} className="truncate text-slate-100">
                             {composeProductName(e.productBase, e.productKind)} · {toNumber(e.qtyText).toLocaleString("ko-KR")}
                           </p>
                         ))}
@@ -1444,7 +1458,7 @@ export default function PlanningBoardClient() {
                         .filter((x) => x.person_name.trim() && x.detail.trim())
                         .slice(0, 3)
                         .map((x, i) => (
-                          <p key={`preview-other-${i}`} className="text-amber-200 truncate">
+                          <p key={`preview-other-${i}`} className="truncate text-amber-200">
                             {x.detail.trim()} : {x.person_name.trim()}
                           </p>
                         ))}
@@ -1452,29 +1466,31 @@ export default function PlanningBoardClient() {
                   </div>
 
                 </div>
-                <div className="shrink-0 border-t border-slate-700 bg-space-900/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
+                <div className="shrink-0 border-t border-slate-700 bg-space-900/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur-sm sm:px-5">
                   <div className="flex gap-2">
                     <button
                       type="button"
                       onClick={saveDay}
                       disabled={!canEdit || saving}
-                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-3 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-sm font-medium"
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-cyan-600 px-4 py-3.5 text-base font-medium text-white hover:bg-cyan-500 disabled:opacity-50"
                     >
-                      <Save className="w-4 h-4" /> {saving ? "저장 중..." : "저장"}
+                      <Save className="h-5 w-5" /> {saving ? "저장 중..." : "저장"}
                     </button>
                     <button
                       type="button"
                       onClick={duplicateToAnotherDate}
                       disabled={!canEdit}
-                      className="px-4 py-3 rounded-lg border border-slate-600 text-slate-200 hover:bg-slate-800 text-sm inline-flex items-center gap-1 shrink-0"
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-600 px-4 py-3.5 text-base text-slate-200 hover:bg-slate-800"
                     >
-                      <Copy className="w-4 h-4" /> 복제
+                      <Copy className="h-5 w-5" /> 복제
                     </button>
                   </div>
                 </div>
               </div>
-            </>
-          ) : null}
+            </>,
+                document.body
+              )
+            : null}
         </div>
       )}
     </div>
