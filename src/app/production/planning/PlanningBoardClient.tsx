@@ -17,7 +17,13 @@ import {
 import { computeMonthlyCategoryTotals } from "@/features/production/planning/computeMonthlyCategoryTotals";
 import { computeMonthlyOperationalMetrics } from "@/features/production/planning/computeMonthlyOperationalMetrics";
 import { computeMonthlyProductTotals } from "@/features/production/planning/computeMonthlyProductTotals";
-import { categoryBadgeClassName, getPlanningEntryToneClass } from "@/features/production/planning/productClassification";
+import {
+  categoryBadgeClassName,
+  formatMiniPlanningLabel,
+  getPlanningEntryToneClass,
+  isMiniProductKind,
+  rollupQtyForPlanning,
+} from "@/features/production/planning/productClassification";
 import { listUnclassifiedProductBases } from "@/features/production/planning/listUnclassifiedProductBases";
 import type { MaterialRequirementRow, PlanningDayEntryInput, PlanningMonthData } from "@/features/production/planning/types";
 import { supabase } from "@/lib/supabase";
@@ -114,6 +120,8 @@ export default function PlanningBoardClient() {
   const [rightPanelTab, setRightPanelTab] = useState<"summary" | "products" | "materials" | "processed">("summary");
   const [productPlanExpanded, setProductPlanExpanded] = useState(false);
   const [showNoteInput, setShowNoteInput] = useState(false);
+  const [baselineSaving, setBaselineSaving] = useState(false);
+  const [baselineInput, setBaselineInput] = useState("");
 
   const { profile, loading: authLoading } = useAuth();
   const canView = profile?.role === "admin" || profile?.role === "manager";
@@ -167,9 +175,52 @@ export default function PlanningBoardClient() {
     setSelectedDate((prev) => (prev < start || prev > end ? start : prev));
   }, [authLoading, canView, month, year]);
 
+  const saveBaselineHeadcount = useCallback(async () => {
+    if (!canEdit || !data) return;
+    const n = Number(baselineInput);
+    if (!Number.isFinite(n) || n < 1 || n > 500) {
+      setError("기준 인원은 1~500 사이 숫자로 입력하세요.");
+      return;
+    }
+    setBaselineSaving(true);
+    setError(null);
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      setBaselineSaving(false);
+      setError("로그인 세션이 없습니다.");
+      return;
+    }
+    const res = await fetch("/api/production/planning/month", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token ?? "",
+        year,
+        month,
+        baseline_headcount: Math.round(n),
+      }),
+    });
+    const json = (await res.json()) as { ok?: boolean; error?: string; message?: string };
+    setBaselineSaving(false);
+    if (!res.ok || !json.ok) {
+      setError(json.message ?? json.error ?? "기준 인원 저장 실패");
+      return;
+    }
+    await loadMonth();
+  }, [baselineInput, canEdit, data, loadMonth, month, year]);
+
   useEffect(() => {
     loadMonth();
   }, [loadMonth]);
+
+  useEffect(() => {
+    if (data?.month) {
+      setBaselineInput(String(Number(data.month.baseline_headcount) || 25));
+    }
+  }, [data?.month?.baseline_headcount, data?.month?.id]);
 
   useEffect(() => {
     setDayDrawerOpen(false);
@@ -366,7 +417,14 @@ export default function PlanningBoardClient() {
     });
   }, [data]);
 
-  const selectedDayTotal = useMemo(() => draft.entries.reduce((s, e) => s + (toNumber(e.qtyText) || 0), 0), [draft.entries]);
+  const selectedDayTotal = useMemo(
+    () =>
+      draft.entries.reduce(
+        (s, e) => s + rollupQtyForPlanning(composeProductName(e.productBase, e.productKind), toNumber(e.qtyText)),
+        0
+      ),
+    [draft.entries]
+  );
   const annualCount = useMemo(
     () => draft.leaves.filter((l) => l.leave_type === "annual" && l.person_name.trim().length > 0).length,
     [draft.leaves]
@@ -609,8 +667,14 @@ export default function PlanningBoardClient() {
               {dayCells.map((dateKey, idx) => {
                 const dayEntries = dateKey ? entriesByDate.get(dateKey) ?? [] : [];
                 const dayLeaves = dateKey ? leavesByDate.get(dateKey) ?? [] : [];
-                const total = dayEntries.reduce((s, e) => s + e.qty, 0);
-                const topProducts = dayEntries.slice().sort((a, b) => b.qty - a.qty).slice(0, 2);
+                const topProducts = dayEntries
+                  .slice()
+                  .sort(
+                    (a, b) =>
+                      rollupQtyForPlanning(b.product_name_snapshot, b.qty) -
+                      rollupQtyForPlanning(a.product_name_snapshot, a.qty)
+                  )
+                  .slice(0, 2);
                 const extraCount = Math.max(0, dayEntries.length - 2);
                 const selected = dateKey === selectedDate;
                 const weekday = idx % 7;
@@ -657,14 +721,17 @@ export default function PlanningBoardClient() {
                         <div className="space-y-1">
                           {topProducts.map((p, i) => {
                             const d = splitForDisplay(p.product_name_snapshot);
+                            const isMini = isMiniProductKind(d.kind);
+                            const titleLine = isMini ? formatMiniPlanningLabel(d.base) : d.base;
+                            const rollup = rollupQtyForPlanning(p.product_name_snapshot, p.qty);
                             return (
                               <div
                                 key={`${p.product_name_snapshot}-${i}`}
                                 className={`rounded-md px-1.5 py-1 text-[10px] leading-snug ${getPlanningEntryToneClass(p.product_name_snapshot)}`}
                               >
-                                <p className="font-medium break-words whitespace-normal leading-tight">{d.base}</p>
-                                <p className="text-[10px] opacity-90">{d.kind || "기본"}</p>
-                                <p className="text-[10px] opacity-80">수량 {p.qty.toLocaleString("ko-KR")}</p>
+                                <p className="font-medium break-words whitespace-normal leading-tight">{titleLine}</p>
+                                {!isMini ? <p className="text-[10px] opacity-90">{d.kind || "기본"}</p> : null}
+                                <p className="text-[10px] opacity-80">수량 {rollup.toLocaleString("ko-KR")}</p>
                               </div>
                             );
                           })}
@@ -751,10 +818,36 @@ export default function PlanningBoardClient() {
                         <div className="mt-3 grid grid-cols-2 gap-3">
                           <div className="rounded-xl border border-slate-600/70 bg-space-900/55 p-3">
                             <p className="text-[10px] font-medium text-slate-500">기준 인원</p>
-                            <p className="mt-1 text-xl font-semibold tabular-nums text-slate-100">
-                              {operationalMetrics.baselineHeadcount.toLocaleString("ko-KR")}
-                            </p>
+                            {canEdit ? (
+                              <div className="mt-1 flex flex-wrap items-center gap-2">
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={500}
+                                  inputMode="numeric"
+                                  className="w-[5.5rem] rounded-lg border border-slate-600 bg-space-800 px-2 py-1.5 text-lg font-semibold tabular-nums text-slate-100"
+                                  value={baselineInput}
+                                  onChange={(e) => setBaselineInput(e.target.value)}
+                                />
+                                <span className="text-sm text-slate-400">명</span>
+                                <button
+                                  type="button"
+                                  onClick={() => void saveBaselineHeadcount()}
+                                  disabled={baselineSaving}
+                                  className="rounded-md border border-cyan-500/50 bg-cyan-950/40 px-2 py-1 text-[11px] font-medium text-cyan-200 hover:bg-cyan-900/50 disabled:opacity-50"
+                                >
+                                  {baselineSaving ? "저장…" : "적용"}
+                                </button>
+                              </div>
+                            ) : (
+                              <p className="mt-1 text-xl font-semibold tabular-nums text-slate-100">
+                                {operationalMetrics.baselineHeadcount.toLocaleString("ko-KR")}
+                              </p>
+                            )}
                             <p className="text-[10px] text-slate-500 mt-1">활성 프로필 {operationalMetrics.totalMembers}명 (참고)</p>
+                            {canEdit ? (
+                              <p className="text-[10px] text-slate-600 mt-1 leading-snug">월별로 다를 때만 숫자 바꾼 뒤 적용하세요.</p>
+                            ) : null}
                           </div>
                           <div className="rounded-xl border border-slate-600/70 bg-space-900/55 p-3">
                             <p className="text-[10px] font-medium text-slate-500">총 가동일</p>
@@ -800,7 +893,8 @@ export default function PlanningBoardClient() {
                               <span className="tabular-nums font-medium">{categoryRollup.unclassifiedQty.toLocaleString("ko-KR")}</span>
                               <span className="text-rose-200/70">
                                 {" "}
-                                · <code className="text-rose-100/90">productClassification.ts</code>에 베이스명 추가 시 반영
+                                · 조건 <span className="text-rose-100/90">미니</span> 피자는 피자·미니 집계 ·{" "}
+                                <code className="text-rose-100/90">productClassification.ts</code>에 베이스명 추가 시 반영
                               </span>
                             </p>
                             {unclassifiedBases.length > 0 ? (
@@ -871,7 +965,9 @@ export default function PlanningBoardClient() {
                       <div className="flex flex-wrap items-end justify-between gap-2">
                         <div>
                           <h3 className="text-sm font-semibold text-slate-100">제품별 월 생산 예정</h3>
-                          <p className="text-[10px] text-slate-500 mt-0.5">수량 상위 기준 · 기본 5개만 표시</p>
+                          <p className="text-[10px] text-slate-500 mt-0.5">
+                            같은 제품명·일반·파베이크 사용 등은 한 줄로 합산 · 미니만 별도 행으로 표시
+                          </p>
                         </div>
                         {productTotals.length > 5 ? (
                           <button
@@ -894,7 +990,7 @@ export default function PlanningBoardClient() {
                           </thead>
                           <tbody>
                             {productRowsForPanel.map((row) => (
-                              <tr key={row.productBase} className="border-t border-slate-800/90 text-slate-300">
+                              <tr key={row.groupKey} className="border-t border-slate-800/90 text-slate-300">
                                 <td className="p-2.5 align-top font-medium text-slate-200">{row.displayName}</td>
                                 <td className="p-2.5 align-top">
                                   <span
@@ -1440,11 +1536,18 @@ export default function PlanningBoardClient() {
                       {draft.entries
                         .filter((e) => e.productBase.trim() && toNumber(e.qtyText) > 0)
                         .slice(0, 4)
-                        .map((e, i) => (
-                          <p key={`preview-entry-${i}`} className="truncate text-slate-100">
-                            {composeProductName(e.productBase, e.productKind)} · {toNumber(e.qtyText).toLocaleString("ko-KR")}
-                          </p>
-                        ))}
+                        .map((e, i) => {
+                          const snap = composeProductName(e.productBase, e.productKind);
+                          const label = isMiniProductKind(e.productKind)
+                            ? formatMiniPlanningLabel(e.productBase)
+                            : snap;
+                          const q = rollupQtyForPlanning(snap, toNumber(e.qtyText));
+                          return (
+                            <p key={`preview-entry-${i}`} className="truncate text-slate-100">
+                              {label} · {q.toLocaleString("ko-KR")}
+                            </p>
+                          );
+                        })}
                       {draft.leaves.filter((l) => l.person_name.trim()).length > 0 ? (
                         <p className="text-violet-200">
                           휴무{" "}

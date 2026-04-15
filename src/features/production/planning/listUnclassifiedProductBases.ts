@@ -1,6 +1,6 @@
 import type { PlanningEntryRow } from "./types";
 import { baseProductName } from "./calculations";
-import { classifyProductBaseName } from "./productClassification";
+import { classifyPlanningSnapshotForRollup } from "./productClassification";
 
 export type UnclassifiedBaseRow = { base: string; monthQty: number };
 
@@ -13,9 +13,10 @@ export function listUnclassifiedProductBases(entries: PlanningEntryRow[]): Uncla
   for (const e of entries) {
     const qty = Number(e.qty) || 0;
     if (qty <= 0) continue;
-    const base = baseProductName(e.product_name_snapshot);
+    const snap = e.product_name_snapshot.trim();
+    if (classifyPlanningSnapshotForRollup(snap).major !== "unclassified") continue;
+    const base = baseProductName(snap);
     if (!base.trim()) continue;
-    if (classifyProductBaseName(base).major !== "unclassified") continue;
     byBase.set(base, (byBase.get(base) ?? 0) + qty);
   }
   return Array.from(byBase.entries())

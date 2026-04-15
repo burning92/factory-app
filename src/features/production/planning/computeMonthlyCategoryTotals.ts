@@ -1,6 +1,9 @@
 import type { PlanningEntryRow } from "./types";
-import { baseProductName } from "./calculations";
-import { classifyProductBaseName, type ProductClassification } from "./productClassification";
+import {
+  classifyPlanningSnapshotForRollup,
+  rollupQtyForPlanning,
+  type ProductClassification,
+} from "./productClassification";
 
 export type MonthlyCategoryRollup = {
   /** 피자(라이트+헤비+미니), 미분류 제외 */
@@ -67,10 +70,10 @@ export function computeMonthlyCategoryTotals(entries: PlanningEntryRow[]): Month
   };
 
   for (const e of entries) {
-    const qty = Number(e.qty) || 0;
+    const snap = e.product_name_snapshot.trim();
+    const qty = rollupQtyForPlanning(snap, e.qty);
     if (qty <= 0) continue;
-    const base = baseProductName(e.product_name_snapshot);
-    const c = classifyProductBaseName(base);
+    const c = classifyPlanningSnapshotForRollup(snap);
     addQty(roll, c, qty);
   }
 

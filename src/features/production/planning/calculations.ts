@@ -188,6 +188,28 @@ export function baseProductName(productNameSnapshot: string): string {
   return name.slice(0, idx).trim();
 }
 
+/** `베이스 - 조건` 에서 조건 부분 (없으면 빈 문자열) */
+export function productKindFromSnapshot(productNameSnapshot: string): string {
+  const name = productNameSnapshot.trim();
+  const idx = name.indexOf(" - ");
+  if (idx < 0) return "";
+  return name.slice(idx + 3).trim();
+}
+
+/**
+ * 출력/집계/원료 환산 공통: 미니(2입) 또는 `(2입)` 표기 제품은 수량을 2배로 본다.
+ * 미니+2입이 함께 있어도 한 번만 2배 적용한다.
+ */
+export function rollupQtyForPlanning(productNameSnapshot: string, rawQty: number): number {
+  const q = Number(rawQty) || 0;
+  if (q <= 0) return 0;
+  const snap = productNameSnapshot.trim();
+  const kind = productKindFromSnapshot(snap).trim();
+  if (kind === "미니" || kind.startsWith("미니")) return q * 2;
+  if (snap.includes("(2입)")) return q * 2;
+  return q;
+}
+
 /**
  * 월간(또는 기간) 필요 원료 합계.
  * BOM 매칭 키는 **계획 행의 전체 스냅샷 문자열**(`product_name_snapshot`, 예: `마르게리따 - 일반`)이며
@@ -209,11 +231,13 @@ export function computeMaterialRequirements(params: {
   for (const entry of entries) {
     if (entry.plan_date < startDate || entry.plan_date > endDate) continue;
     const bomList = bomByProduct.get(entry.product_name_snapshot.trim()) ?? [];
+    const rollupQty = rollupQtyForPlanning(entry.product_name_snapshot, entry.qty);
+    if (rollupQty <= 0) continue;
     for (const bom of bomList) {
       const materialKey = canonicalMaterialName(bom.material_name);
       if (!materialKey) continue;
       const curr = requiredByMaterial.get(materialKey) ?? 0;
-      requiredByMaterial.set(materialKey, curr + entry.qty * bom.bom_g_per_ea);
+      requiredByMaterial.set(materialKey, curr + rollupQty * bom.bom_g_per_ea);
     }
   }
 

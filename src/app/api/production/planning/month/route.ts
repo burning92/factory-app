@@ -63,3 +63,89 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "failed_to_load_month", message }, { status: 500 });
   }
 }
+
+type PatchBody = {
+  access_token?: string;
+  refresh_token?: string;
+  year?: number;
+  month?: number;
+  baseline_headcount?: number;
+};
+
+/** 월 마스터 행의 기준 인원만 수정 (DB 마이그레이션 없음) */
+export async function PATCH(req: NextRequest) {
+  if (!serviceRoleKey) return NextResponse.json({ error: "server_config_error" }, { status: 500 });
+
+  let body: PatchBody;
+  try {
+    body = (await req.json()) as PatchBody;
+  } catch {
+    return NextResponse.json({ error: "invalid_json" }, { status: 400 });
+  }
+  const accessToken = String(body.access_token ?? "").trim();
+  const refreshToken = String(body.refresh_token ?? "").trim();
+  if (!accessToken) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  const year = Number(body.year);
+  const month = Number(body.month);
+  const baseline = Number(body.baseline_headcount);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+    return NextResponse.json({ error: "year/month invalid" }, { status: 400 });
+  }
+  if (!Number.isFinite(baseline) || baseline < 1 || baseline > 500) {
+    return NextResponse.json({ error: "baseline_headcount invalid" }, { status: 400 });
+  }
+
+  const anon = createClient(url, anonKey);
+  const {
+    data: { user: userFromAccess },
+    error: userErr,
+  } = await anon.auth.getUser(accessToken);
+  let user = userFromAccess ?? null;
+  if (!user && refreshToken) {
+    const {
+      data: { user: userFromSession },
+      error: sessionError,
+    } = await anon.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+    if (!sessionError) user = userFromSession ?? null;
+  }
+  if (userErr || !user) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  const admin = createClient(url, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+  const { data: me, error: meErr } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
+  if (meErr || !me || (me.role !== "admin" && me.role !== "manager")) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  try {
+    const { data: row, error: findErr } = await admin
+      .from("production_plan_months")
+      .select("id")
+      .eq("plan_year", year)
+      .eq("plan_month", month)
+      .eq("version_type", "master")
+      .maybeSingle();
+    if (findErr) throw findErr;
+    if (!row?.id) {
+      return NextResponse.json({ error: "month_row_not_found" }, { status: 404 });
+    }
+    const { error: upErr } = await admin
+      .from("production_plan_months")
+      .update({
+        baseline_headcount: Math.round(baseline),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", row.id);
+    if (upErr) throw upErr;
+    return NextResponse.json({ ok: true, baseline_headcount: Math.round(baseline) });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: "patch_failed", message }, { status: 500 });
+  }
+}

@@ -8,6 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { getKoreanHolidayName, isKoreanPublicHoliday, monthDays, weekdayOfFirstDay, ymd } from "@/features/production/planning/calculations";
 import { computeMonthlyCategoryTotals } from "@/features/production/planning/computeMonthlyCategoryTotals";
+import { formatMiniPlanningLabel, isMiniProductKind, rollupQtyForPlanning } from "@/features/production/planning/productClassification";
 import type { PlanningMonthData } from "@/features/production/planning/types";
 
 type LeaveTag = { type: "annual" | "half"; person: string };
@@ -35,10 +36,6 @@ function normalizedPrintName(base: string): string {
   return n;
 }
 
-function adjustedQty(productName: string, qty: number): number {
-  return productName.includes("(2입)") ? qty * 2 : qty;
-}
-
 function cleanupCategorySuffix(name: string): string {
   return name.replace(/\((브레드|피자|파베이크)\)/g, "").replace(/\s{2,}/g, " ").trim();
 }
@@ -47,8 +44,9 @@ function cleanupCategorySuffix(name: string): string {
 function formatPrintProductLine(productSnapshot: string, qty: number): { name: string; qtyText: string } {
   const sp = splitProductName(productSnapshot);
   const base = cleanupCategorySuffix(normalizedPrintName(sp.base));
+  const name = isMiniProductKind(sp.kind) ? formatMiniPlanningLabel(base) : base;
   return {
-    name: base,
+    name,
     qtyText: qty.toLocaleString("ko-KR"),
   };
 }
@@ -245,7 +243,7 @@ export default function PlanningPrintPage() {
                     {holidayName ? <p className="planning-a3-holiday">🔴 {holidayName}</p> : null}
                     <div className="planning-a3-products">
                       {list.map((row, i) => {
-                        const qty = adjustedQty(row.product, row.qty);
+                        const qty = rollupQtyForPlanning(row.product, row.qty);
                         const line = formatPrintProductLine(row.product, qty);
                         const tone = productToneClass(line.name);
                         return (

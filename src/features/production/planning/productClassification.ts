@@ -3,7 +3,7 @@
  * UI에서는 문자열 includes 분기 대신 이 모듈의 함수만 사용한다.
  */
 
-import { baseProductName } from "./calculations";
+import { baseProductName, productKindFromSnapshot, rollupQtyForPlanning as calcRollupQtyForPlanning } from "./calculations";
 
 export type MajorCategory = "pizza" | "bread" | "parbake_storage" | "parbake_sale" | "unclassified";
 
@@ -27,9 +27,12 @@ const BASE_NAME_TO_CLASS: Record<string, ProductClassification> = {
   허니고르곤졸라: { major: "pizza", pizzaSubtype: "light" },
   마르게리따: { major: "pizza", pizzaSubtype: "light" },
   허니갈릭페퍼로니: { major: "pizza", pizzaSubtype: "heavy" },
+  /** 허니갈릭 미니 등 갈릭 미표기 베이스명 (현장 표기) */
+  허니페퍼로니: { major: "pizza", pizzaSubtype: "heavy" },
   청양페퍼로니: { major: "pizza", pizzaSubtype: "heavy" },
   "트리플치즈 라구": { major: "pizza", pizzaSubtype: "heavy" },
   트리플치즈라구: { major: "pizza", pizzaSubtype: "heavy" },
+  "머쉬룸 베이컨": { major: "pizza", pizzaSubtype: "heavy" },
   "머쉬룸 베이컨피자": { major: "pizza", pizzaSubtype: "heavy" },
   파이브치즈: { major: "pizza", pizzaSubtype: "heavy" },
   통통옥수수: { major: "pizza", pizzaSubtype: "heavy" },
@@ -103,9 +106,64 @@ export function classifyProductBaseName(productBaseName: string): ProductClassif
   return { major: "unclassified", pizzaSubtype: null };
 }
 
-/** full snapshot(`베이스 - 조건`) → 분류 */
+/** 조건이 미니(미니, 미니 …)인지 — 집계·UI 톤 공통 */
+export function isMiniProductKind(kind: string): boolean {
+  const k = kind.trim();
+  if (!k) return false;
+  if (k === "미니") return true;
+  if (k.startsWith("미니")) return true;
+  return false;
+}
+
+/**
+ * 달력·인쇄·제품별 집계 표시용: `미니 ` + 베이스명 앞 6자(유니코드 문자 단위).
+ */
+export function formatMiniPlanningLabel(baseName: string): string {
+  const b = baseName.normalize("NFC").trim();
+  const short = Array.from(b).slice(0, 6).join("");
+  return `미니 ${short}`;
+}
+
+/**
+ * 출력·대분류/제품별 집계용 수량: 조건이 미니이거나 스냅샷에 `(2입)`이 있으면 입력 수량 ×2.
+ * (미니 2입을 이중으로 곱하지 않도록 한 번만 적용)
+ */
+export function rollupQtyForPlanning(productNameSnapshot: string, rawQty: number): number {
+  return calcRollupQtyForPlanning(productNameSnapshot, rawQty);
+}
+
+/**
+ * 월 집계·달력 톤용: `베이스 - 미니` 는 베이스가 라이트/헤비여도 피자·미니로 잡는다.
+ * (BOM/원료는 여전히 전체 스냅샷 문자열로 매칭)
+ */
+export function classifyPlanningSnapshotForRollup(productNameSnapshot: string): ProductClassification {
+  const base = baseProductName(productNameSnapshot);
+  const kind = productKindFromSnapshot(productNameSnapshot);
+  const baseClass = classifyProductBaseName(base);
+
+  if (isMiniProductKind(kind)) {
+    if (baseClass.major === "pizza") {
+      return { major: "pizza", pizzaSubtype: "mini" };
+    }
+    if (baseClass.major === "unclassified" && looksLikePizzaBaseForMiniKind(base)) {
+      return { major: "pizza", pizzaSubtype: "mini" };
+    }
+  }
+  return baseClass;
+}
+
+function looksLikePizzaBaseForMiniKind(base: string): boolean {
+  const b = base.trim();
+  if (!b) return false;
+  if (b.includes("파베이크")) return false;
+  if (b.includes("포노") && !b.includes("파베이크")) return false;
+  if (b.includes("브레드")) return false;
+  return /페퍼로니|마르게리|고르곤|피자|치즈|라구|페스토|쉬림프|옥수수|리코타|베이컨|바질|갈릭|허니|청양|핫페퍼|조선호텔|머쉬룸|통통|멜팅|구운가지/i.test(b);
+}
+
+/** full snapshot(`베이스 - 조건`) → 분류 (조건 미니 반영) */
 export function classifyPlanningProductSnapshot(productNameSnapshot: string): ProductClassification {
-  return classifyProductBaseName(baseProductName(productNameSnapshot));
+  return classifyPlanningSnapshotForRollup(productNameSnapshot);
 }
 
 /** 달력/카드 색상용 (tailwind 클래스만 반환) */
