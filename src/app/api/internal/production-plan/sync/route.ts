@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     const { error: deleteErr } = await supabase
       .from("production_plan_rows")
       .delete()
-      .neq("id", 0);
+      .neq("source_sheet_name", "planning_board");
     if (deleteErr) throw deleteErr;
 
     let inserted = 0;

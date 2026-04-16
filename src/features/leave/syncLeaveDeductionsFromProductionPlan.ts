@@ -90,6 +90,7 @@ export async function syncLeaveDeductionsFromProductionPlan(
   const { data: planRows, error: re } = await supabase
     .from("production_plan_rows")
     .select("plan_date, product_name, category, plan_version")
+    .neq("source_sheet_name", "planning_board")
     .in("plan_version", ["master", "end"]);
   if (re) throw re;
 
