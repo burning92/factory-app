@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { HarangCategory, HarangMasterItem } from "@/features/harang/types";
+import { effectiveRawMaterialUnit, isRawMaterialUnitLocked } from "@/features/harang/rawMaterialUnit";
 
 type LineForm = {
   line_id: string;
@@ -49,7 +50,7 @@ export default function HarangInboundCreatePage() {
     const [rawRes, packRes] = await Promise.all([
       supabase
         .from("harang_raw_materials")
-        .select("id, item_code, item_name, default_unit, is_active, note, created_at, updated_at")
+        .select("id, item_code, item_name, default_unit, locked_unit, is_active, note, created_at, updated_at")
         .eq("is_active", true)
         .order("item_name", { ascending: true }),
       supabase
@@ -107,7 +108,10 @@ export default function HarangInboundCreatePage() {
           item_id: item.id,
           item_code: item.item_code,
           item_name: item.item_name,
-          unit: item.default_unit,
+          unit:
+            line.category === "raw_material"
+              ? effectiveRawMaterialUnit(item as HarangMasterItem)
+              : item.default_unit,
         };
       }),
     );
@@ -240,6 +244,9 @@ export default function HarangInboundCreatePage() {
               <tbody>
                 {lines.map((line) => {
                   const options = optionsByCategory[line.category];
+                  const selectedItem = options.find((o) => o.id === line.item_id) as HarangMasterItem | undefined;
+                  const unitLocked =
+                    line.category === "raw_material" && selectedItem && isRawMaterialUnitLocked(selectedItem);
                   return (
                     <tr key={line.line_id} className="border-b border-slate-100 text-slate-900">
                       <td className="px-2 py-2">
@@ -281,7 +288,15 @@ export default function HarangInboundCreatePage() {
                         <input type="number" min="0" step="0.001" value={line.quantity} onChange={(e) => handleChangeLine(line.line_id, { quantity: e.target.value })} className="w-[120px] px-2 py-1.5 rounded bg-white border border-slate-300 text-right" />
                       </td>
                       <td className="px-2 py-2">
-                        <input value={line.unit} onChange={(e) => handleChangeLine(line.line_id, { unit: e.target.value })} className="w-[90px] px-2 py-1.5 rounded bg-white border border-slate-300" />
+                        <input
+                          value={line.unit}
+                          readOnly={!!unitLocked}
+                          title={unitLocked ? "단위 고정 품목은 EA 등 지정 단위만 사용합니다." : undefined}
+                          onChange={(e) => handleChangeLine(line.line_id, { unit: e.target.value })}
+                          className={`w-[90px] px-2 py-1.5 rounded border border-slate-300 ${
+                            unitLocked ? "bg-slate-100 text-slate-800" : "bg-white"
+                          }`}
+                        />
                       </td>
                       <td className="px-2 py-2">
                         <input value={line.note} onChange={(e) => handleChangeLine(line.line_id, { note: e.target.value })} className="w-[220px] px-2 py-1.5 rounded bg-white border border-slate-300" />

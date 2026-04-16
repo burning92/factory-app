@@ -17,6 +17,8 @@ type FormState = {
   item_code: string;
   item_name: string;
   default_unit: string;
+  /** 원재료만: 단위 고정(예: EA) 시 기본단위 수정 불가 */
+  lockedUnit: string | null;
   box_weight_g: string;
   unit_weight_g: string;
   note: string;
@@ -28,6 +30,7 @@ const INITIAL_FORM: FormState = {
   item_code: "",
   item_name: "",
   default_unit: "",
+  lockedUnit: null,
   box_weight_g: "0",
   unit_weight_g: "0",
   note: "",
@@ -48,11 +51,12 @@ export default function MasterItemsPage({ title, tableName, description, showWei
     setFetching(true);
     let data: unknown[] | null = null;
     let error: { message?: string } | null = null;
+    const rawLocked = tableName === "harang_raw_materials" ? ", locked_unit" : "";
 
     if (showWeightFields) {
       const res = await supabase
         .from(tableName)
-        .select("id, item_code, item_name, default_unit, box_weight_g, unit_weight_g, is_active, note, created_at, updated_at")
+        .select(`id, item_code, item_name, default_unit${rawLocked}, box_weight_g, unit_weight_g, is_active, note, created_at, updated_at`)
         .order("item_code", { ascending: true });
       data = res.data as unknown[] | null;
       error = res.error as { message?: string } | null;
@@ -61,7 +65,7 @@ export default function MasterItemsPage({ title, tableName, description, showWei
         setWeightColumnsAvailable(false);
         const fallback = await supabase
           .from(tableName)
-          .select("id, item_code, item_name, default_unit, is_active, note, created_at, updated_at")
+          .select(`id, item_code, item_name, default_unit${rawLocked}, is_active, note, created_at, updated_at`)
           .order("item_code", { ascending: true });
         data = fallback.data as unknown[] | null;
         error = fallback.error as { message?: string } | null;
@@ -71,7 +75,7 @@ export default function MasterItemsPage({ title, tableName, description, showWei
     } else {
       const res = await supabase
         .from(tableName)
-        .select("id, item_code, item_name, default_unit, is_active, note, created_at, updated_at")
+        .select(`id, item_code, item_name, default_unit${rawLocked}, is_active, note, created_at, updated_at`)
         .order("item_code", { ascending: true });
       data = res.data as unknown[] | null;
       error = res.error as { message?: string } | null;
@@ -101,10 +105,11 @@ export default function MasterItemsPage({ title, tableName, description, showWei
   const resetForm = () => setForm(INITIAL_FORM);
 
   const handleSave = async () => {
-    const payload = {
+    const defaultUnit = (form.lockedUnit?.trim() || form.default_unit.trim());
+    const payload: Record<string, unknown> = {
       item_code: form.item_code.trim(),
       item_name: form.item_name.trim(),
-      default_unit: form.default_unit.trim(),
+      default_unit: defaultUnit,
       ...(showWeightFields && weightColumnsAvailable
         ? {
             box_weight_g: Math.max(0, Number(form.box_weight_g) || 0),
@@ -114,20 +119,23 @@ export default function MasterItemsPage({ title, tableName, description, showWei
       note: form.note.trim() || null,
       is_active: form.is_active,
     };
-    if (!payload.item_code || !payload.item_name || !payload.default_unit) {
+    if (tableName === "harang_raw_materials") {
+      payload.locked_unit = form.lockedUnit ?? null;
+    }
+    if (!payload.item_code || !payload.item_name || !(payload.default_unit as string)) {
       alert("코드/품목명/기본단위는 필수입니다.");
       return;
     }
     setSaving(true);
     if (form.id) {
-      const { error } = await supabase.from(tableName).update(payload).eq("id", form.id);
+      const { error } = await supabase.from(tableName).update(payload as never).eq("id", form.id);
       setSaving(false);
       if (error) return alert(error.message);
       await loadItems();
       resetForm();
       return;
     }
-    const { error } = await supabase.from(tableName).insert(payload);
+    const { error } = await supabase.from(tableName).insert(payload as never);
     setSaving(false);
     if (error) return alert(error.message);
     await loadItems();
@@ -140,6 +148,7 @@ export default function MasterItemsPage({ title, tableName, description, showWei
       item_code: item.item_code,
       item_name: item.item_name,
       default_unit: item.default_unit,
+      lockedUnit: tableName === "harang_raw_materials" ? (item.locked_unit ?? null) : null,
       box_weight_g: String(item.box_weight_g ?? 0),
       unit_weight_g: String(item.unit_weight_g ?? 0),
       note: item.note ?? "",
@@ -193,9 +202,13 @@ export default function MasterItemsPage({ title, tableName, description, showWei
             />
             <input
               value={form.default_unit}
+              readOnly={Boolean(form.lockedUnit)}
+              title={form.lockedUnit ? "단위 고정 품목은 EA 등 고정 단위만 사용합니다." : undefined}
               onChange={(e) => setForm((prev) => ({ ...prev, default_unit: e.target.value }))}
               placeholder="기본단위 (예: g, EA)"
-              className="px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 text-sm"
+              className={`px-3 py-2 rounded-lg border text-slate-900 text-sm ${
+                form.lockedUnit ? "bg-slate-100 border-slate-200" : "bg-white border-slate-300"
+              }`}
             />
             {showWeightFields && weightColumnsAvailable && (
               <input
@@ -301,7 +314,14 @@ export default function MasterItemsPage({ title, tableName, description, showWei
                     <tr key={item.id} className="border-b border-slate-100 text-slate-900">
                       <td className="px-3 py-2">{item.item_code}</td>
                       <td className="px-3 py-2">{item.item_name}</td>
-                      <td className="px-3 py-2">{item.default_unit}</td>
+                      <td className="px-3 py-2">
+                        {item.default_unit}
+                        {tableName === "harang_raw_materials" && item.locked_unit?.trim() ? (
+                          <span className="ml-1 text-[10px] text-cyan-800 font-medium whitespace-nowrap">
+                            ({item.locked_unit} 고정)
+                          </span>
+                        ) : null}
+                      </td>
                       {showWeightFields && weightColumnsAvailable && (
                         <td className="px-3 py-2 text-right tabular-nums">{Number(item.box_weight_g ?? 0).toLocaleString()}</td>
                       )}

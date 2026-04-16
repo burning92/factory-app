@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import type { HarangBomRow, HarangMasterItem } from "@/features/harang/types";
+import { effectiveRawMaterialUnit } from "@/features/harang/rawMaterialUnit";
 
 type MaterialCategory = "raw_material" | "packaging_material";
 
@@ -62,7 +63,7 @@ export default function HarangProductBomPage() {
     const [materialsRes, packagingRes, rowsRes] = await Promise.all([
       supabase
         .from("harang_raw_materials")
-        .select("id, item_code, item_name, default_unit, is_active, note, created_at, updated_at")
+        .select("id, item_code, item_name, default_unit, locked_unit, is_active, note, created_at, updated_at")
         .order("item_name", { ascending: true }),
       supabase
         .from("harang_packaging_materials")
@@ -134,11 +135,23 @@ export default function HarangProductBomPage() {
   );
 
   useEffect(() => {
-    const fixedUnit = newProductForm.material_category === "raw_material" ? "g" : "EA";
-    if (newProductForm.unit !== fixedUnit) {
-      setNewProductForm((prev) => ({ ...prev, unit: fixedUnit }));
+    if (newProductForm.material_category === "packaging_material") {
+      if (newProductForm.unit !== "EA") {
+        setNewProductForm((prev) => ({ ...prev, unit: "EA" }));
+      }
+      return;
     }
-  }, [newProductForm.material_category, newProductForm.unit]);
+    if (!selectedNewProductMaterial) return;
+    const u = effectiveRawMaterialUnit(selectedNewProductMaterial);
+    if (newProductForm.unit !== u) {
+      setNewProductForm((prev) => ({ ...prev, unit: u }));
+    }
+  }, [
+    newProductForm.material_category,
+    newProductForm.material_id,
+    newProductForm.unit,
+    selectedNewProductMaterial,
+  ]);
 
   const selectedNewLineMaterial = useMemo(
     () => getMaterialsByCategory(newLine.material_category).find((item) => item.id === newLine.material_id) ?? null,
@@ -146,11 +159,18 @@ export default function HarangProductBomPage() {
   );
 
   useEffect(() => {
-    const fixedUnit = newLine.material_category === "raw_material" ? "g" : "EA";
-    if (newLine.unit !== fixedUnit) {
-      setNewLine((prev) => ({ ...prev, unit: fixedUnit }));
+    if (newLine.material_category === "packaging_material") {
+      if (newLine.unit !== "EA") {
+        setNewLine((prev) => ({ ...prev, unit: "EA" }));
+      }
+      return;
     }
-  }, [newLine.material_category, newLine.unit]);
+    if (!selectedNewLineMaterial) return;
+    const u = effectiveRawMaterialUnit(selectedNewLineMaterial);
+    if (newLine.unit !== u) {
+      setNewLine((prev) => ({ ...prev, unit: u }));
+    }
+  }, [newLine.material_category, newLine.material_id, newLine.unit, selectedNewLineMaterial]);
 
   const quickAddMaterialOptions = useMemo(
     () => getMaterialsByCategory(newProductForm.material_category),
@@ -174,7 +194,10 @@ export default function HarangProductBomPage() {
       material_code: material.item_code,
       material_name: material.item_name,
       bom_qty: qty,
-      unit: newProductForm.material_category === "raw_material" ? "g" : "EA",
+      unit:
+        newProductForm.material_category === "raw_material"
+          ? effectiveRawMaterialUnit(material)
+          : "EA",
       is_active: newProductForm.is_active,
     });
     setSaving(false);
@@ -246,11 +269,17 @@ export default function HarangProductBomPage() {
         material_code: material.item_code,
         material_name: material.item_name,
         bom_qty: String(qty),
-        unit: newLine.material_category === "raw_material" ? "g" : "EA",
+        unit: newLine.material_category === "raw_material" ? effectiveRawMaterialUnit(material) : "EA",
         is_active: newLine.is_active,
       },
     ]);
-    setNewLine({ material_category: newLine.material_category, material_id: "", bom_qty: "", unit: newLine.material_category === "raw_material" ? "g" : "EA", is_active: true });
+    setNewLine({
+      material_category: newLine.material_category,
+      material_id: "",
+      bom_qty: "",
+      unit: newLine.material_category === "raw_material" ? "g" : "EA",
+      is_active: true,
+    });
   };
 
   const selectableMaterialsForNewLine = useMemo(
@@ -292,6 +321,11 @@ export default function HarangProductBomPage() {
       }
 
       for (const line of draftLines) {
+        const rawMat = line.material_category === "raw_material" ? materials.find((m) => m.id === line.material_id) : null;
+        const unit =
+          line.material_category === "raw_material" && rawMat
+            ? effectiveRawMaterialUnit(rawMat)
+            : "EA";
         const payload = {
           product_name: editingProductName,
           material_category: line.material_category,
@@ -299,7 +333,7 @@ export default function HarangProductBomPage() {
           material_code: line.material_code,
           material_name: line.material_name,
           bom_qty: Number(line.bom_qty),
-          unit: line.material_category === "raw_material" ? "g" : "EA",
+          unit,
           is_active: line.is_active,
         };
         if (line.id) {
@@ -359,11 +393,15 @@ export default function HarangProductBomPage() {
             <select
               value={newProductForm.material_id}
               onChange={(e) => {
-                const material = quickAddMaterialOptions.find((item) => item.id === e.target.value);
+                const id = e.target.value;
+                const material = quickAddMaterialOptions.find((item) => item.id === id);
                 setNewProductForm((prev) => ({
                   ...prev,
-                  material_id: e.target.value,
-                  unit: prev.material_category === "raw_material" ? "g" : "EA",
+                  material_id: id,
+                  unit:
+                    prev.material_category === "raw_material" && material
+                      ? effectiveRawMaterialUnit(material)
+                      : "EA",
                 }));
               }}
               className="px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 text-sm"

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { InboundEditModal } from "@/features/harang/InboundEditModal";
 import type { HarangInboundHeader } from "@/features/harang/types";
 
 type CategoryLabel = "원재료" | "부자재" | "혼합";
@@ -58,6 +59,8 @@ export default function HarangInboundListPage() {
     keyword: "",
   });
   const [loading, setLoading] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const loadRows = useCallback(async () => {
     setLoading(true);
@@ -140,6 +143,15 @@ export default function HarangInboundListPage() {
     });
   };
 
+  const handleDelete = async (id: string) => {
+    if (!confirm("이 입고 내역을 삭제하시겠습니까? LOT가 생산 등에 사용된 경우 삭제할 수 없습니다.")) return;
+    setDeletingId(id);
+    const { error } = await supabase.rpc("delete_harang_inbound", { p_header_id: id });
+    setDeletingId(null);
+    if (error) return alert(error.message);
+    void loadRows();
+  };
+
   const resetFilters = () => {
     setYearFilter("");
     setMonthFilter("");
@@ -159,6 +171,15 @@ export default function HarangInboundListPage() {
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8">
+      <InboundEditModal
+        open={editingId !== null}
+        headerId={editingId}
+        onClose={() => setEditingId(null)}
+        onSaved={() => {
+          setEditingId(null);
+          void loadRows();
+        }}
+      />
       <div className="max-w-7xl mx-auto space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -255,14 +276,15 @@ export default function HarangInboundListPage() {
                   <th className="px-3 py-2 text-left">비고</th>
                   <th className="px-3 py-2 text-left">등록일시</th>
                   <th className="px-3 py-2 text-left">등록자</th>
+                  <th className="px-3 py-2 text-left">관리</th>
                 </tr>
               </thead>
               <tbody>
                 {loading && (
-                  <tr><td colSpan={8} className="px-3 py-6 text-center text-slate-500">불러오는 중...</td></tr>
+                  <tr><td colSpan={9} className="px-3 py-6 text-center text-slate-500">불러오는 중...</td></tr>
                 )}
                 {!loading && filtered.length === 0 && (
-                  <tr><td colSpan={8} className="px-3 py-6 text-center text-slate-500">입고내역이 없습니다.</td></tr>
+                  <tr><td colSpan={9} className="px-3 py-6 text-center text-slate-500">입고내역이 없습니다.</td></tr>
                 )}
                 {!loading &&
                   filtered.map((row) => (
@@ -275,6 +297,23 @@ export default function HarangInboundListPage() {
                       <td className="px-3 py-2 text-slate-600">{row.note ?? "-"}</td>
                       <td className="px-3 py-2">{new Date(row.created_at).toLocaleString("ko-KR")}</td>
                       <td className="px-3 py-2">{authorLabel(row)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => setEditingId(row.id)}
+                          className="mr-2 rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 bg-white hover:bg-slate-50"
+                        >
+                          수정
+                        </button>
+                        <button
+                          type="button"
+                          disabled={deletingId === row.id}
+                          onClick={() => void handleDelete(row.id)}
+                          className="rounded border border-red-600/70 px-2 py-1 text-xs text-red-700 bg-white hover:bg-red-50 disabled:opacity-50"
+                        >
+                          {deletingId === row.id ? "삭제 중..." : "삭제"}
+                        </button>
+                      </td>
                     </tr>
                   ))}
               </tbody>

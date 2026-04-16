@@ -5,6 +5,8 @@ export interface HarangMasterItem {
   item_code: string;
   item_name: string;
   default_unit: string;
+  /** 설정 시 해당 단위로만 사용 (입고·BOM·생산입력) */
+  locked_unit?: string | null;
   box_weight_g?: number;
   unit_weight_g?: number;
   is_active: boolean;
@@ -86,4 +88,19 @@ export interface HarangInventoryTransaction {
   unit: string;
   note: string | null;
   created_at: string;
+}
+
+export interface HarangProductionHeader {
+  id: string;
+  production_date: string;
+  production_no: string;
+  product_name: string;
+  finished_qty: number;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+  profiles?:
+    | { display_name: string | null; login_id: string | null }
+    | { display_name: string | null; login_id: string | null }[]
+    | null;
 }
