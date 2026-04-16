@@ -55,6 +55,10 @@ export async function getProductionPlanPageData(): Promise<ProductionPlanPageDat
     if (!planningDates.has(r.plan_date)) return true;
     return (r.source_sheet_name ?? "") === "planning_board";
   });
+  // planning_board 미러에서 기타 인원은 메모(비고)로 이미 표현되므로 별도 "기타" 카테고리 행은 숨긴다.
+  const normalizedRows = rows.filter(
+    (r) => !((r.source_sheet_name ?? "") === "planning_board" && (r.category ?? "") === "기타")
+  );
 
   const s = syncRes.data;
   const sync =
@@ -67,5 +71,5 @@ export async function getProductionPlanPageData(): Promise<ProductionPlanPageDat
         }
       : null;
 
-  return { rows, sync };
+  return { rows: normalizedRows, sync };
 }

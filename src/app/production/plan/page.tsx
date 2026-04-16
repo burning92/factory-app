@@ -56,7 +56,10 @@ function getRowClass(category: string | null, productName: string): string {
 }
 
 function getDisplayName(category: string | null, productName: string, note: string | null): string {
-  if (category === "메모" && note && note.trim()) return note.trim();
+  if (category === "메모" && note && note.trim()) {
+    const t = note.trim();
+    return t.startsWith("[기타]") ? t.slice("[기타]".length).trim() : t;
+  }
   if (category === "연차") return `휴 : ${productName}`;
   if (category === "반차") return `반 : ${productName}`;
   if (category === "생산") {
@@ -370,10 +373,6 @@ export default async function ProductionPlanPage({
                   <span className="inline-flex items-center gap-1.5">
                     <span className="h-2 w-2 rounded-sm bg-violet-400/70" />
                     반차
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-sm bg-slate-400/60" />
-                    기타
                   </span>
                 </div>
               </div>

@@ -38,6 +38,9 @@ export interface HarangInboundItem {
   lot_date: string;
   quantity: number;
   unit: string;
+  box_qty?: number;
+  unit_qty?: number;
+  remainder_g?: number;
   note: string | null;
 }
 

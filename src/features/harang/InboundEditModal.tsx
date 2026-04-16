@@ -13,6 +13,9 @@ type LineForm = {
   item_name: string;
   lot_date: string;
   quantity: string;
+  box_qty: string;
+  unit_qty: string;
+  remainder_g: string;
   unit: string;
   note: string;
 };
@@ -28,9 +31,17 @@ function makeEmptyLine(): LineForm {
     item_name: "",
     lot_date: "",
     quantity: "",
+    box_qty: "",
+    unit_qty: "",
+    remainder_g: "",
     unit: "",
     note: "",
   };
+}
+
+function num(v: string): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
 }
 
 type Props = {
@@ -82,7 +93,7 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
         inbound_route,
         note,
         items:harang_inbound_items(
-          id, category, item_id, item_code, item_name, lot_date, quantity, unit, note
+          id, category, item_id, item_code, item_name, lot_date, quantity, unit, box_qty, unit_qty, remainder_g, note
         )
       `,
       )
@@ -112,6 +123,9 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
           item_name: it.item_name,
           lot_date: (it.lot_date ?? "").slice(0, 10),
           quantity: String(it.quantity ?? ""),
+          box_qty: String(it.box_qty ?? ""),
+          unit_qty: String(it.unit_qty ?? ""),
+          remainder_g: String(it.remainder_g ?? ""),
           unit: it.unit ?? "",
           note: it.note ?? "",
         })),
@@ -148,7 +162,7 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
         const options = optionsByCategory[line.category];
         const item = options.find((candidate) => candidate.id === itemId);
         if (!item) {
-          return { ...line, item_id: "", item_code: "", item_name: "", unit: "" };
+          return { ...line, item_id: "", item_code: "", item_name: "", quantity: "", box_qty: "", unit_qty: "", remainder_g: "", unit: "" };
         }
         return {
           ...line,
@@ -180,12 +194,24 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
       item_name: string;
       lot_date: string;
       quantity: number;
+      box_qty: number;
+      unit_qty: number;
+      remainder_g: number;
       unit: string;
       note: string | null;
     }[] = [];
     try {
       payloadItems = lines.map((line, idx) => {
-        const quantity = Number(line.quantity);
+        const selectedItem = optionsByCategory[line.category].find((item) => item.id === line.item_id);
+        const boxQty = Math.max(0, num(line.box_qty));
+        const unitQty = Math.max(0, num(line.unit_qty));
+        const remainderG = Math.max(0, num(line.remainder_g));
+        const boxWeight = Number(selectedItem?.box_weight_g ?? 0);
+        const unitWeight = Number(selectedItem?.unit_weight_g ?? 0);
+        const hasWeightSpec = line.category === "raw_material" && (boxWeight > 0 || unitWeight > 0);
+        const quantity = hasWeightSpec
+          ? boxQty * boxWeight + unitQty * unitWeight + remainderG
+          : Number(line.quantity);
         if (!line.item_id || !line.item_code || !line.item_name) {
           throw new Error(`${idx + 1}행 품목을 선택해 주세요.`);
         }
@@ -205,6 +231,9 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
           item_name: line.item_name,
           lot_date: line.lot_date,
           quantity,
+          box_qty: boxQty,
+          unit_qty: unitQty,
+          remainder_g: remainderG,
           unit: line.unit.trim(),
           note: line.note.trim() || null,
         };
@@ -320,6 +349,9 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
                         <th className="px-2 py-2 text-left">분류</th>
                         <th className="px-2 py-2 text-left">품목명</th>
                         <th className="px-2 py-2 text-left">LOT(제조일자/소비기한)</th>
+                        <th className="px-2 py-2 text-right">박스</th>
+                        <th className="px-2 py-2 text-right">낱개</th>
+                        <th className="px-2 py-2 text-right">잔량(g)</th>
                         <th className="px-2 py-2 text-right">입고수량</th>
                         <th className="px-2 py-2 text-left">단위</th>
                         <th className="px-2 py-2 text-left">비고</th>
@@ -332,6 +364,12 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
                         const selectedItem = options.find((o) => o.id === line.item_id) as HarangMasterItem | undefined;
                         const unitLocked =
                           line.category === "raw_material" && selectedItem && isRawMaterialUnitLocked(selectedItem);
+                        const boxWeight = Number(selectedItem?.box_weight_g ?? 0);
+                        const unitWeight = Number(selectedItem?.unit_weight_g ?? 0);
+                        const hasWeightSpec = line.category === "raw_material" && (boxWeight > 0 || unitWeight > 0);
+                        const calcQuantity = hasWeightSpec
+                          ? num(line.box_qty) * boxWeight + num(line.unit_qty) * unitWeight + num(line.remainder_g)
+                          : num(line.quantity);
                         return (
                           <tr key={line.line_id} className="border-b border-slate-100 text-slate-900">
                             <td className="px-2 py-2">
@@ -343,6 +381,10 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
                                     item_id: "",
                                     item_code: "",
                                     item_name: "",
+                                    quantity: "",
+                                    box_qty: "",
+                                    unit_qty: "",
+                                    remainder_g: "",
                                     unit: "",
                                   })
                                 }
@@ -378,10 +420,43 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
                               <input
                                 type="number"
                                 min="0"
+                                step="1"
+                                value={line.box_qty}
+                                onChange={(e) => handleChangeLine(line.line_id, { box_qty: e.target.value })}
+                                className="w-[90px] px-2 py-1.5 rounded bg-white border border-slate-300 text-right"
+                              />
+                            </td>
+                            <td className="px-2 py-2 text-right">
+                              <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={line.unit_qty}
+                                onChange={(e) => handleChangeLine(line.line_id, { unit_qty: e.target.value })}
+                                className="w-[90px] px-2 py-1.5 rounded bg-white border border-slate-300 text-right"
+                              />
+                            </td>
+                            <td className="px-2 py-2 text-right">
+                              <input
+                                type="number"
+                                min="0"
                                 step="0.001"
-                                value={line.quantity}
+                                value={line.remainder_g}
+                                onChange={(e) => handleChangeLine(line.line_id, { remainder_g: e.target.value })}
+                                className="w-[110px] px-2 py-1.5 rounded bg-white border border-slate-300 text-right"
+                              />
+                            </td>
+                            <td className="px-2 py-2 text-right">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.001"
+                                value={hasWeightSpec ? String(calcQuantity || "") : line.quantity}
+                                readOnly={hasWeightSpec}
                                 onChange={(e) => handleChangeLine(line.line_id, { quantity: e.target.value })}
-                                className="w-[120px] px-2 py-1.5 rounded bg-white border border-slate-300 text-right"
+                                className={`w-[120px] px-2 py-1.5 rounded border border-slate-300 text-right ${
+                                  hasWeightSpec ? "bg-slate-100 text-slate-800" : "bg-white"
+                                }`}
                               />
                             </td>
                             <td className="px-2 py-2">

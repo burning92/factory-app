@@ -255,22 +255,6 @@ export async function POST(request: Request) {
       });
     }
 
-    if ((Number(payload.other_count) || 0) > 0) {
-      mirrorRows.push({
-        plan_date: planDate,
-        product_name: `기타(${Number(payload.other_count)})`,
-        qty: null,
-        category: "기타",
-        note: null,
-        plan_year: planYear,
-        plan_month: planMonth,
-        plan_version: "master",
-        source_sheet_name: "planning_board",
-        sort_order: sort++,
-        updated_at: new Date().toISOString(),
-      });
-    }
-
     if (mirrorRows.length > 0) {
       const { error: insMirrorErr } = await admin.from("production_plan_rows").insert(mirrorRows);
       if (insMirrorErr) throw insMirrorErr;

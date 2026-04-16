@@ -278,7 +278,7 @@ export default function PlanningPrintPage() {
                           const parsed = parseOtherNoteText(n);
                           return (
                             <p key={`${dateKey}-note-${i}`} className={`note ${parsed ? "" : "alert"}`}>
-                              {parsed ? `🟩기타: ${parsed.detail} : ${parsed.person}` : `■ 비고: ${n}`}
+                              {parsed ? `■ 비고: ${parsed.detail} : ${parsed.person}` : `■ 비고: ${n.replace(/^\[기타\]\s*/, "")}`}
                             </p>
                           );
                         })}
