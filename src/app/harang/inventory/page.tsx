@@ -21,6 +21,15 @@ function categoryLabel(category: HarangCategory): string {
   return category === "raw_material" ? "원재료" : "부자재";
 }
 
+function isParbakeDoughName(name: string): boolean {
+  return name.replace(/\s/g, "").includes("파베이크도우");
+}
+
+function displayUnit(category: HarangCategory, itemName: string): "EA" | "g" {
+  if (category === "packaging_material") return "EA";
+  return isParbakeDoughName(itemName) ? "EA" : "g";
+}
+
 export default function HarangInventoryPage() {
   const [rows, setRows] = useState<StockSummary[]>([]);
   const [category, setCategory] = useState("");
@@ -58,7 +67,8 @@ export default function HarangInventoryPage() {
 
     const map = new Map<string, StockSummary>();
     for (const lot of lots) {
-      const key = `${lot.category}:${lot.item_id}:${lot.unit}`;
+      const shownUnit = displayUnit(lot.category, lot.item_name);
+      const key = `${lot.category}:${lot.item_id}:${shownUnit}`;
       const prev =
         map.get(key) ??
         ({
@@ -66,7 +76,7 @@ export default function HarangInventoryPage() {
           item_id: lot.item_id,
           item_code: lot.item_code,
           item_name: lot.item_name,
-          unit: lot.unit,
+          unit: shownUnit,
           total_current_qty: 0,
           lot_count: 0,
           recent_inbound_date: null,

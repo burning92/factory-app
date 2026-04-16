@@ -6,13 +6,22 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { HarangInventoryLot, HarangInventoryTransaction } from "@/features/harang/types";
 
+function isParbakeDoughName(name: string): boolean {
+  return name.replace(/\s/g, "").includes("파베이크도우");
+}
+
+function displayUnit(category: string, itemName: string): "EA" | "g" {
+  if (category === "packaging_material") return "EA";
+  return isParbakeDoughName(itemName) ? "EA" : "g";
+}
+
 export default function HarangInventoryItemDetailPage() {
   const params = useParams<{ category: string; itemId: string }>();
   const searchParams = useSearchParams();
   const category = params.category;
   const itemId = params.itemId;
   const itemName = searchParams.get("itemName") ?? "-";
-  const unit = searchParams.get("unit") ?? "";
+  const unit = displayUnit(category, itemName);
 
   const [lots, setLots] = useState<HarangInventoryLot[]>([]);
   const [txs, setTxs] = useState<HarangInventoryTransaction[]>([]);

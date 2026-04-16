@@ -8,6 +8,10 @@ import type { HarangInboundHeader } from "@/features/harang/types";
 
 type CategoryLabel = "원재료" | "부자재" | "혼합";
 
+function isParbakeDoughName(name: string): boolean {
+  return name.replace(/\s/g, "").includes("파베이크도우");
+}
+
 function summarizeCategory(header: HarangInboundHeader): CategoryLabel {
   const categories = Array.from(new Set((header.items ?? []).map((item) => item.category)));
   if (categories.length <= 1) {
@@ -28,12 +32,18 @@ function summarizeItemName(header: HarangInboundHeader): string {
 function sumQuantity(header: HarangInboundHeader): string {
   const totals = new Map<string, number>();
   for (const item of header.items ?? []) {
-    const prev = totals.get(item.unit) ?? 0;
-    totals.set(item.unit, prev + Number(item.quantity ?? 0));
+    const unit =
+      item.category === "packaging_material"
+        ? "EA"
+        : isParbakeDoughName(String(item.item_name ?? ""))
+          ? "EA"
+          : "g";
+    const prev = totals.get(unit) ?? 0;
+    totals.set(unit, prev + Number(item.quantity ?? 0));
   }
   if (totals.size === 0) return "-";
   return Array.from(totals.entries())
-    .map(([unit, qty]) => `${qty.toLocaleString()} ${unit}`)
+    .map(([unit, qty]) => `${qty.toLocaleString("ko-KR")} ${unit}`)
     .join(" / ");
 }
 
