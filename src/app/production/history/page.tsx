@@ -1,11 +1,11 @@
 "use client";
 
 import { Suspense, useMemo, useState, useCallback, useEffect, useRef } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMasterStore, type ProductionLog, type OutboundLine } from "@/store/useMasterStore";
 import { calculateUsageSummary, getDateParbakeTypes, type ComputedResult } from "@/features/production/history/calculations";
 import { parseProductLabel } from "@/features/production/history/productLabel";
-import { getJournalStorageKey } from "@/features/production/history/journalAllocation";
 import { getBomRowsForProductAndStandard } from "@/features/production/history/bomAdapter";
 import type { BomRowRef } from "@/features/production/history/types";
 import DateWheelPicker from "@/components/DateWheelPicker";
@@ -424,6 +424,107 @@ function buildInitialMaterials(
   }));
 }
 
+/**
+ * 마감 스냅샷의 LOT별 출고량을 출고 현황(production_logs) 최신값과 맞춘다.
+ * 출고만 수정하고 1·2차 마감을 다시 저장하지 않은 경우에도 사용량·생산일지가 출고와 일치하도록 한다.
+ * — 수동 추가 LOT(sourceType === "manual")의 출고량은 건드리지 않는다.
+ */
+/** DB 출고(production_logs) 기준으로 마감 스냅샷의 LOT별 출고량을 갱신한다. */
+export function mergeOutboundFromLogsForDate(
+  date: string,
+  materials: MaterialCard[],
+  logs: ProductionLog[],
+  materialsList: MaterialLike[]
+): MaterialCard[] {
+  const fresh = buildInitialMaterials(date, logs, materialsList);
+  if (materials.length === 0) return fresh;
+
+  const outboundByKey = new Map<string, number>();
+  for (const c of fresh) {
+    const mn = (c.materialName ?? "").trim();
+    for (const lot of c.lots) {
+      const exp = (lot.expiryDate ?? "").trim();
+      outboundByKey.set(`${mn}\t${exp}`, lot.outboundQty);
+    }
+  }
+
+  const materialByName = new Map<string, MaterialCard>();
+  for (const c of materials) {
+    const mn = (c.materialName ?? "").trim();
+    materialByName.set(mn, {
+      ...c,
+      lots: c.lots.map((l) => ({ ...l })),
+    });
+  }
+
+  for (const mn of Array.from(materialByName.keys())) {
+    const card = materialByName.get(mn)!;
+    const newLots = card.lots.map((lot) => {
+      if (lot.sourceType === "manual") return lot;
+      const exp = (lot.expiryDate ?? "").trim();
+      const key = `${mn}\t${exp}`;
+      const ob = outboundByKey.get(key);
+      if (ob === undefined) return { ...lot, outboundQty: 0 };
+      return { ...lot, outboundQty: ob };
+    });
+    materialByName.set(mn, { ...card, lots: newLots });
+  }
+
+  const existingKeys = new Set<string>();
+  for (const c of materials) {
+    const mn = (c.materialName ?? "").trim();
+    for (const lot of c.lots) {
+      existingKeys.add(`${mn}\t${(lot.expiryDate ?? "").trim()}`);
+    }
+  }
+
+  for (const fc of fresh) {
+    const mn = (fc.materialName ?? "").trim();
+    let card = materialByName.get(mn);
+    if (!card) {
+      card = {
+        materialCardId: generateId(),
+        materialName: fc.materialName,
+        lots: [],
+      };
+      materialByName.set(mn, card);
+    }
+    const lots = [...card.lots];
+    for (const fl of fc.lots) {
+      const exp = (fl.expiryDate ?? "").trim();
+      const key = `${mn}\t${exp}`;
+      if (existingKeys.has(key)) continue;
+      lots.push({
+        lotRowId: generateId(),
+        sourceType: "from-log",
+        expiryDate: fl.expiryDate,
+        outboundQty: fl.outboundQty,
+        prevDayUnitCount: "",
+        prevDayRemainderG: "",
+        currentDayUnitCount: "",
+        currentDayRemainderG: "",
+      });
+      existingKeys.add(key);
+    }
+    materialByName.set(mn, { ...card, lots });
+  }
+
+  return Array.from(materialByName.values());
+}
+
+function outboundSnapshot(materials: MaterialCard[]): string {
+  return JSON.stringify(
+    materials.map((c) => ({
+      m: c.materialName,
+      lots: c.lots.map((l) => ({
+        e: l.expiryDate,
+        o: l.outboundQty,
+        s: l.sourceType,
+      })),
+    }))
+  );
+}
+
 /** 해당 날짜 생산 제품들의 BOM 원료 목록 중, 아직 카드로 없는 원료만 반환 (원료 추가 선택지) */
 function getAddableBomMaterialNames(
   products: { baseProductName?: string; productStandardName?: string }[],
@@ -600,6 +701,26 @@ function UsageCalculationPageContent() {
     }
   }, [groupStateByDate]);
 
+  /** 출고 현황(DB) 변경 시 마감 스냅샷의 LOT별 출고량을 맞춤. 출고만 수정한 뒤에도 1·2차 재저장 없이 표시·계산·생산일지가 일치하도록 함 */
+  useEffect(() => {
+    if (typeof window === "undefined" || !hasRestoredRef.current) return;
+    setGroupStateByDate((prev) => {
+      if (Object.keys(prev).length === 0) return prev;
+      let changed = false;
+      const next: Record<string, DateGroupState> = { ...prev };
+      for (const date of Object.keys(next)) {
+        const logs = productionLogs.filter((l) => (l.생산일자 ?? "").slice(0, 10) === date);
+        const s = next[date];
+        if (!s) continue;
+        const merged = mergeOutboundFromLogsForDate(date, s.materials, logs, materialsList);
+        if (outboundSnapshot(merged) === outboundSnapshot(s.materials)) continue;
+        next[date] = { ...s, materials: merged };
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [productionLogs, materialsList, groupStateByDate]);
+
   /** 토스트 2.5초 후 자동 제거 */
   useEffect(() => {
     if (!toast) return;
@@ -626,15 +747,17 @@ function UsageCalculationPageContent() {
       basis: b.basis,
     }));
     for (const { date, logs } of dateGroups) {
-      const state =
+      const rawState =
         groupStateByDate[date] ??
         createInitialDateGroupState(date, logs, materialsList, defaultAuthor);
+      const state: DateGroupState = {
+        ...rawState,
+        materials: mergeOutboundFromLogsForDate(date, rawState.materials, logs, materialsList),
+      };
       out[date] = calculateUsageSummary(state, bomRefs, materialsMeta);
     }
     return out;
   }, [dateGroups, groupStateByDate, materialsList, bomList, materialsMeta, defaultAuthor]);
-
-  const router = useRouter();
 
   const getOrInitGroupState = useCallback(
     (date: string): DateGroupState => {
@@ -692,38 +815,6 @@ function UsageCalculationPageContent() {
       return createInitialDateGroupState(date, logs, materialsList, defaultAuthor);
     },
     [groupStateByDate, productionLogs, materialsList, defaultAuthor]
-  );
-
-  const openJournal = useCallback(
-    (date: string) => {
-      const state = getOrInitGroupState(date);
-      const computed = computedByDate[date];
-      if (!computed) return;
-      try {
-        if (typeof window === "undefined") return;
-        const payload = {
-          date,
-          dateGroup: state as unknown as import("@/features/production/history/types").DateGroupInput,
-          computedResult: computed,
-        };
-        sessionStorage.setItem(getJournalStorageKey(), JSON.stringify(payload));
-
-        const params = new URLSearchParams();
-        params.set("date", date);
-        params.set("from", "usage");
-        // 사용량 계산에서 들어온 경우 현재 URL의 검색 파라미터를 그대로 보존
-        const currentSearch = searchParams.toString();
-        const returnToBase = "/production/history";
-        const returnTo =
-          currentSearch.length > 0 ? `${returnToBase}?${currentSearch}` : returnToBase;
-        params.set("returnTo", encodeURIComponent(returnTo));
-
-        router.push(`/production/history/journal?${params.toString()}`);
-      } catch {
-        setToast({ message: "생산일지 데이터 저장에 실패했습니다." });
-      }
-    },
-    [getOrInitGroupState, computedByDate, router, searchParams]
   );
 
   const setGroupState = useCallback((date: string, state: DateGroupState) => {
@@ -1113,8 +1204,8 @@ function UsageCalculationPageContent() {
 
                   {isExpanded && (
                     <div className="border-t border-slate-700/80 p-4 sm:p-6 space-y-6 bg-space-900/40">
-                      {/* 생산일지 보기 · 마감 초기화 (manager/admin) */}
-                      <div className="flex flex-wrap justify-end gap-2">
+                      {/* 마감 초기화 (manager/admin) — 생산일지는 생산일지 완료 목록에서만 엽니다 */}
+                      <div className="flex flex-wrap items-center justify-end gap-3">
                         {canManageDateClosing && (
                           <button
                             type="button"
@@ -1125,13 +1216,14 @@ function UsageCalculationPageContent() {
                             {resettingDateClosing === date ? "초기화 중..." : "마감 초기화"}
                           </button>
                         )}
-                        <button
-                          type="button"
-                          onClick={() => openJournal(date)}
-                          className="rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 text-sm font-medium"
-                        >
-                          생산일지 보기
-                        </button>
+                        {state.status === "2차마감완료" && (
+                          <Link
+                            href="/production/history/completed"
+                            className="text-sm font-medium text-cyan-400 hover:text-cyan-300"
+                          >
+                            생산일지 보기 →
+                          </Link>
+                        )}
                       </div>
                       {/* Step 3 계산 경고 (있을 때만) */}
                       {computedByDate[date]?.warnings?.length > 0 && (

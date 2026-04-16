@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useMasterStore, type DoughLogRecord, type DoughProcessLine } from "@/store/useMasterStore";
 import type {
+  BomRowRef,
   DateGroupInput,
   ComputedResult,
 } from "@/features/production/history/types";
@@ -70,6 +71,8 @@ type StoredJournal = {
   date: string;
   dateGroup: DateGroupInput & { authorName?: string };
   computedResult: ComputedResult;
+  /** 생산일지 보기 클릭 시점의 BOM — 스토어 BOM 로드 타이밍과 무관하게 동일한 제품별 원료 표시 */
+  bomRefsSnapshot?: BomRowRef[];
 };
 
 function addDays(isoDate: string, days: number): string {
@@ -122,7 +125,7 @@ function JournalPageContent() {
         typeof window !== "undefined" ? sessionStorage.getItem(key) : null;
       if (!raw) {
         setError(
-          "저장된 일지 데이터가 없습니다. 사용량 계산에서 해당 날짜를 연 뒤 '생산일지 보기'를 눌러 주세요.",
+          "저장된 일지 데이터가 없습니다. 생산 → 생산일지 완료 목록에서 해당 날짜 '보기'를 눌러 주세요.",
         );
         setStored(null);
         return;
@@ -130,7 +133,7 @@ function JournalPageContent() {
       const data = JSON.parse(raw) as StoredJournal;
       if (data.date !== date) {
         setError(
-          "선택한 날짜와 저장된 날짜가 다릅니다. 사용량 계산에서 해당 날짜를 연 뒤 다시 '생산일지 보기'를 눌러 주세요.",
+          "선택한 날짜와 저장된 날짜가 다릅니다. 생산일지 완료 목록에서 다시 '보기'를 눌러 주세요.",
         );
         setStored(null);
         return;
@@ -143,34 +146,40 @@ function JournalPageContent() {
     }
   }, [date]);
 
-  const bomRefs = useMemo(
-    () =>
-      bomList.map((b) => ({
-        productName: b.productName,
-        materialName: b.materialName,
-        bomGPerEa: b.bomGPerEa,
-        basis: b.basis,
-      })),
-    [bomList],
-  );
+  /** 저장 스냅샷이 있으면 그 BOM만 사용(일지 값 고정). 없으면 레거시 세션용으로 스토어 BOM */
+  const bomRefsEffective = useMemo((): BomRowRef[] => {
+    const snap = stored?.bomRefsSnapshot;
+    if (Array.isArray(snap) && snap.length > 0) return snap;
+    return bomList.map((b) => ({
+      productName: b.productName,
+      materialName: b.materialName,
+      bomGPerEa: b.bomGPerEa,
+      basis: b.basis,
+    }));
+  }, [stored?.bomRefsSnapshot, bomList]);
+
+  const journalBomResolved = useMemo(() => {
+    if (stored?.bomRefsSnapshot && stored.bomRefsSnapshot.length > 0) return true;
+    return bomReady;
+  }, [stored?.bomRefsSnapshot, bomReady]);
 
   const usageResult = useMemo(() => {
     if (!stored) return null;
     return buildPerProductUsage(
       stored.dateGroup,
       stored.computedResult,
-      bomRefs,
+      bomRefsEffective,
     );
-  }, [stored, bomRefs]);
+  }, [stored, bomRefsEffective]);
 
   const ponoBreadDerived = useMemo((): PonoBreadDerived | null => {
     if (!stored) return null;
     return calculatePonoBreadDerived(
       stored.dateGroup,
       stored.computedResult,
-      bomRefs,
+      bomRefsEffective,
     );
-  }, [stored, bomRefs]);
+  }, [stored, bomRefsEffective]);
 
   /** 반죽 내역(사용일자=생산일자 기준) 집계. P1 총괄 "반죽 사용량" 블록용. */
   const doughUsageLines = useMemo(
@@ -252,7 +261,7 @@ function JournalPageContent() {
     );
   }
 
-  if (stored && !bomReady) {
+  if (stored && !journalBomResolved) {
     return (
       <div className="min-h-screen bg-space-950 text-slate-200 py-12 px-4">
         <div className="max-w-lg mx-auto text-center">원료 BOM 불러오는 중…</div>

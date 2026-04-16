@@ -7,7 +7,7 @@ import { useMasterStore } from "@/store/useMasterStore";
 import { calculateUsageSummary } from "@/features/production/history/calculations";
 import { getJournalStorageKey } from "@/features/production/history/journalAllocation";
 import type { DateGroupInput } from "@/features/production/history/types";
-import type { DateGroupState, ProductOutput } from "../page";
+import { mergeOutboundFromLogsForDate, type DateGroupState, type ProductOutput } from "../page";
 
 /** 제품 표시명: "-일반", "-파베이크사용", "-브레드" 제거 */
 function productDisplayName(label: string): string {
@@ -28,19 +28,19 @@ type CompletedItem = {
 export default function CompletedListPage() {
   const router = useRouter();
   const {
-    bomList,
-    materials,
     productionLogs,
     fetchBom,
+    fetchMaterials,
     fetchProductionLogs,
     fetchProductionHistoryDateStates,
     productionHistoryDateStates,
     productionHistoryDateStatesLoading,
-    getProductionHistoryDateState,
   } = useMasterStore();
   const [searchDate, setSearchDate] = useState("");
   const [searchAuthor, setSearchAuthor] = useState("");
   const [searchProduct, setSearchProduct] = useState("");
+  /** 보기/인쇄 시 서버·출고 최신화 중 */
+  const [openingJournalDate, setOpeningJournalDate] = useState<string | null>(null);
 
   /** 서버 기준 통일: production_history_date_state + production_logs 둘 다 로드. 사용량 계산과 동일한 날짜 집합 사용. */
   useEffect(() => {
@@ -48,27 +48,6 @@ export default function CompletedListPage() {
     fetchProductionLogs();
     fetchProductionHistoryDateStates();
   }, [fetchBom, fetchProductionLogs, fetchProductionHistoryDateStates]);
-
-  const bomRefs = useMemo(
-    () =>
-      bomList.map((b) => ({
-        productName: b.productName,
-        materialName: b.materialName,
-        bomGPerEa: b.bomGPerEa,
-        basis: b.basis,
-      })),
-    [bomList],
-  );
-
-  const materialsMeta = useMemo(
-    () =>
-      materials.map((m) => ({
-        materialName: m.materialName,
-        unitWeightG: m.unitWeightG,
-        boxWeightG: m.boxWeightG,
-      })),
-    [materials],
-  );
 
   /** 사용량 계산과 동일 기준: production_history_date_state.second_closed_at IS NOT NULL 인 날짜만,
    * 且 해당 날짜에 production_logs 가 1건 이상 있는 경우만 표시. 테스트 후 로그만 삭제된 날짜는 제외. */
@@ -129,25 +108,58 @@ export default function CompletedListPage() {
   }, [completedList, searchDate, searchAuthor, searchProduct]);
 
   const openJournal = useCallback(
-    (date: string, openPrint?: boolean) => {
-      const row = getProductionHistoryDateState(date);
-      const state = row?.state_snapshot && typeof row.state_snapshot === "object"
-        ? (row.state_snapshot as DateGroupState)
-        : null;
-      if (!state) return;
+    async (date: string, openPrint?: boolean) => {
+      setOpeningJournalDate(date);
       try {
-        const computed = calculateUsageSummary(state as unknown as DateGroupInput, bomRefs, materialsMeta);
+        await Promise.all([
+          fetchBom(),
+          fetchMaterials(),
+          fetchProductionLogs(),
+          fetchProductionHistoryDateStates(),
+        ]);
+        const st = useMasterStore.getState();
+        const row = st.getProductionHistoryDateState(date);
+        const state = row?.state_snapshot && typeof row.state_snapshot === "object"
+          ? (row.state_snapshot as DateGroupState)
+          : null;
+        if (!state) return;
+        const logs = st.productionLogs.filter((l) => (l.생산일자 ?? "").slice(0, 10) === date);
+        const materialsList = st.materials.map((m) => ({
+          materialName: m.materialName,
+          boxWeightG: m.boxWeightG,
+          unitWeightG: m.unitWeightG,
+        }));
+        const materialsMetaFresh = st.materials.map((m) => ({
+          materialName: m.materialName,
+          unitWeightG: m.unitWeightG,
+          boxWeightG: m.boxWeightG,
+        }));
+        const bomRefsFresh = st.bomList.map((b) => ({
+          productName: b.productName,
+          materialName: b.materialName,
+          bomGPerEa: b.bomGPerEa,
+          basis: b.basis,
+        }));
+        const mergedState: DateGroupState = {
+          ...state,
+          materials: mergeOutboundFromLogsForDate(date, state.materials, logs, materialsList),
+        };
+        const computed = calculateUsageSummary(
+          mergedState as unknown as DateGroupInput,
+          bomRefsFresh,
+          materialsMetaFresh
+        );
         const payload = {
           date,
-          dateGroup: state as unknown as DateGroupInput,
+          dateGroup: mergedState as unknown as DateGroupInput,
           computedResult: computed,
+          bomRefsSnapshot: bomRefsFresh,
         };
         if (typeof window === "undefined") return;
         sessionStorage.setItem(getJournalStorageKey(), JSON.stringify(payload));
         const params = new URLSearchParams();
         params.set("date", date);
         params.set("from", "completed");
-        // 완료 목록 검색 조건을 그대로 보존할 수 있도록 returnTo에 인코딩
         const returnToSearch = new URLSearchParams();
         if (searchDate.trim()) returnToSearch.set("date", searchDate.trim());
         if (searchAuthor.trim()) returnToSearch.set("author", searchAuthor.trim());
@@ -167,9 +179,20 @@ export default function CompletedListPage() {
         }
       } catch {
         // ignore
+      } finally {
+        setOpeningJournalDate(null);
       }
     },
-    [getProductionHistoryDateState, bomRefs, materialsMeta, router, searchDate, searchAuthor, searchProduct],
+    [
+      fetchBom,
+      fetchMaterials,
+      fetchProductionLogs,
+      fetchProductionHistoryDateStates,
+      router,
+      searchDate,
+      searchAuthor,
+      searchProduct,
+    ],
   );
 
   return (
@@ -186,7 +209,7 @@ export default function CompletedListPage() {
         </div>
 
         <p className="text-slate-400 text-sm mb-6">
-          2차 마감까지 완료된 날짜만 표시됩니다. 목록은 서버에 저장된 마감 상태를 기준으로 불러옵니다.
+          2차 마감까지 완료된 날짜만 표시됩니다. 보기·인쇄 시 출고·마감·BOM을 서버에서 다시 불러온 뒤 생산일지를 만듭니다.
         </p>
 
         {productionHistoryDateStatesLoading && (
@@ -261,15 +284,17 @@ export default function CompletedListPage() {
                   <div className="flex flex-wrap gap-2 shrink-0">
                     <button
                       type="button"
-                      onClick={() => openJournal(item.date, false)}
-                      className="rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 text-sm font-medium"
+                      disabled={openingJournalDate === item.date}
+                      onClick={() => void openJournal(item.date, false)}
+                      className="rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                      보기
+                      {openingJournalDate === item.date ? "불러오는 중…" : "보기"}
                     </button>
                     <button
                       type="button"
-                      onClick={() => openJournal(item.date, true)}
-                      className="rounded-lg border border-slate-500 hover:bg-slate-700/80 text-slate-200 px-4 py-2 text-sm font-medium"
+                      disabled={openingJournalDate === item.date}
+                      onClick={() => void openJournal(item.date, true)}
+                      className="rounded-lg border border-slate-500 hover:bg-slate-700/80 text-slate-200 px-4 py-2 text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       인쇄
                     </button>
