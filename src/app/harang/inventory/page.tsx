@@ -153,7 +153,7 @@ export default function HarangInventoryPage() {
                       <td className="px-3 py-2">{row.recent_usage_date ?? "-"}</td>
                       <td className="px-3 py-2">
                         <Link
-                          href={`/harang/inventory/${row.category}/${row.item_id}?itemName=${encodeURIComponent(row.item_name)}&unit=${encodeURIComponent(row.unit)}`}
+                          href={`/harang/inventory/${row.category}/${row.item_id}?itemName=${encodeURIComponent(row.item_name)}&lotId=${encodeURIComponent(row.lot_id)}`}
                           className="px-3 py-1.5 rounded border border-cyan-700/70 text-cyan-300 text-xs"
                         >
                           보기

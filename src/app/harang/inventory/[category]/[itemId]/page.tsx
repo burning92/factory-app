@@ -21,6 +21,7 @@ export default function HarangInventoryItemDetailPage() {
   const category = params.category;
   const itemId = params.itemId;
   const itemName = searchParams.get("itemName") ?? "-";
+  const lotId = searchParams.get("lotId");
   const unit = displayUnit(category, itemName);
 
   const [lots, setLots] = useState<HarangInventoryLot[]>([]);
@@ -60,15 +61,25 @@ export default function HarangInventoryItemDetailPage() {
     void loadData();
   }, [loadData]);
 
+  const visibleLots = useMemo(() => {
+    if (!lotId) return lots;
+    return lots.filter((lot) => lot.id === lotId);
+  }, [lots, lotId]);
+
+  const visibleTxs = useMemo(() => {
+    if (!lotId) return txs;
+    return txs.filter((tx) => tx.lot_id === lotId);
+  }, [txs, lotId]);
+
   const summary = useMemo(() => {
-    const totalQty = lots.reduce((acc, lot) => acc + Number(lot.current_quantity ?? 0), 0);
-    const recentInbound = lots.reduce<string | null>((acc, lot) => {
+    const totalQty = visibleLots.reduce((acc, lot) => acc + Number(lot.current_quantity ?? 0), 0);
+    const recentInbound = visibleLots.reduce<string | null>((acc, lot) => {
       if (!acc || lot.inbound_date > acc) return lot.inbound_date;
       return acc;
     }, null);
-    const recentUsage = txs.find((tx) => tx.tx_type === "usage")?.tx_date ?? null;
+    const recentUsage = visibleTxs.find((tx) => tx.tx_type === "usage")?.tx_date ?? null;
     return { totalQty, recentInbound, recentUsage };
-  }, [lots, txs]);
+  }, [visibleLots, visibleTxs]);
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8">
@@ -118,9 +129,9 @@ export default function HarangInventoryItemDetailPage() {
               </thead>
               <tbody>
                 {loading && <tr><td colSpan={8} className="px-3 py-6 text-center text-slate-500">불러오는 중...</td></tr>}
-                {!loading && lots.length === 0 && <tr><td colSpan={8} className="px-3 py-6 text-center text-slate-500">LOT가 없습니다.</td></tr>}
+                {!loading && visibleLots.length === 0 && <tr><td colSpan={8} className="px-3 py-6 text-center text-slate-500">LOT가 없습니다.</td></tr>}
                 {!loading &&
-                  lots.map((lot) => {
+                  visibleLots.map((lot) => {
                     const headerInboundNo = (lot as HarangInventoryLot & { headers?: { inbound_no?: string } | null }).headers?.inbound_no;
                     return (
                       <tr key={lot.id} className="border-b border-slate-100 text-slate-900">
@@ -157,9 +168,9 @@ export default function HarangInventoryItemDetailPage() {
               </thead>
               <tbody>
                 {loading && <tr><td colSpan={7} className="px-3 py-6 text-center text-slate-500">불러오는 중...</td></tr>}
-                {!loading && txs.length === 0 && <tr><td colSpan={7} className="px-3 py-6 text-center text-slate-500">이력이 없습니다.</td></tr>}
+                {!loading && visibleTxs.length === 0 && <tr><td colSpan={7} className="px-3 py-6 text-center text-slate-500">이력이 없습니다.</td></tr>}
                 {!loading &&
-                  txs.map((tx) => (
+                  visibleTxs.map((tx) => (
                     <tr key={tx.id} className="border-b border-slate-100 text-slate-900">
                       <td className="px-3 py-2">{tx.tx_date}</td>
                       <td className="px-3 py-2">{tx.tx_type === "inbound" ? "입고" : tx.tx_type === "usage" ? "사용" : "조정"}</td>
