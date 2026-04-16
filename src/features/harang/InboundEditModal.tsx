@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { HarangCategory, HarangInboundHeader, HarangMasterItem } from "@/features/harang/types";
-import { effectiveRawMaterialUnit, isRawMaterialUnitLocked } from "@/features/harang/rawMaterialUnit";
+import { effectiveRawMaterialUnit } from "@/features/harang/rawMaterialUnit";
 
 type LineForm = {
   line_id: string;
@@ -21,6 +21,7 @@ type LineForm = {
 };
 
 const ROUTES = ["AF발송", "하랑직입고"] as const;
+const PARBAKE_BOX_EA = 40;
 
 function makeEmptyLine(): LineForm {
   return {
@@ -40,8 +41,18 @@ function makeEmptyLine(): LineForm {
 }
 
 function num(v: string): number {
-  const n = Number(v);
+  const n = Number(String(v).replaceAll(",", "").trim());
   return Number.isFinite(n) ? n : 0;
+}
+
+function formatNumberInput(v: string, digits = 3): string {
+  const n = num(v);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  return n.toLocaleString("ko-KR", { maximumFractionDigits: digits });
+}
+
+function isParbakeDoughName(name: string): boolean {
+  return name.replace(/\s/g, "").includes("파베이크도우");
 }
 
 type Props = {
@@ -66,7 +77,7 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
     const [rawRes, packRes] = await Promise.all([
       supabase
         .from("harang_raw_materials")
-        .select("id, item_code, item_name, default_unit, locked_unit, is_active, note, created_at, updated_at")
+        .select("id, item_code, item_name, default_unit, locked_unit, box_weight_g, unit_weight_g, is_active, note, created_at, updated_at")
         .eq("is_active", true)
         .order("item_name", { ascending: true }),
       supabase
@@ -151,6 +162,24 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
     [rawMaterials, packagingMaterials],
   );
 
+  const totalWeightG = useMemo(() => {
+    return lines.reduce((sum, line) => {
+      const selectedItem = optionsByCategory[line.category].find((item) => item.id === line.item_id);
+      const isParbakeDough = line.category === "raw_material" && isParbakeDoughName(String(selectedItem?.item_name ?? line.item_name ?? ""));
+      const boxWeight = Number(selectedItem?.box_weight_g ?? 0);
+      const unitWeight = Number(selectedItem?.unit_weight_g ?? 0);
+      const hasWeightSpec = line.category === "raw_material" && !isParbakeDough && (boxWeight > 0 || unitWeight > 0);
+      const qty = isParbakeDough
+        ? Math.max(0, num(line.box_qty)) * PARBAKE_BOX_EA + Math.max(0, num(line.unit_qty))
+        : hasWeightSpec
+        ? Math.max(0, num(line.box_qty)) * boxWeight +
+          Math.max(0, num(line.unit_qty)) * unitWeight +
+          Math.max(0, num(line.remainder_g))
+        : Math.max(0, num(line.quantity));
+      return sum + (Number.isFinite(qty) ? qty : 0);
+    }, 0);
+  }, [lines, optionsByCategory]);
+
   const handleChangeLine = (lineId: string, patch: Partial<LineForm>) => {
     setLines((prev) => prev.map((line) => (line.line_id === lineId ? { ...line, ...patch } : line)));
   };
@@ -203,13 +232,16 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
     try {
       payloadItems = lines.map((line, idx) => {
         const selectedItem = optionsByCategory[line.category].find((item) => item.id === line.item_id);
+        const isParbakeDough = line.category === "raw_material" && isParbakeDoughName(String(selectedItem?.item_name ?? line.item_name ?? ""));
         const boxQty = Math.max(0, num(line.box_qty));
         const unitQty = Math.max(0, num(line.unit_qty));
         const remainderG = Math.max(0, num(line.remainder_g));
         const boxWeight = Number(selectedItem?.box_weight_g ?? 0);
         const unitWeight = Number(selectedItem?.unit_weight_g ?? 0);
-        const hasWeightSpec = line.category === "raw_material" && (boxWeight > 0 || unitWeight > 0);
-        const quantity = hasWeightSpec
+        const hasWeightSpec = line.category === "raw_material" && !isParbakeDough && (boxWeight > 0 || unitWeight > 0);
+        const quantity = isParbakeDough
+          ? boxQty * PARBAKE_BOX_EA + unitQty
+          : hasWeightSpec
           ? boxQty * boxWeight + unitQty * unitWeight + remainderG
           : Number(line.quantity);
         if (!line.item_id || !line.item_code || !line.item_name) {
@@ -221,9 +253,14 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
         if (!Number.isFinite(quantity) || quantity <= 0) {
           throw new Error(`${idx + 1}행 수량은 0보다 커야 합니다.`);
         }
-        if (!line.unit.trim()) {
-          throw new Error(`${idx + 1}행 단위를 입력해 주세요.`);
-        }
+        const fallbackUnit =
+          line.category === "raw_material"
+            ? selectedItem
+              ? effectiveRawMaterialUnit(selectedItem)
+              : ""
+            : String(selectedItem?.default_unit ?? "");
+        const unit = line.unit.trim() || fallbackUnit.trim();
+        if (!unit) throw new Error(`${idx + 1}행 단위 마스터값이 없습니다.`);
         return {
           category: line.category,
           item_id: line.item_id,
@@ -234,7 +271,7 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
           box_qty: boxQty,
           unit_qty: unitQty,
           remainder_g: remainderG,
-          unit: line.unit.trim(),
+          unit,
           note: line.note.trim() || null,
         };
       });
@@ -342,8 +379,8 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
                     + 라인 추가
                   </button>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1200px] text-sm">
+                <div className="overflow-x-hidden">
+                  <table className="w-full table-fixed text-sm">
                     <thead>
                       <tr className="border-b border-slate-200 text-slate-600">
                         <th className="px-2 py-2 text-left">분류</th>
@@ -353,7 +390,6 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
                         <th className="px-2 py-2 text-right">낱개</th>
                         <th className="px-2 py-2 text-right">잔량(g)</th>
                         <th className="px-2 py-2 text-right">입고수량</th>
-                        <th className="px-2 py-2 text-left">단위</th>
                         <th className="px-2 py-2 text-left">비고</th>
                         <th className="px-2 py-2 text-right">삭제</th>
                       </tr>
@@ -362,14 +398,17 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
                       {lines.map((line) => {
                         const options = optionsByCategory[line.category];
                         const selectedItem = options.find((o) => o.id === line.item_id) as HarangMasterItem | undefined;
-                        const unitLocked =
-                          line.category === "raw_material" && selectedItem && isRawMaterialUnitLocked(selectedItem);
+                        const isParbakeDough = line.category === "raw_material" && isParbakeDoughName(String(selectedItem?.item_name ?? line.item_name ?? ""));
                         const boxWeight = Number(selectedItem?.box_weight_g ?? 0);
                         const unitWeight = Number(selectedItem?.unit_weight_g ?? 0);
-                        const hasWeightSpec = line.category === "raw_material" && (boxWeight > 0 || unitWeight > 0);
-                        const calcQuantity = hasWeightSpec
+                        const hasWeightSpec = line.category === "raw_material" && !isParbakeDough && (boxWeight > 0 || unitWeight > 0);
+                        const useBoxUnitInput = isParbakeDough || hasWeightSpec;
+                        const calcQuantity = isParbakeDough
+                          ? num(line.box_qty) * PARBAKE_BOX_EA + num(line.unit_qty)
+                          : hasWeightSpec
                           ? num(line.box_qty) * boxWeight + num(line.unit_qty) * unitWeight + num(line.remainder_g)
                           : num(line.quantity);
+                        const quantitySuffix = isParbakeDough ? "ea" : hasWeightSpec ? "g" : "";
                         return (
                           <tr key={line.line_id} className="border-b border-slate-100 text-slate-900">
                             <td className="px-2 py-2">
@@ -388,7 +427,7 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
                                     unit: "",
                                   })
                                 }
-                                className="w-[120px] px-2 py-1.5 rounded bg-white border border-slate-300"
+                                className="w-full min-w-0 px-2 py-1.5 rounded bg-white border border-slate-300"
                               >
                                 <option value="raw_material">원재료</option>
                                 <option value="packaging_material">부자재</option>
@@ -398,7 +437,7 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
                               <select
                                 value={line.item_id}
                                 onChange={(e) => handleSelectItem(line.line_id, e.target.value)}
-                                className="w-[260px] px-2 py-1.5 rounded bg-white border border-slate-300"
+                                className="w-full min-w-0 px-2 py-1.5 rounded bg-white border border-slate-300"
                               >
                                 <option value="">품목 선택</option>
                                 {options.map((item) => (
@@ -413,68 +452,98 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
                                 type="date"
                                 value={line.lot_date}
                                 onChange={(e) => handleChangeLine(line.line_id, { lot_date: e.target.value })}
-                                className="w-[170px] px-2 py-1.5 rounded bg-white border border-slate-300"
+                                className="w-full min-w-0 px-2 py-1.5 rounded bg-white border border-slate-300"
                               />
                             </td>
-                            <td className="px-2 py-2 text-right">
+                            <td className="px-2 py-2 text-right align-top">
                               <input
-                                type="number"
+                                type="text"
+                                inputMode="numeric"
                                 min="0"
                                 step="1"
                                 value={line.box_qty}
                                 onChange={(e) => handleChangeLine(line.line_id, { box_qty: e.target.value })}
-                                className="w-[90px] px-2 py-1.5 rounded bg-white border border-slate-300 text-right"
+                                onBlur={() => handleChangeLine(line.line_id, { box_qty: formatNumberInput(line.box_qty, 0) })}
+                                disabled={!useBoxUnitInput}
+                                className={`w-full min-w-0 px-2 py-1.5 rounded border border-slate-300 text-right ${useBoxUnitInput ? "bg-white" : "bg-slate-100 text-slate-400"}`}
                               />
+                              {isParbakeDough ? (
+                                <p className="mt-1 text-[10px] text-slate-500">
+                                  x {PARBAKE_BOX_EA.toLocaleString("ko-KR")}ea
+                                </p>
+                              ) : null}
+                              {hasWeightSpec && boxWeight > 0 ? (
+                                <p className="mt-1 text-[10px] text-slate-500">
+                                  x {boxWeight.toLocaleString("ko-KR")}g
+                                </p>
+                              ) : null}
                             </td>
-                            <td className="px-2 py-2 text-right">
+                            <td className="px-2 py-2 text-right align-top">
                               <input
-                                type="number"
+                                type="text"
+                                inputMode="numeric"
                                 min="0"
                                 step="1"
                                 value={line.unit_qty}
                                 onChange={(e) => handleChangeLine(line.line_id, { unit_qty: e.target.value })}
-                                className="w-[90px] px-2 py-1.5 rounded bg-white border border-slate-300 text-right"
+                                onBlur={() => handleChangeLine(line.line_id, { unit_qty: formatNumberInput(line.unit_qty, 0) })}
+                                disabled={!useBoxUnitInput}
+                                className={`w-full min-w-0 px-2 py-1.5 rounded border border-slate-300 text-right ${useBoxUnitInput ? "bg-white" : "bg-slate-100 text-slate-400"}`}
                               />
+                              {isParbakeDough ? (
+                                <p className="mt-1 text-[10px] text-slate-500">ea</p>
+                              ) : null}
+                              {hasWeightSpec && unitWeight > 0 ? (
+                                <p className="mt-1 text-[10px] text-slate-500">
+                                  x {unitWeight.toLocaleString("ko-KR")}g
+                                </p>
+                              ) : null}
                             </td>
-                            <td className="px-2 py-2 text-right">
+                            <td className="px-2 py-2 text-right align-top">
                               <input
-                                type="number"
+                                type="text"
+                                inputMode="decimal"
                                 min="0"
                                 step="0.001"
                                 value={line.remainder_g}
                                 onChange={(e) => handleChangeLine(line.line_id, { remainder_g: e.target.value })}
-                                className="w-[110px] px-2 py-1.5 rounded bg-white border border-slate-300 text-right"
+                                onBlur={() => handleChangeLine(line.line_id, { remainder_g: formatNumberInput(line.remainder_g, 3) })}
+                                disabled={!hasWeightSpec}
+                                className={`w-full min-w-0 px-2 py-1.5 rounded border border-slate-300 text-right ${hasWeightSpec ? "bg-white" : "bg-slate-100 text-slate-400"}`}
                               />
+                              {hasWeightSpec ? (
+                                <p className="mt-1 text-[10px] text-slate-500">g 직접입력</p>
+                              ) : null}
                             </td>
-                            <td className="px-2 py-2 text-right">
+                            <td className="px-2 py-2 text-right align-top">
                               <input
-                                type="number"
+                                type="text"
+                                inputMode="decimal"
                                 min="0"
                                 step="0.001"
-                                value={hasWeightSpec ? String(calcQuantity || "") : line.quantity}
-                                readOnly={hasWeightSpec}
+                                value={useBoxUnitInput ? String(calcQuantity || "") : line.quantity}
+                                readOnly={useBoxUnitInput}
                                 onChange={(e) => handleChangeLine(line.line_id, { quantity: e.target.value })}
-                                className={`w-[120px] px-2 py-1.5 rounded border border-slate-300 text-right ${
-                                  hasWeightSpec ? "bg-slate-100 text-slate-800" : "bg-white"
+                                onBlur={() => {
+                                  if (!useBoxUnitInput) {
+                                    handleChangeLine(line.line_id, { quantity: formatNumberInput(line.quantity, 3) });
+                                  }
+                                }}
+                                className={`w-full min-w-0 px-2 py-1.5 rounded border border-slate-300 text-right ${
+                                  useBoxUnitInput ? "bg-slate-100 text-slate-800" : "bg-white"
                                 }`}
                               />
-                            </td>
-                            <td className="px-2 py-2">
-                              <input
-                                value={line.unit}
-                                readOnly={!!unitLocked}
-                                title={unitLocked ? "단위 고정 품목은 EA 등 지정 단위만 사용합니다." : undefined}
-                                onChange={(e) => handleChangeLine(line.line_id, { unit: e.target.value })}
-                                className={`w-[90px] px-2 py-1.5 rounded border border-slate-300 ${
-                                  unitLocked ? "bg-slate-100 text-slate-800" : "bg-white"
-                                }`}
-                              />
+                              {useBoxUnitInput ? (
+                                <p className="mt-1 text-[10px] text-cyan-700">
+                                  합계 {calcQuantity.toLocaleString("ko-KR")}{quantitySuffix}
+                                </p>
+                              ) : null}
                             </td>
                             <td className="px-2 py-2">
                               <input
                                 value={line.note}
                                 onChange={(e) => handleChangeLine(line.line_id, { note: e.target.value })}
-                                className="w-[220px] px-2 py-1.5 rounded bg-white border border-slate-300"
+                                className="w-full min-w-0 px-2 py-1.5 rounded bg-white border border-slate-300"
                               />
                             </td>
                             <td className="px-2 py-2 text-right">
@@ -491,6 +560,11 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
                       })}
                     </tbody>
                   </table>
+                </div>
+                <div className="mt-3 flex justify-end">
+                  <p className="rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-sm font-medium text-cyan-800">
+                    합계: {totalWeightG.toLocaleString("ko-KR")}
+                  </p>
                 </div>
               </section>
 
