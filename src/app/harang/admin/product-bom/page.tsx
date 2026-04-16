@@ -111,6 +111,7 @@ export default function HarangProductBomPage() {
         product_name,
         lines: lines.sort((a, b) => a.material_name.localeCompare(b.material_name, "ko-KR")),
         material_count: lines.length,
+        active_count: lines.filter((line) => line.is_active).length,
       }))
       .sort((a, b) => a.product_name.localeCompare(b.product_name, "ko-KR"));
   }, [filteredRows]);
@@ -209,6 +210,23 @@ export default function HarangProductBomPage() {
   const handleDeleteProduct = async (productName: string) => {
     if (!confirm(`'${productName}' 제품 BOM 전체를 삭제할까요?`)) return;
     const { error } = await supabase.from("harang_product_bom").delete().eq("product_name", productName);
+    if (error) return alert(error.message);
+    if (editingProductName === productName) {
+      setEditingProductName(null);
+      setDraftLines([]);
+    }
+    await loadAll();
+  };
+
+  const handleToggleProductActive = async (productName: string, nextActive: boolean) => {
+    const confirmMsg = nextActive
+      ? `'${productName}' 제품 BOM을 사용으로 전환할까요?`
+      : `'${productName}' 제품 BOM을 미사용으로 전환할까요?\n(생산입고 제품 선택 목록에서 숨겨집니다.)`;
+    if (!confirm(confirmMsg)) return;
+    const { error } = await supabase
+      .from("harang_product_bom")
+      .update({ is_active: nextActive })
+      .eq("product_name", productName);
     if (error) return alert(error.message);
     if (editingProductName === productName) {
       setEditingProductName(null);
@@ -487,9 +505,31 @@ export default function HarangProductBomPage() {
                   groupedProducts.map((product) => (
                     <tr key={product.product_name} className="border-b border-slate-100 text-slate-900">
                       <td className="px-3 py-2">{product.product_name}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{product.material_count}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {product.material_count}
+                        <span className="ml-2 text-xs text-slate-500">
+                          ({product.active_count === 0 ? "미사용" : "사용중"})
+                        </span>
+                      </td>
                       <td className="px-3 py-2">
                         <div className="flex items-center justify-end gap-2">
+                          {product.active_count === 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => void handleToggleProductActive(product.product_name, true)}
+                              className="px-3 py-1.5 rounded border border-emerald-600/60 text-emerald-300 text-xs"
+                            >
+                              사용
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => void handleToggleProductActive(product.product_name, false)}
+                              className="px-3 py-1.5 rounded border border-amber-600/60 text-amber-300 text-xs"
+                            >
+                              미사용
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => openProductEditor(product.product_name)}
