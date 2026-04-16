@@ -1,6 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
 import type { ProductionPlanPageData, ProductionPlanRow } from "./types";
-import { shouldShowOnlyPlanningBoardInPlanView } from "./planningMirrorPolicy";
 
 const SYNC_NAME = "production_plan";
 
@@ -46,11 +45,15 @@ export async function getProductionPlanPageData(): Promise<ProductionPlanPageDat
     sort_order: Number(r.sort_order) || 0,
     updated_at: r.updated_at ? String(r.updated_at) : "",
   }));
+  // 날짜별 우선순위:
+  // - planning_board 행이 1건이라도 있으면 그 날짜는 planning_board만 표시
+  // - 없으면 기존 sync 행을 그대로 표시
+  const planningDates = new Set(
+    rowsRaw.filter((r) => (r.source_sheet_name ?? "") === "planning_board").map((r) => r.plan_date)
+  );
   const rows = rowsRaw.filter((r) => {
-    if (shouldShowOnlyPlanningBoardInPlanView(r.plan_date)) {
-      return (r.source_sheet_name ?? "") === "planning_board";
-    }
-    return true;
+    if (!planningDates.has(r.plan_date)) return true;
+    return (r.source_sheet_name ?? "") === "planning_board";
   });
 
   const s = syncRes.data;

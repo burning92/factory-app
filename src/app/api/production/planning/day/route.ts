@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { computeActualManpower } from "@/features/production/planning/calculations";
 import type { PlanningDayPayload } from "@/features/production/planning/types";
-import { shouldMirrorPlanningToProductionPlanRows } from "@/features/production/plan/planningMirrorPolicy";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -180,102 +179,101 @@ export async function POST(request: Request) {
     if (manpowerErr) throw manpowerErr;
 
     // planning 입력값을 기존 조회용 production_plan_rows에도 반영 (뷰 전용 화면 유지)
-    if (shouldMirrorPlanningToProductionPlanRows(planDate)) {
-      const { error: delMirrorErr } = await admin
-        .from("production_plan_rows")
-        .delete()
-        .eq("plan_date", planDate)
-        .eq("plan_version", "master");
-      if (delMirrorErr) throw delMirrorErr;
+    const { error: delMirrorErr } = await admin
+      .from("production_plan_rows")
+      .delete()
+      .eq("plan_date", planDate)
+      .eq("plan_version", "master")
+      .eq("source_sheet_name", "planning_board");
+    if (delMirrorErr) throw delMirrorErr;
 
-      const mirrorRows: Array<{
-        plan_date: string;
-        product_name: string;
-        qty: number | null;
-        category: string | null;
-        note: string | null;
-        plan_year: number;
-        plan_month: number;
-        plan_version: "master";
-        source_sheet_name: string;
-        sort_order: number;
-        updated_at: string;
-      }> = [];
-      let sort = 0;
+    const mirrorRows: Array<{
+      plan_date: string;
+      product_name: string;
+      qty: number | null;
+      category: string | null;
+      note: string | null;
+      plan_year: number;
+      plan_month: number;
+      plan_version: "master";
+      source_sheet_name: string;
+      sort_order: number;
+      updated_at: string;
+    }> = [];
+    let sort = 0;
 
-      for (const e of payload.entries ?? []) {
-        const productName = String(e.product_name_snapshot ?? "").trim();
-        const qty = Number(e.qty) || 0;
-        if (!productName || qty <= 0) continue;
-        mirrorRows.push({
-          plan_date: planDate,
-          product_name: productName,
-          qty,
-          category: "생산",
-          note: null,
-          plan_year: planYear,
-          plan_month: planMonth,
-          plan_version: "master",
-          source_sheet_name: "planning_board",
-          sort_order: sort++,
-          updated_at: new Date().toISOString(),
-        });
-      }
+    for (const e of payload.entries ?? []) {
+      const productName = String(e.product_name_snapshot ?? "").trim();
+      const qty = Number(e.qty) || 0;
+      if (!productName || qty <= 0) continue;
+      mirrorRows.push({
+        plan_date: planDate,
+        product_name: productName,
+        qty,
+        category: "생산",
+        note: null,
+        plan_year: planYear,
+        plan_month: planMonth,
+        plan_version: "master",
+        source_sheet_name: "planning_board",
+        sort_order: sort++,
+        updated_at: new Date().toISOString(),
+      });
+    }
 
-      for (const n of payload.notes ?? []) {
-        const note = String(n ?? "").trim();
-        if (!note) continue;
-        mirrorRows.push({
-          plan_date: planDate,
-          product_name: "메모",
-          qty: null,
-          category: "메모",
-          note,
-          plan_year: planYear,
-          plan_month: planMonth,
-          plan_version: "master",
-          source_sheet_name: "planning_board",
-          sort_order: sort++,
-          updated_at: new Date().toISOString(),
-        });
-      }
+    for (const n of payload.notes ?? []) {
+      const note = String(n ?? "").trim();
+      if (!note) continue;
+      mirrorRows.push({
+        plan_date: planDate,
+        product_name: "메모",
+        qty: null,
+        category: "메모",
+        note,
+        plan_year: planYear,
+        plan_month: planMonth,
+        plan_version: "master",
+        source_sheet_name: "planning_board",
+        sort_order: sort++,
+        updated_at: new Date().toISOString(),
+      });
+    }
 
-      for (const l of leaves) {
-        mirrorRows.push({
-          plan_date: planDate,
-          product_name: l.person_name,
-          qty: null,
-          category: l.leave_type === "half" ? "반차" : "연차",
-          note: null,
-          plan_year: planYear,
-          plan_month: planMonth,
-          plan_version: "master",
-          source_sheet_name: "planning_board",
-          sort_order: sort++,
-          updated_at: new Date().toISOString(),
-        });
-      }
+    for (const l of leaves) {
+      mirrorRows.push({
+        plan_date: planDate,
+        product_name: l.person_name,
+        qty: null,
+        category: l.leave_type === "half" ? "반차" : "연차",
+        note: null,
+        plan_year: planYear,
+        plan_month: planMonth,
+        plan_version: "master",
+        source_sheet_name: "planning_board",
+        sort_order: sort++,
+        updated_at: new Date().toISOString(),
+      });
+    }
 
-      if ((Number(payload.other_count) || 0) > 0) {
-        mirrorRows.push({
-          plan_date: planDate,
-          product_name: `기타(${Number(payload.other_count)})`,
-          qty: null,
-          category: "기타",
-          note: null,
-          plan_year: planYear,
-          plan_month: planMonth,
-          plan_version: "master",
-          source_sheet_name: "planning_board",
-          sort_order: sort++,
-          updated_at: new Date().toISOString(),
-        });
-      }
+    if ((Number(payload.other_count) || 0) > 0) {
+      mirrorRows.push({
+        plan_date: planDate,
+        product_name: `기타(${Number(payload.other_count)})`,
+        qty: null,
+        category: "기타",
+        note: null,
+        plan_year: planYear,
+        plan_month: planMonth,
+        plan_version: "master",
+        source_sheet_name: "planning_board",
+        sort_order: sort++,
+        updated_at: new Date().toISOString(),
+      });
+    }
 
-      if (mirrorRows.length > 0) {
-        const { error: insMirrorErr } = await admin.from("production_plan_rows").insert(mirrorRows);
-        if (insMirrorErr) throw insMirrorErr;
-      }
+    if (mirrorRows.length > 0) {
+      const { error: insMirrorErr } = await admin.from("production_plan_rows").insert(mirrorRows);
+      if (insMirrorErr) throw insMirrorErr;
     }
 
     return NextResponse.json({ ok: true, actualManpower });

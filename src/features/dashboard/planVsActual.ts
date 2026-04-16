@@ -26,6 +26,23 @@ function ymdBounds(year: number, month: number): { start: string; end: string } 
 }
 
 /** 생산계획 시트 동기화 행 합계 (수량 null은 0) */
+function filterRowsPreferPlanningBoard<T extends { plan_date?: string | null; source_sheet_name?: string | null }>(
+  rows: T[]
+): T[] {
+  const planningDates = new Set(
+    rows
+      .filter((r) => String(r.source_sheet_name ?? "") === "planning_board")
+      .map((r) => String(r.plan_date ?? "").slice(0, 10))
+      .filter(Boolean)
+  );
+  return rows.filter((r) => {
+    const d = String(r.plan_date ?? "").slice(0, 10);
+    if (!planningDates.has(d)) return true;
+    return String(r.source_sheet_name ?? "") === "planning_board";
+  });
+}
+
+/** production_plan_rows 계획 합계 (날짜별 planning_board 우선) */
 export async function sumPlanQtyInRange(
   supabase: SupabaseClient,
   start: string,
@@ -33,11 +50,12 @@ export async function sumPlanQtyInRange(
 ): Promise<number> {
   const { data, error } = await supabase
     .from("production_plan_rows")
-    .select("qty")
+    .select("plan_date, qty, source_sheet_name")
     .gte("plan_date", start)
     .lte("plan_date", end);
   if (error || !data) return 0;
-  return data.reduce((s, row) => s + (Number((row as { qty: unknown }).qty) || 0), 0);
+  const filtered = filterRowsPreferPlanningBoard(data as Array<{ plan_date?: string; qty?: unknown; source_sheet_name?: string }>);
+  return filtered.reduce((s, row) => s + (Number((row as { qty: unknown }).qty) || 0), 0);
 }
 
 /** 생산계획가공 시트 동기화 행 합계 */
@@ -231,7 +249,7 @@ export async function loadPlanActualByProductForMonth(
       .lte("plan_date", end),
     supabase
       .from("production_plan_rows")
-      .select("product_name, qty")
+      .select("plan_date, product_name, qty, source_sheet_name")
       .gte("plan_date", start)
       .lte("plan_date", end),
     supabase
@@ -253,7 +271,14 @@ export async function loadPlanActualByProductForMonth(
       .lte("movement_date", end),
   ]);
   const planFromProcessedSheet = (processedPlanRes.data?.length ?? 0) > 0;
-  const planRows = planFromProcessedSheet ? processedPlanRes.data ?? [] : legacyPlanRes.data ?? [];
+  const legacyPlanRowsRaw = (legacyPlanRes.data ?? []) as Array<{
+    plan_date?: string | null;
+    product_name?: string | null;
+    qty?: unknown;
+    source_sheet_name?: string | null;
+  }>;
+  const legacyPlanRows = filterRowsPreferPlanningBoard(legacyPlanRowsRaw);
+  const planRows = planFromProcessedSheet ? processedPlanRes.data ?? [] : legacyPlanRows;
   const secondClosedDates = new Set(
     (closedSnapshotRes.data ?? [])
       .map((r) => String((r as { production_date?: string }).production_date ?? "").slice(0, 10))
