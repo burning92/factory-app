@@ -96,18 +96,20 @@ export default function AccountLeavePage() {
       </Link>
       <h1 className="text-lg font-semibold text-slate-100 mb-1">나의 연차</h1>
       <p className="text-slate-500 text-sm mb-6">
-        운영 기준 부여 연차와 사용 내역을 기준으로 현재 잔여 연차를 보여줍니다.
+        사내 운영 기준에 따라 등록된 부여일수, 추가 부여, 사용 내역을 바탕으로 현재 잔여일수를 참고용으로 보여줍니다.
       </p>
       <div className="mb-6 rounded-xl border border-cyan-700/60 bg-cyan-950/15 px-4 py-3 text-xs leading-relaxed text-cyan-100">
-        <p className="mb-1 font-semibold text-cyan-200">연차 계산 안내</p>
+        <p className="mb-1 font-semibold text-cyan-200">연차 관리 기준 안내</p>
         <p className="text-cyan-100/90">
-          운영 기준 부여 연차는 관리자 입력 기준이며, 추가연차(가산)와 차감 내역이 합산되어 현재 잔여가 표시됩니다.
+          본 화면은 사내 연차 관리 및 사용 내역 확인을 위한 참고용 화면입니다.
         </p>
         <div className="mt-2 rounded-lg border border-cyan-700/40 bg-cyan-950/10 px-3 py-2 text-[11px] text-cyan-100/90">
-          <p>운영 기준 부여: 관리자 입력값</p>
-          <p>추가연차: 특근 보상 등 가산 내역</p>
-          <p className="mt-1 font-medium text-cyan-100">잔여 연차 = 운영 기준 부여 + 추가연차 − 차감 합계</p>
-          <p className="text-cyan-100/80">예) 부여 15일, 추가 1일, 차감 3.5일 → 잔여 12.5일</p>
+          <p>
+            표시되는 일수는 관리자 등록값, 추가 부여, 사용(차감) 내역을 반영한 관리 기준 값이며, 법정 연차유급휴가의 발생일수 또는
+            최종 정산 결과와 차이가 있을 수 있습니다.
+          </p>
+          <p className="mt-2 font-medium text-cyan-100">현재 관리 잔여 = 운영 기준 부여일수 + 추가 부여 − 사용/차감 합계</p>
+          <p className="text-cyan-100/80">예) 부여 15일, 추가 1일, 사용 3.5일 → 현재 관리 잔여 12.5일</p>
         </div>
       </div>
 
@@ -137,19 +139,19 @@ export default function AccountLeavePage() {
         <>
           <div className="rounded-xl border border-slate-700 bg-space-800/80 p-4 mb-4 space-y-2 text-sm">
             <div className="flex justify-between text-slate-300">
-              <span>운영 기준 부여</span>
+              <span>운영 기준 부여일수</span>
               <span className="tabular-nums font-medium text-slate-100">{(totalDays ?? 0).toLocaleString("ko-KR")} 일</span>
             </div>
             <div className="flex justify-between text-slate-400">
-              <span>추가연차(가산)</span>
+              <span>추가 부여</span>
               <span className="tabular-nums text-emerald-300">+{added.toLocaleString("ko-KR")} 일</span>
             </div>
             <div className="flex justify-between text-slate-400">
-              <span>차감 합계</span>
+              <span>사용/차감 합계</span>
               <span className="tabular-nums">{used.toLocaleString("ko-KR")} 일</span>
             </div>
             <div className="flex justify-between border-t border-slate-700 pt-2 text-cyan-200/90">
-              <span className="font-medium">잔여</span>
+              <span className="font-medium">현재 관리 잔여</span>
               <span className="tabular-nums font-semibold">{remain.toLocaleString("ko-KR")} 일</span>
             </div>
           </div>
