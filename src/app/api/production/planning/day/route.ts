@@ -142,7 +142,6 @@ export async function POST(request: Request) {
         .eq("usage_date", planDate)
         .eq("source", "planning_board");
       if (delLeaveDeductionErr) throw delLeaveDeductionErr;
-
       const leaveDeductionRows = leavePayload
         .filter((l) => l.profile_id)
         .map((l) => ({

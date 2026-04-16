@@ -5,7 +5,6 @@ import Link from "next/link";
 import { Eye, EyeOff, Copy, KeyRound } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
-import ManageAnnualLeaveSection from "./ManageAnnualLeaveSection";
 
 function generateTempPassword(length = 12): string {
   const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -243,6 +242,10 @@ export default function ManagePage() {
     <div className="p-6 max-w-4xl mx-auto space-y-8">
       <h1 className="text-2xl font-bold text-slate-100">관리 (사업장 / 사용자)</h1>
       <p className="text-sm text-slate-400 -mt-4">
+        <Link href="/manage/leave" className="text-cyan-400 hover:text-cyan-300 font-medium">
+          연월차관리
+        </Link>
+        <span className="text-slate-600 mx-2">·</span>
         <Link href="/admin/equipment" className="text-cyan-400 hover:text-cyan-300 font-medium">
           제조설비등록
         </Link>
@@ -464,8 +467,6 @@ export default function ManagePage() {
           추가된 사용자는 설정한 초기 비밀번호로 로그인합니다. 필요 시 비밀번호 재설정 버튼으로 변경하세요.
         </p>
       </section>
-
-      <ManageAnnualLeaveSection profiles={filteredProfiles} />
     </div>
   );
 }

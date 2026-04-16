@@ -60,6 +60,7 @@ const DESKTOP_DROPDOWN_DAILY_BLOCKS: DailyDropdownBlock[] = [
 const DESKTOP_DROPDOWN_MANAGEMENT: DropdownItem[] = [
   { href: "/production/admin", label: "제품정보관리" },
   { href: "/manage", label: "사용자관리" },
+  { href: "/manage/leave", label: "연월차관리" },
   { href: "/admin/equipment", label: "제조설비등록" },
   { href: "/admin/equipment-options", label: "설비옵션관리" },
   { href: "/admin/logs", label: "로그조회" },
