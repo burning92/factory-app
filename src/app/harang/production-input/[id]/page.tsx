@@ -28,7 +28,7 @@ function displayUnitForLine(line: ProductionLine): string {
 type ProductionLotUsage = {
   line_id: string;
   quantity_used: number;
-  lots?: { lot_date: string | null } | null;
+  lots?: Array<{ lot_date: string | null }> | null;
 };
 
 type ProductionHeaderDetail = {
@@ -101,7 +101,7 @@ export default function HarangProductionInputDetailPage() {
     for (const row of lotUsages) {
       const prev = map.get(row.line_id) ?? { total: 0, dates: [], details: [] };
       prev.total += Number(row.quantity_used) || 0;
-      const d = String(row.lots?.lot_date ?? "").slice(0, 10).replaceAll("-", ".");
+      const d = String(row.lots?.[0]?.lot_date ?? "").slice(0, 10).replaceAll("-", ".");
       if (d && !prev.dates.includes(d)) prev.dates.push(d);
       if (d) {
         prev.details.push({
