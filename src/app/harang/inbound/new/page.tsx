@@ -192,7 +192,7 @@ export default function HarangInboundCreatePage() {
           ? boxQty * PARBAKE_BOX_EA + unitQty
           : hasWeightSpec
           ? boxQty * boxWeight + unitQty * unitWeight + remainderG
-          : Number(line.quantity);
+          : num(line.quantity);
         if (!line.item_id || !line.item_code || !line.item_name) {
           throw new Error(`${idx + 1}행 품목을 선택해 주세요.`);
         }
