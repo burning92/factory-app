@@ -150,6 +150,11 @@ export default function LotPickerModal({
   };
 
   const sumInput = useMemo(() => rows.reduce((s, r) => s + r.qty, 0), [rows]);
+  const totalCurrentStock = useMemo(
+    () => rows.reduce((s, r) => s + Number(r.lot.current_quantity || 0), 0),
+    [rows],
+  );
+  const reflectedStock = useMemo(() => Math.max(0, totalCurrentStock - sumInput), [totalCurrentStock, sumInput]);
 
   const handleApply = () => {
     const allocations: LotAllocation[] = [];
@@ -211,14 +216,16 @@ export default function LotPickerModal({
             <p className="p-6 text-center text-sm text-slate-600">사용 가능한 재고 LOT가 없습니다.</p>
           )}
           {!loading && lots.length > 0 && (
-            <table className="w-full min-w-[820px] text-sm">
+            <table className="w-full min-w-[1120px] text-sm">
               <thead>
                 <tr className="bg-slate-50 text-slate-700 border-b border-slate-200">
                   <th className="px-3 py-2 text-left font-medium">시리얼/로트 No.</th>
-                  <th className="px-3 py-2 text-right font-medium">재고</th>
+                  <th className="px-3 py-2 text-right font-medium">현재고</th>
                   <th className="px-3 py-2 text-right font-medium">박스</th>
                   <th className="px-3 py-2 text-right font-medium">수량</th>
                   <th className="px-3 py-2 text-right font-medium">잔량</th>
+                  <th className="px-3 py-2 text-right font-medium">총사용량</th>
+                  <th className="px-3 py-2 text-right font-medium">반영재고</th>
                 </tr>
               </thead>
               <tbody>
@@ -256,16 +263,25 @@ export default function LotPickerModal({
                       {after.toLocaleString(undefined, { maximumFractionDigits: 3 })}
                       <span className="text-slate-500 ml-0.5">{lot.unit}</span>
                     </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-slate-700">
+                      {sumInput.toLocaleString(undefined, { maximumFractionDigits: 3 })}
+                      <span className="text-slate-500 ml-0.5">{lot.unit}</span>
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-slate-900 font-medium">
+                      {reflectedStock.toLocaleString(undefined, { maximumFractionDigits: 3 })}
+                      <span className="text-slate-500 ml-0.5">{lot.unit}</span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr className="bg-slate-50 font-semibold text-slate-900">
-                  <td colSpan={3} className="px-3 py-2 text-right">
-                    합계(수량)
+                  <td colSpan={4} className="px-3 py-2 text-right">
+                    합계(수량/재고)
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{sumInput.toLocaleString()}</td>
-                  <td />
+                  <td className="px-3 py-2 text-right tabular-nums">{sumInput.toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{reflectedStock.toLocaleString()}</td>
                 </tr>
               </tfoot>
             </table>
