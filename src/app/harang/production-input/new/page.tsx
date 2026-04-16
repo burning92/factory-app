@@ -35,6 +35,7 @@ function sumAllocations(allocs: LotAllocation[]): number {
 /** 원재료 마스터 시드: 파베이크도우 토마토·베샤멜 — 상단 '파베이크' 블록 전용 */
 const PARBAKE_RAW_MATERIAL_CODES = new Set(["HR-PARBAKE-DOUGH-TOMATO", "HR-PARBAKE-DOUGH-BECHAMEL"]);
 const PARBAKE_MATERIAL_NAMES = new Set(["파베이크도우 - 토마토", "파베이크도우 - 베샤멜"]);
+const DRAFT_STORAGE_KEY = "harang-production-input-draft-v1";
 
 function isParbakeDoughLine(line: DraftLine): boolean {
   if (line.material_category !== "raw_material") return false;
@@ -53,7 +54,92 @@ export default function HarangProductionInputNewPage() {
   const [bomRows, setBomRows] = useState<HarangBomRow[]>([]);
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [saving, setSaving] = useState(false);
+  const [draftBusy, setDraftBusy] = useState(false);
   const [pickerKey, setPickerKey] = useState<string | null>(null);
+
+  const saveDraft = async () => {
+    const payload = {
+      productionDate,
+      productName,
+      finishedQtyStr,
+      note,
+      lines,
+      savedAt: new Date().toISOString(),
+    };
+    try {
+      setDraftBusy(true);
+      const { error } = await supabase.rpc("upsert_harang_production_draft", {
+        p_draft_data: payload,
+      });
+      setDraftBusy(false);
+      if (error) throw error;
+      alert("서버 임시저장되었습니다.");
+      localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(payload));
+      return;
+    } catch {
+      setDraftBusy(false);
+      try {
+        localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(payload));
+        alert("서버 저장 실패로 로컬 임시저장으로 대체했습니다.");
+      } catch {
+        alert("임시저장에 실패했습니다.");
+      }
+    }
+  };
+
+  const loadDraft = async () => {
+    try {
+      setDraftBusy(true);
+      const { data, error } = await supabase.rpc("get_harang_production_draft");
+      setDraftBusy(false);
+      if (!error && data && typeof data === "object") {
+        const parsed = data as Partial<{
+          productionDate: string;
+          productName: string;
+          finishedQtyStr: string;
+          note: string;
+          lines: DraftLine[];
+        }>;
+        if (!Array.isArray(parsed.lines)) throw new Error("invalid server draft");
+        setProductionDate(parsed.productionDate || new Date().toISOString().slice(0, 10));
+        setProductName(parsed.productName || "");
+        setFinishedQtyStr(parsed.finishedQtyStr || "1");
+        setNote(parsed.note || "");
+        setLines(parsed.lines);
+        alert("서버 임시저장 데이터를 불러왔습니다.");
+        return;
+      }
+    } catch {
+      setDraftBusy(false);
+      // fallback to local draft
+    }
+    try {
+      const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
+      if (!raw) {
+        alert("임시저장 데이터가 없습니다.");
+        return;
+      }
+      const parsed = JSON.parse(raw) as Partial<{
+        productionDate: string;
+        productName: string;
+        finishedQtyStr: string;
+        note: string;
+        lines: DraftLine[];
+      }>;
+      if (!parsed || !Array.isArray(parsed.lines)) {
+        alert("임시저장 데이터 형식이 올바르지 않습니다.");
+        return;
+      }
+      setProductionDate(parsed.productionDate || new Date().toISOString().slice(0, 10));
+      setProductName(parsed.productName || "");
+      setFinishedQtyStr(parsed.finishedQtyStr || "1");
+      setNote(parsed.note || "");
+      setLines(parsed.lines);
+      alert("로컬 임시저장 데이터를 불러왔습니다.");
+    } catch {
+      alert("임시저장 데이터를 불러오지 못했습니다.");
+    }
+  };
 
   const loadProductNames = useCallback(async () => {
     const { data, error } = await supabase
@@ -160,14 +246,6 @@ export default function HarangProductionInputNewPage() {
 
   const openPicker = (key: string) => setPickerKey(key);
 
-  const handleUsageChange = (key: string, raw: string) => {
-    patchLine(key, {
-      usageQty: raw,
-      allocations: [],
-      lotDatesSummary: "",
-    });
-  };
-
   const handleSave = async () => {
     if (!productName.trim()) {
       alert("제품명을 선택하세요.");
@@ -227,6 +305,16 @@ export default function HarangProductionInputNewPage() {
     if (error) {
       alert(error.message);
       return;
+    }
+    try {
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
+    } catch {
+      // ignore localStorage cleanup failure
+    }
+    try {
+      await supabase.rpc("delete_harang_production_draft");
+    } catch {
+      // ignore server draft cleanup failure
     }
     router.replace("/harang/production-input");
   };
@@ -375,10 +463,11 @@ export default function HarangProductionInputNewPage() {
                                   <input
                                     type="text"
                                     inputMode="decimal"
-                                    value={line.usageQty}
-                                    onChange={(e) => handleUsageChange(line.key, e.target.value)}
+                                    value={Number(line.usageQty || 0).toLocaleString("ko-KR", { maximumFractionDigits: 3 })}
+                                    readOnly
                                     onDoubleClick={() => openPicker(line.key)}
-                                    className="w-full min-w-[96px] max-w-[140px] rounded border border-slate-300 px-2 py-1.5 text-right text-slate-900 bg-white"
+                                    className="w-full min-w-[96px] max-w-[140px] cursor-pointer rounded border border-slate-300 px-2 py-1.5 text-right text-slate-900 bg-slate-50"
+                                    title="직접입력 불가. 더블클릭 또는 돋보기로 LOT에서 입력"
                                   />
                                   <button
                                     type="button"
@@ -391,7 +480,7 @@ export default function HarangProductionInputNewPage() {
                                   </button>
                                 </div>
                               </td>
-                              <td className="px-3 py-2 text-slate-700 text-xs whitespace-pre-wrap">
+                              <td className="px-3 py-2 text-slate-700 text-sm whitespace-pre-wrap">
                                 {line.lotDatesSummary || (line.allocations.length === 0 ? "—" : "")}
                               </td>
                             </tr>
@@ -406,7 +495,23 @@ export default function HarangProductionInputNewPage() {
           )}
         </section>
 
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => void loadDraft()}
+            disabled={draftBusy}
+            className="px-4 py-2.5 rounded-lg border border-slate-300 text-slate-700 text-sm bg-white hover:bg-slate-50"
+          >
+            임시불러오기
+          </button>
+          <button
+            type="button"
+            onClick={() => void saveDraft()}
+            disabled={draftBusy}
+            className="px-4 py-2.5 rounded-lg border border-amber-400/70 text-amber-700 text-sm bg-amber-50 hover:bg-amber-100"
+          >
+            임시저장
+          </button>
           <button
             type="button"
             disabled={saving}
