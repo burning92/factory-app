@@ -5,15 +5,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { HarangCategory, HarangInventoryLot, HarangInventoryTransaction } from "@/features/harang/types";
 
-type StockSummary = {
+type StockRow = {
+  lot_id: string;
   category: HarangCategory;
   item_id: string;
   item_code: string;
   item_name: string;
   unit: string;
-  total_current_qty: number;
-  lot_count: number;
-  recent_inbound_date: string | null;
+  current_qty: number;
+  inbound_date: string | null;
   recent_usage_date: string | null;
 };
 
@@ -31,7 +31,7 @@ function displayUnit(category: HarangCategory, itemName: string): "EA" | "g" {
 }
 
 export default function HarangInventoryPage() {
-  const [rows, setRows] = useState<StockSummary[]>([]);
+  const [rows, setRows] = useState<StockRow[]>([]);
   const [category, setCategory] = useState("");
   const [keyword, setKeyword] = useState("");
   const [hasStock, setHasStock] = useState("");
@@ -61,36 +61,26 @@ export default function HarangInventoryPage() {
     const usageTx = (usageRes.data ?? []) as HarangInventoryTransaction[];
     const usageMap = new Map<string, string>();
     for (const tx of usageTx) {
-      const key = `${tx.category}:${tx.item_id}`;
+      const key = String(tx.lot_id ?? "");
+      if (!key) continue;
       if (!usageMap.has(key)) usageMap.set(key, tx.tx_date);
     }
 
-    const map = new Map<string, StockSummary>();
-    for (const lot of lots) {
+    const mappedRows = lots.map((lot) => {
       const shownUnit = displayUnit(lot.category, lot.item_name);
-      const key = `${lot.category}:${lot.item_id}:${shownUnit}`;
-      const prev =
-        map.get(key) ??
-        ({
-          category: lot.category,
-          item_id: lot.item_id,
-          item_code: lot.item_code,
-          item_name: lot.item_name,
-          unit: shownUnit,
-          total_current_qty: 0,
-          lot_count: 0,
-          recent_inbound_date: null,
-          recent_usage_date: usageMap.get(`${lot.category}:${lot.item_id}`) ?? null,
-        } as StockSummary);
-      const current = Number(lot.current_quantity ?? 0);
-      prev.total_current_qty += current;
-      if (current > 0) prev.lot_count += 1;
-      if (!prev.recent_inbound_date || lot.inbound_date > prev.recent_inbound_date) {
-        prev.recent_inbound_date = lot.inbound_date;
-      }
-      map.set(key, prev);
-    }
-    setRows(Array.from(map.values()));
+      return {
+        lot_id: lot.id,
+        category: lot.category,
+        item_id: lot.item_id,
+        item_code: lot.item_code,
+        item_name: lot.item_name,
+        unit: shownUnit,
+        current_qty: Number(lot.current_quantity ?? 0),
+        inbound_date: lot.inbound_date ?? null,
+        recent_usage_date: usageMap.get(lot.id) ?? null,
+      } as StockRow;
+    });
+    setRows(mappedRows);
   }, []);
 
   useEffect(() => {
@@ -100,8 +90,8 @@ export default function HarangInventoryPage() {
   const filtered = useMemo(() => {
     return rows.filter((row) => {
       if (category && row.category !== category) return false;
-      if (hasStock === "yes" && row.total_current_qty <= 0) return false;
-      if (hasStock === "no" && row.total_current_qty > 0) return false;
+      if (hasStock === "yes" && row.current_qty <= 0) return false;
+      if (hasStock === "no" && row.current_qty > 0) return false;
       if (keyword.trim()) {
         const q = keyword.trim().toLowerCase();
         if (!row.item_name.toLowerCase().includes(q) && !row.item_code.toLowerCase().includes(q)) return false;
@@ -115,7 +105,7 @@ export default function HarangInventoryPage() {
       <div className="max-w-7xl mx-auto space-y-5">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">하랑 재고현황</h1>
-          <p className="mt-1 text-sm text-slate-600">품목별 현재고와 LOT별 잔량을 조회합니다.</p>
+          <p className="mt-1 text-sm text-slate-600">LOT별 현재고와 이력을 조회합니다.</p>
         </div>
 
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -137,33 +127,29 @@ export default function HarangInventoryPage() {
 
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1100px] text-sm">
+            <table className="w-full min-w-[980px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-slate-600">
                   <th className="px-3 py-2 text-left">분류</th>
                   <th className="px-3 py-2 text-left">품목명</th>
-                  <th className="px-3 py-2 text-left">기본단위</th>
-                  <th className="px-3 py-2 text-right">총 현재고</th>
-                  <th className="px-3 py-2 text-right">LOT 수</th>
+                  <th className="px-3 py-2 text-right">재고수량</th>
                   <th className="px-3 py-2 text-left">최근 입고일</th>
                   <th className="px-3 py-2 text-left">최근 사용일</th>
                   <th className="px-3 py-2 text-left">상세보기</th>
                 </tr>
               </thead>
               <tbody>
-                {loading && <tr><td colSpan={8} className="px-3 py-6 text-center text-slate-500">불러오는 중...</td></tr>}
-                {!loading && filtered.length === 0 && <tr><td colSpan={8} className="px-3 py-6 text-center text-slate-500">재고 데이터가 없습니다.</td></tr>}
+                {loading && <tr><td colSpan={6} className="px-3 py-6 text-center text-slate-500">불러오는 중...</td></tr>}
+                {!loading && filtered.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-slate-500">재고 데이터가 없습니다.</td></tr>}
                 {!loading &&
                   filtered.map((row) => (
-                    <tr key={`${row.category}:${row.item_id}:${row.unit}`} className="border-b border-slate-100 text-slate-900">
+                    <tr key={row.lot_id} className="border-b border-slate-100 text-slate-900">
                       <td className="px-3 py-2">{categoryLabel(row.category)}</td>
                       <td className="px-3 py-2">{row.item_name}</td>
-                      <td className="px-3 py-2">{row.unit}</td>
                       <td className="px-3 py-2 text-right tabular-nums">
-                        {row.total_current_qty.toLocaleString()} {row.unit}
+                        {row.current_qty.toLocaleString("ko-KR")} {row.unit}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums">{row.lot_count}</td>
-                      <td className="px-3 py-2">{row.recent_inbound_date ?? "-"}</td>
+                      <td className="px-3 py-2">{row.inbound_date ?? "-"}</td>
                       <td className="px-3 py-2">{row.recent_usage_date ?? "-"}</td>
                       <td className="px-3 py-2">
                         <Link
