@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMasterStore } from "@/store/useMasterStore";
+import { useMasterStore, type OutboundLine, type ProductionLog } from "@/store/useMasterStore";
 import { calculateUsageSummary } from "@/features/production/history/calculations";
 import { getJournalStorageKey } from "@/features/production/history/journalAllocation";
 import type { DateGroupInput } from "@/features/production/history/types";
-import { mergeOutboundFromLogsForDate, type DateGroupState, type ProductOutput } from "../page";
+import type { DateGroupState, ProductOutput } from "../page";
 
 /** 제품 표시명: "-일반", "-파베이크사용", "-브레드" 제거 */
 function productDisplayName(label: string): string {
@@ -16,6 +16,115 @@ function productDisplayName(label: string): string {
     if (s.endsWith(suffix)) return s.slice(0, -suffix.length).trim();
   }
   return s;
+}
+
+type MaterialLike = { materialName: string; boxWeightG: number; unitWeightG: number };
+
+function totalGFromQty(
+  box: number,
+  nack: number,
+  g: number,
+  material: MaterialLike | undefined
+): number {
+  if (!material) return g;
+  if (material.boxWeightG === 0 && material.unitWeightG === 0) return g;
+  const unitG = material.unitWeightG > 0 ? material.unitWeightG : material.boxWeightG;
+  return box * material.boxWeightG + nack * unitG + g;
+}
+
+function getLines(log: ProductionLog): OutboundLine[] {
+  if (Array.isArray(log.출고_라인) && log.출고_라인.length > 0) {
+    return log.출고_라인;
+  }
+  return [
+    {
+      소비기한: log.소비기한 ?? "",
+      박스: log.출고_박스 ?? 0,
+      낱개: log.출고_낱개 ?? 0,
+      g: log.출고_g ?? 0,
+    },
+  ];
+}
+
+/** 완료 목록에서 일지 생성 시, 서버 최신 출고를 스냅샷 원료행에 병합한다. */
+function mergeOutboundFromLogs(
+  materials: DateGroupState["materials"],
+  logs: ProductionLog[],
+  materialsList: MaterialLike[]
+): DateGroupState["materials"] {
+  const outboundByKey = new Map<string, number>();
+  for (const log of logs) {
+    const materialName = (log.원료명 ?? "").trim();
+    if (!materialName) continue;
+    const mat = materialsList.find((m) => m.materialName === materialName);
+    for (const line of getLines(log)) {
+      const outboundG = totalGFromQty(
+        Number(line.박스 ?? 0),
+        Number(line.낱개 ?? 0),
+        Number(line.g ?? 0),
+        mat
+      );
+      const expiryDate = String(line.소비기한 ?? "").trim();
+      const key = `${materialName}\t${expiryDate}`;
+      outboundByKey.set(key, (outboundByKey.get(key) ?? 0) + outboundG);
+    }
+  }
+
+  const materialByName = new Map<string, DateGroupState["materials"][number]>();
+  for (const card of materials) {
+    const mn = (card.materialName ?? "").trim();
+    materialByName.set(mn, { ...card, lots: card.lots.map((l) => ({ ...l })) });
+  }
+
+  for (const [mn, card] of Array.from(materialByName.entries())) {
+    const nextLots = card.lots.map((lot) => {
+      if (lot.sourceType === "manual") return lot;
+      const key = `${mn}\t${(lot.expiryDate ?? "").trim()}`;
+      return { ...lot, outboundQty: outboundByKey.get(key) ?? 0 };
+    });
+    materialByName.set(mn, { ...card, lots: nextLots });
+  }
+
+  for (const [key, qty] of Array.from(outboundByKey.entries())) {
+    const [materialName, expiryDate] = key.split("\t");
+    const card = materialByName.get(materialName);
+    if (!card) {
+      materialByName.set(materialName, {
+        materialCardId: `${materialName}-${Date.now()}`,
+        materialName,
+        lots: [
+          {
+            lotRowId: `${materialName}-${expiryDate}-${Date.now()}`,
+            sourceType: "from-log",
+            expiryDate: expiryDate ?? "",
+            outboundQty: qty,
+            prevDayUnitCount: "",
+            prevDayRemainderG: "",
+            currentDayUnitCount: "",
+            currentDayRemainderG: "",
+          },
+        ],
+      });
+      continue;
+    }
+    const exists = card.lots.some(
+      (l) => l.sourceType === "from-log" && (l.expiryDate ?? "").trim() === (expiryDate ?? "")
+    );
+    if (!exists) {
+      card.lots.push({
+        lotRowId: `${materialName}-${expiryDate}-${Date.now()}`,
+        sourceType: "from-log",
+        expiryDate: expiryDate ?? "",
+        outboundQty: qty,
+        prevDayUnitCount: "",
+        prevDayRemainderG: "",
+        currentDayUnitCount: "",
+        currentDayRemainderG: "",
+      });
+    }
+  }
+
+  return Array.from(materialByName.values());
 }
 
 type CompletedItem = {
@@ -142,7 +251,7 @@ export default function CompletedListPage() {
         }));
         const mergedState: DateGroupState = {
           ...state,
-          materials: mergeOutboundFromLogsForDate(date, state.materials, logs, materialsList),
+          materials: mergeOutboundFromLogs(state.materials, logs, materialsList),
         };
         const computed = calculateUsageSummary(
           mergedState as unknown as DateGroupInput,

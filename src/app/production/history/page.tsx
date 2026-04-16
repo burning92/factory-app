@@ -430,7 +430,7 @@ function buildInitialMaterials(
  * — 수동 추가 LOT(sourceType === "manual")의 출고량은 건드리지 않는다.
  */
 /** DB 출고(production_logs) 기준으로 마감 스냅샷의 LOT별 출고량을 갱신한다. */
-export function mergeOutboundFromLogsForDate(
+function mergeOutboundFromLogsForDate(
   date: string,
   materials: MaterialCard[],
   logs: ProductionLog[],
