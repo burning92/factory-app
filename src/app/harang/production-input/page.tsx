@@ -185,19 +185,20 @@ export default function HarangProductionInputListPage() {
                   <th className="px-3 py-2 text-right">수량</th>
                   <th className="px-3 py-2 text-left">등록일시</th>
                   <th className="px-3 py-2 text-left">등록자</th>
+                  <th className="px-3 py-2 text-left">내역</th>
                 </tr>
               </thead>
               <tbody>
                 {loading && (
                   <tr>
-                    <td colSpan={5} className="px-3 py-6 text-center text-slate-500">
+                    <td colSpan={6} className="px-3 py-6 text-center text-slate-500">
                       불러오는 중...
                     </td>
                   </tr>
                 )}
                 {!loading && filtered.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-3 py-6 text-center text-slate-500">
+                    <td colSpan={6} className="px-3 py-6 text-center text-slate-500">
                       내역이 없습니다.
                     </td>
                   </tr>
@@ -212,6 +213,14 @@ export default function HarangProductionInputListPage() {
                       </td>
                       <td className="px-3 py-2">{new Date(row.created_at).toLocaleString("ko-KR")}</td>
                       <td className="px-3 py-2">{authorLabel(row)}</td>
+                      <td className="px-3 py-2">
+                        <Link
+                          href={`/harang/production-input/${row.id}`}
+                          className="rounded border border-cyan-700/70 px-2 py-1 text-xs text-cyan-300 hover:bg-cyan-950/20"
+                        >
+                          내역보기
+                        </Link>
+                      </td>
                     </tr>
                   ))}
               </tbody>
