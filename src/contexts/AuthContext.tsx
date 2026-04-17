@@ -333,6 +333,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     state.viewOrganizationCode,
   ]);
 
+  /** 조직 200(하랑) 계정은 보기 모드를 항상 200으로 고정 (AFF 전환 불가) */
+  useEffect(() => {
+    if (state.organization?.organization_code !== "200") return;
+    if (state.viewOrganizationCode === "200") return;
+    setState((prev) => ({ ...prev, viewOrganizationCode: "200" }));
+  }, [state.organization?.organization_code, state.viewOrganizationCode]);
+
   const setMustChangePasswordDone = useCallback(async (): Promise<{ error: string | null }> => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: "로그인이 필요합니다." };
@@ -348,14 +355,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const canSwitchOrganization =
-    state.profile?.role === "manager" || state.profile?.role === "admin";
+    (state.profile?.role === "manager" || state.profile?.role === "admin") &&
+    state.organization?.organization_code !== "200";
 
   const setViewOrganizationCodeSafe = useCallback((code: string) => {
     if (!SHOW_ORGANIZATION_VIEW_SWITCHER || !canSwitchOrganization) return;
-    const trimmed = (code ?? "").trim();
-    if (SWITCHABLE_ORG_CODES.includes(trimmed as (typeof SWITCHABLE_ORG_CODES)[number])) {
-      setState((prev) => ({ ...prev, viewOrganizationCode: trimmed }));
-    }
+    setState((prev) => {
+      if (prev.organization?.organization_code === "200") return prev;
+      const trimmed = (code ?? "").trim();
+      if (SWITCHABLE_ORG_CODES.includes(trimmed as (typeof SWITCHABLE_ORG_CODES)[number])) {
+        return { ...prev, viewOrganizationCode: trimmed };
+      }
+      return prev;
+    });
   }, [canSwitchOrganization]);
 
   const value = useMemo<AuthContextValue>(

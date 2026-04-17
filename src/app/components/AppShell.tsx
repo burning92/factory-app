@@ -28,23 +28,27 @@ function shouldTrackAccessPath(pathname: string): boolean {
   return false;
 }
 
-/** 하랑(200)이 접근하면 안 되는 100용 업무 경로 (실제 app 라우트 기준) */
+/** 하랑(200) 보기 또는 조직 200 계정이 접근하면 안 되는 AFF 업무 경로 */
 function isHarangBlockedPath(pathname: string): boolean {
   return (
     pathname.startsWith("/production") ||
+    pathname.startsWith("/materials") ||
+    pathname.startsWith("/daily") ||
+    pathname.startsWith("/executive") ||
+    pathname.startsWith("/manage") ||
+    pathname.startsWith("/admin") ||
     pathname === "/history" ||
     pathname.startsWith("/history/") ||
     pathname.startsWith("/inventory") ||
-    pathname.startsWith("/materials") ||
-    pathname.startsWith("/journal") ||
-    pathname.startsWith("/executive")
+    pathname.startsWith("/journal")
   );
 }
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, profile, loading, uiSettings, viewOrganizationCode } = useAuth();
+  const { user, profile, loading, uiSettings, viewOrganizationCode, organization } = useAuth();
+  const isHarangOrgAccount = organization?.organization_code === "200";
   const isLoginPage = pathname === LOGIN_PATH;
   const isChangePasswordPage = pathname === CHANGE_PASSWORD_PATH;
 
@@ -68,10 +72,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     const path = uiSettings.default_landing_path.trim();
     // admin은 공통 진입("/") 유지. 기존 admin 전용 /manage 직행만 예외 처리.
     if (profile.role === "admin" && path === "/manage") return;
+    // 조직 200(하랑): AFF 쪽 기본 랜딩으로 보내지 않음
+    if (isHarangOrgAccount && path && path !== "/" && !path.startsWith("/harang") && !path.startsWith("/account")) {
+      return;
+    }
     if (path && path !== "/") {
       router.replace(path);
     }
-  }, [user, profile, uiSettings?.default_landing_path, pathname, router]);
+  }, [user, profile, uiSettings?.default_landing_path, pathname, router, isHarangOrgAccount]);
 
   /** 설비 이상 등록: worker URL 직접 접근 차단 */
   useEffect(() => {
@@ -144,12 +152,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  if (viewOrganizationCode === "200" && isHarangBlockedPath(pathname)) {
+  if ((viewOrganizationCode === "200" || isHarangOrgAccount) && isHarangBlockedPath(pathname)) {
     router.replace("/");
     return null;
   }
+  if (isHarangOrgAccount && (pathname === "/account/leave" || pathname.startsWith("/account/leave/"))) {
+    router.replace("/account");
+    return null;
+  }
   if (pathname === "/harang" || pathname.startsWith("/harang/")) {
-    if (viewOrganizationCode !== "200") {
+    const allowHarang = viewOrganizationCode === "200" || isHarangOrgAccount;
+    if (!allowHarang) {
       router.replace("/");
       return null;
     }
