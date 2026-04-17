@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { HarangBomRow, HarangCategory } from "@/features/harang/types";
 import LotPickerModal, { type LotAllocation } from "@/features/harang/LotPickerModal";
+import { STATUS_LABEL } from "@/features/harang/productionRequests";
 
 type DraftLine = {
   key: string;
@@ -43,7 +44,7 @@ function isParbakeDoughLine(line: DraftLine): boolean {
   return PARBAKE_MATERIAL_NAMES.has(line.material_name.trim());
 }
 
-export default function HarangProductionInputNewPage() {
+function LegacyHarangProductionInputNewPage() {
   const router = useRouter();
   const [productionDate, setProductionDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [previewNo, setPreviewNo] = useState("");
@@ -200,7 +201,6 @@ export default function HarangProductionInputNewPage() {
     const n = Number(finishedQtyStr);
     return Number.isFinite(n) && n > 0 ? n : 0;
   }, [finishedQtyStr]);
-
   useEffect(() => {
     if (!productName || bomRows.length === 0 || finishedQty <= 0) {
       setLines([]);
@@ -542,6 +542,652 @@ export default function HarangProductionInputNewPage() {
             });
           }}
         />
+      )}
+    </div>
+  );
+}
+
+type RequestLinePick = {
+  line_id: string;
+  header_id: string;
+  request_no: string;
+  request_date: string;
+  due_date: string;
+  status: string;
+  product_name: string;
+  requested_qty: number;
+  produced_qty: number;
+  closed_qty: number;
+  remaining_qty: number;
+};
+
+type RequestMaterialRow = {
+  id: string;
+  request_line_id: string;
+  material_category: HarangCategory;
+  material_id: string;
+  material_code: string;
+  material_name: string;
+  unit: string;
+  bom_qty_per_unit: number;
+};
+
+type ExecDraftLine = {
+  key: string;
+  material_category: HarangCategory;
+  material_id: string;
+  material_code: string;
+  material_name: string;
+  unit: string;
+  bom_qty_per_unit: number;
+  requiredQty: number;
+  usageQty: string;
+  allocations: LotAllocation[];
+  lotDatesSummary: string;
+};
+
+function pickStatusLabel(status: string): string {
+  return STATUS_LABEL[status as keyof typeof STATUS_LABEL] ?? status;
+}
+
+function buildExecLines(materials: RequestMaterialRow[], qty: number): ExecDraftLine[] {
+  return materials.map((m) => ({
+    key: m.id,
+    material_category: m.material_category,
+    material_id: m.material_id,
+    material_code: m.material_code,
+    material_name: m.material_name,
+    unit: m.unit,
+    bom_qty_per_unit: Number(m.bom_qty_per_unit),
+    requiredQty: roundQty(Number(m.bom_qty_per_unit) * qty),
+    usageQty: String(roundQty(Number(m.bom_qty_per_unit) * qty)),
+    allocations: [],
+    lotDatesSummary: "",
+  }));
+}
+
+export default function HarangProductionInputNewPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestIdParam = searchParams.get("request_id");
+  const requestLineIdParam = searchParams.get("request_line_id");
+  const editIdParam = searchParams.get("edit_id");
+
+  const [productionDate, setProductionDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [previewNo, setPreviewNo] = useState("");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [requestCandidates, setRequestCandidates] = useState<RequestLinePick[]>([]);
+  const [selectedLine, setSelectedLine] = useState<RequestLinePick | null>(null);
+  const [materials, setMaterials] = useState<RequestMaterialRow[]>([]);
+  const [finishedQtyStr, setFinishedQtyStr] = useState("");
+  const [lines, setLines] = useState<ExecDraftLine[]>([]);
+  const [lotPickerKey, setLotPickerKey] = useState<string | null>(null);
+  const [loadingCandidates, setLoadingCandidates] = useState(false);
+  const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
+
+  const finishedQty = useMemo(() => {
+    const n = Number(finishedQtyStr);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }, [finishedQtyStr]);
+  const appliedToRequestQty = useMemo(
+    () => (selectedLine ? Math.min(finishedQty, selectedLine.remaining_qty) : 0),
+    [finishedQty, selectedLine],
+  );
+  const overrunQty = useMemo(
+    () => (selectedLine ? Math.max(0, finishedQty - selectedLine.remaining_qty) : 0),
+    [finishedQty, selectedLine],
+  );
+
+  const loadPreviewNo = useCallback(async (date: string) => {
+    const { count, error } = await supabase
+      .from("harang_production_headers")
+      .select("id", { count: "exact", head: true })
+      .eq("production_date", date);
+    if (error) return;
+    setPreviewNo(`${date.replaceAll("-", "/")}-${(count ?? 0) + 1}`);
+  }, []);
+
+  useEffect(() => {
+    void loadPreviewNo(productionDate);
+  }, [productionDate, loadPreviewNo]);
+
+  const loadCandidates = useCallback(async () => {
+    setLoadingCandidates(true);
+    const [headRes, lineRes] = await Promise.all([
+      supabase.from("harang_production_requests").select("id, request_no, request_date, due_date, status"),
+      supabase
+        .from("harang_production_request_lines")
+        .select("id, header_id, product_name, requested_qty, produced_qty, remaining_qty, closed_qty")
+        .gt("remaining_qty", 0),
+    ]);
+    setLoadingCandidates(false);
+    if (headRes.error || lineRes.error) {
+      alert(headRes.error?.message ?? lineRes.error?.message ?? "작업지시 라인을 불러오지 못했습니다.");
+      return;
+    }
+    const headMap = new Map<string, { request_no: string; request_date: string; due_date: string; status: string }>();
+    for (const h of headRes.data ?? []) {
+      headMap.set(h.id as string, {
+        request_no: String(h.request_no),
+        request_date: String(h.request_date),
+        due_date: String(h.due_date),
+        status: String(h.status),
+      });
+    }
+    const out: RequestLinePick[] = [];
+    for (const l of lineRes.data ?? []) {
+      const head = headMap.get(String(l.header_id));
+      if (!head) continue;
+      if (["completed", "settled", "cancelled"].includes(head.status)) continue;
+      out.push({
+        line_id: String(l.id),
+        header_id: String(l.header_id),
+        request_no: head.request_no,
+        request_date: head.request_date,
+        due_date: head.due_date,
+        status: head.status,
+        product_name: String(l.product_name),
+        requested_qty: Number(l.requested_qty),
+        produced_qty: Number(l.produced_qty),
+        closed_qty: Number((l as { closed_qty?: number }).closed_qty ?? 0),
+        remaining_qty: Number(l.remaining_qty),
+      });
+    }
+    out.sort((a, b) => a.due_date.localeCompare(b.due_date) || a.request_no.localeCompare(b.request_no));
+    setRequestCandidates(out);
+  }, []);
+
+  const loadLineMaterials = useCallback(async (lineId: string) => {
+    const res = await supabase
+      .from("harang_production_request_line_materials")
+      .select("id, request_line_id, material_category, material_id, material_code, material_name, unit, bom_qty_per_unit")
+      .eq("request_line_id", lineId)
+      .order("sort_order", { ascending: true });
+    if (res.error) {
+      alert(res.error.message);
+      return [];
+    }
+    return (res.data ?? []) as RequestMaterialRow[];
+  }, []);
+
+  const loadLinePick = useCallback(async (lineId: string) => {
+    const lineRes = await supabase
+      .from("harang_production_request_lines")
+      .select("id, header_id, product_name, requested_qty, produced_qty, remaining_qty, closed_qty")
+      .eq("id", lineId)
+      .single();
+    if (lineRes.error) return null;
+    const headRes = await supabase
+      .from("harang_production_requests")
+      .select("id, request_no, request_date, due_date, status")
+      .eq("id", lineRes.data.header_id)
+      .single();
+    if (headRes.error) return null;
+    return {
+      line_id: String(lineRes.data.id),
+      header_id: String(lineRes.data.header_id),
+      request_no: String(headRes.data.request_no),
+      request_date: String(headRes.data.request_date),
+      due_date: String(headRes.data.due_date),
+      status: String(headRes.data.status),
+      product_name: String(lineRes.data.product_name),
+      requested_qty: Number(lineRes.data.requested_qty),
+      produced_qty: Number(lineRes.data.produced_qty),
+      closed_qty: Number((lineRes.data as { closed_qty?: number }).closed_qty ?? 0),
+      remaining_qty: Number(lineRes.data.remaining_qty),
+    } as RequestLinePick;
+  }, []);
+
+  const applySelectedLine = useCallback(async (picked: RequestLinePick) => {
+    const mats = await loadLineMaterials(picked.line_id);
+    if (mats.length === 0) {
+      alert("작업지시 BOM 스냅샷이 없어 선택할 수 없습니다.");
+      return;
+    }
+    setSelectedLine(picked);
+    setMaterials(mats);
+    setFinishedQtyStr(String(picked.remaining_qty));
+    setLines(buildExecLines(mats, picked.remaining_qty));
+  }, [loadLineMaterials]);
+
+  useEffect(() => {
+    void loadCandidates();
+  }, [loadCandidates]);
+
+  useEffect(() => {
+    if (!requestLineIdParam) return;
+    if (requestCandidates.length === 0) return;
+    const found = requestCandidates.find((x) => x.line_id === requestLineIdParam && x.header_id === requestIdParam);
+    if (!found) return;
+    void applySelectedLine(found);
+  }, [requestLineIdParam, requestIdParam, requestCandidates, applySelectedLine]);
+
+  useEffect(() => {
+    if (!editIdParam) return;
+    void (async () => {
+      const headRes = await supabase
+        .from("harang_production_headers")
+        .select("id, production_date, note, finished_qty, request_line_id")
+        .eq("id", editIdParam)
+        .single();
+      if (headRes.error) return;
+      const requestLineId = String(headRes.data.request_line_id ?? "");
+      if (!requestLineId) return;
+      const picked = await loadLinePick(requestLineId);
+      if (!picked) return;
+      const mats = await loadLineMaterials(requestLineId);
+      if (mats.length === 0) return;
+
+      const plRes = await supabase
+        .from("harang_production_lines")
+        .select("id, material_category, material_id, usage_qty, lot_dates_summary")
+        .eq("header_id", editIdParam);
+      const lineIds = (plRes.data ?? []).map((x) => x.id as string);
+      const lotsRes =
+        lineIds.length > 0
+          ? await supabase
+              .from("harang_production_line_lots")
+              .select("line_id, lot_id, quantity_used")
+              .in("line_id", lineIds)
+          : { data: [] as Array<{ line_id: string; lot_id: string; quantity_used: number }> };
+
+      const usageByMat = new Map<string, { usage_qty: number; lot_dates_summary: string; allocations: LotAllocation[] }>();
+      for (const row of plRes.data ?? []) {
+        const key = `${row.material_category}:${row.material_id}`;
+        usageByMat.set(key, {
+          usage_qty: Number(row.usage_qty ?? 0),
+          lot_dates_summary: String(row.lot_dates_summary ?? ""),
+          allocations: (lotsRes.data ?? [])
+            .filter((x) => x.line_id === row.id)
+            .map((x) => ({ lot_id: String(x.lot_id), quantity_used: Number(x.quantity_used) })),
+        });
+      }
+
+      setEditingHeaderId(String(headRes.data.id));
+      setProductionDate(String(headRes.data.production_date));
+      setNote(String(headRes.data.note ?? ""));
+      setSelectedLine(picked);
+      setMaterials(mats);
+      setFinishedQtyStr(String(Number(headRes.data.finished_qty)));
+      const base = buildExecLines(mats, Number(headRes.data.finished_qty));
+      setLines(
+        base.map((l) => {
+          const key = `${l.material_category}:${l.material_id}`;
+          const hit = usageByMat.get(key);
+          if (!hit) return l;
+          return {
+            ...l,
+            usageQty: String(hit.usage_qty),
+            allocations: hit.allocations,
+            lotDatesSummary: hit.lot_dates_summary,
+          };
+        }),
+      );
+    })();
+  }, [editIdParam, loadLineMaterials, loadLinePick]);
+
+  const pickerLine = useMemo(() => lines.find((l) => l.key === lotPickerKey) ?? null, [lines, lotPickerKey]);
+
+  const patchLine = (key: string, patch: Partial<ExecDraftLine>) => {
+    setLines((prev) => prev.map((line) => (line.key === key ? { ...line, ...patch } : line)));
+  };
+
+  const handleQtyChange = (nextRaw: string) => {
+    const next = Number(nextRaw);
+    const hasAlloc = lines.some((l) => l.allocations.length > 0);
+    if (hasAlloc) {
+      const ok = confirm("생산수량을 변경하면 사용량과 LOT 선택을 다시 계산합니다. 계속할까요?");
+      if (!ok) return;
+    }
+    setFinishedQtyStr(nextRaw);
+    if (!selectedLine || !materials.length) {
+      setLines([]);
+      return;
+    }
+    const qty = Number.isFinite(next) && next > 0 ? next : 0;
+    setLines(buildExecLines(materials, qty));
+  };
+
+  const handleSave = async () => {
+    if (!selectedLine) {
+      alert("작업지시 라인을 먼저 선택하세요.");
+      return;
+    }
+    if (finishedQty <= 0) {
+      alert("이번 생산수량을 입력하세요.");
+      return;
+    }
+    if (lines.length === 0) {
+      alert("BOM 라인이 없습니다.");
+      return;
+    }
+    for (const line of lines) {
+      const u = Number(line.usageQty);
+      if (!Number.isFinite(u) || u < 0) {
+        alert(`사용량이 올바르지 않습니다: ${line.material_name}`);
+        return;
+      }
+      if (line.requiredQty > 0 && u <= 0) {
+        alert(`사용량을 입력하세요: ${line.material_name}`);
+        return;
+      }
+      if (u > 0) {
+        if (line.allocations.length === 0) {
+          alert(`LOT를 지정하세요: ${line.material_name}`);
+          return;
+        }
+        const s = sumAllocations(line.allocations);
+        if (Math.abs(s - u) > 0.001) {
+          alert(`LOT 합계와 사용량이 일치하지 않습니다: ${line.material_name}`);
+          return;
+        }
+      }
+    }
+
+    const payload = lines.map((line) => ({
+      material_category: line.material_category,
+      material_id: line.material_id,
+      material_code: line.material_code,
+      material_name: line.material_name,
+      bom_qty: line.requiredQty,
+      unit: line.unit,
+      usage_qty: Number(line.usageQty),
+      allocations: line.allocations,
+    }));
+
+    setSaving(true);
+    const { error } = editingHeaderId
+      ? await supabase.rpc("update_harang_production_from_request_line", {
+          p_header_id: editingHeaderId,
+          p_production_date: productionDate,
+          p_request_line_id: selectedLine.line_id,
+          p_finished_qty: finishedQty,
+          p_note: note.trim() || null,
+          p_lines: payload,
+        })
+      : await supabase.rpc("create_harang_production_from_request_line", {
+          p_production_date: productionDate,
+          p_request_line_id: selectedLine.line_id,
+          p_finished_qty: finishedQty,
+          p_note: note.trim() || null,
+          p_lines: payload,
+        });
+    setSaving(false);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    router.replace("/harang/production-input");
+  };
+
+  const rawLines = useMemo(() => lines.filter((l) => l.material_category === "raw_material"), [lines]);
+  const packagingLines = useMemo(() => lines.filter((l) => l.material_category === "packaging_material"), [lines]);
+
+  return (
+    <div className="px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-6xl mx-auto space-y-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">하랑 생산입고</h1>
+            <p className="text-sm text-slate-600 mt-1">작업지시(생산요청 라인) 기반 생산실적 입력</p>
+          </div>
+          <Link href="/harang/production-input" className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm bg-white">
+            목록으로
+          </Link>
+        </div>
+
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
+          <h2 className="text-sm font-semibold text-slate-800">헤더 정보</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <label className="block text-xs text-slate-600">
+              생산일자
+              <input
+                type="date"
+                value={productionDate}
+                onChange={(e) => setProductionDate(e.target.value)}
+                className="mt-1 w-full px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 text-sm"
+              />
+            </label>
+            <label className="block text-xs text-slate-600">
+              생산입고 No.
+              <input readOnly value={previewNo} className="mt-1 w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-700 text-sm" />
+            </label>
+            <div className="block text-xs text-slate-600 sm:col-span-2">
+              작업지시 라인 선택
+              <button
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                className="mt-1 w-full px-3 py-2 rounded-lg border border-cyan-300 bg-cyan-50 text-cyan-800 text-sm text-left"
+              >
+                {selectedLine
+                  ? `${selectedLine.request_no} · ${selectedLine.product_name} · 잔여 ${selectedLine.remaining_qty.toLocaleString("ko-KR")}`
+                  : "작업지시 라인 선택"}
+              </button>
+            </div>
+
+            <label className="block text-xs text-slate-600">
+              품목명
+              <input readOnly value={selectedLine?.product_name ?? ""} className="mt-1 w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-800 text-sm" />
+            </label>
+            <label className="block text-xs text-slate-600">
+              납기일
+              <input readOnly value={selectedLine?.due_date ?? ""} className="mt-1 w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-800 text-sm" />
+            </label>
+            <label className="block text-xs text-slate-600">
+              요청수량 / 누적생산 / 잔여
+              <input
+                readOnly
+                value={
+                  selectedLine
+                    ? `${selectedLine.requested_qty.toLocaleString("ko-KR")} / ${selectedLine.produced_qty.toLocaleString("ko-KR")} / ${selectedLine.remaining_qty.toLocaleString("ko-KR")}`
+                    : ""
+                }
+                className="mt-1 w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-800 text-sm"
+              />
+            </label>
+            <label className="block text-xs text-slate-600">
+              요청 반영수량 / 초과생산수량
+              <input
+                readOnly
+                value={selectedLine ? `${appliedToRequestQty.toLocaleString("ko-KR")} / ${overrunQty.toLocaleString("ko-KR")}` : ""}
+                className="mt-1 w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-800 text-sm"
+              />
+            </label>
+            <label className="block text-xs text-slate-600">
+              이번 생산수량
+              <input
+                type="text"
+                inputMode="decimal"
+                value={finishedQtyStr}
+                onChange={(e) => handleQtyChange(e.target.value)}
+                className="mt-1 w-full px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 text-sm"
+                placeholder="0"
+              />
+            </label>
+            <label className="block text-xs text-slate-600 lg:col-span-4">
+              비고
+              <input
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                className="mt-1 w-full px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 text-sm"
+                placeholder="선택"
+              />
+            </label>
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <h2 className="text-sm font-semibold text-slate-800">상세 (이번 생산수량 기준 BOM · 사용 · LOT)</h2>
+          </div>
+          {lines.length === 0 ? (
+            <p className="py-8 text-center text-sm text-slate-500">작업지시 라인 선택 후 생산수량을 입력하세요.</p>
+          ) : (
+            <div className="space-y-5">
+              {[{ title: "원재료", rows: rawLines }, { title: "부자재", rows: packagingLines }].map((section) => (
+                <div key={section.title} className="rounded-lg border border-slate-200 overflow-hidden">
+                  <div className="px-3 py-2 bg-slate-100 border-b border-slate-200">
+                    <h3 className="text-sm font-semibold text-slate-800">{section.title}</h3>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[900px] text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-slate-600 bg-white">
+                          <th className="px-3 py-2 text-left font-medium">소모품목명</th>
+                          <th className="px-3 py-2 text-right font-medium">BOM(이번 생산 기준)</th>
+                          <th className="px-3 py-2 text-right font-medium">사용량</th>
+                          <th className="px-3 py-2 text-left font-medium">소비기한·제조일자</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {section.rows.length === 0 ? (
+                          <tr>
+                            <td colSpan={4} className="px-3 py-8 text-center text-slate-500">해당 없음</td>
+                          </tr>
+                        ) : (
+                          section.rows.map((line) => (
+                            <tr key={line.key} className="border-b border-slate-100 align-top">
+                              <td className="px-3 py-2 text-slate-900">{line.material_name}</td>
+                              <td className="px-3 py-2 text-right tabular-nums text-slate-800">
+                                {line.requiredQty.toLocaleString("ko-KR", { maximumFractionDigits: 3 })} {line.unit}
+                              </td>
+                              <td className="px-3 py-2">
+                                <div className="flex items-center justify-end gap-1">
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={Number(line.usageQty || 0).toLocaleString("ko-KR", { maximumFractionDigits: 3 })}
+                                    readOnly
+                                    onDoubleClick={() => setLotPickerKey(line.key)}
+                                    className="w-full min-w-[96px] max-w-[140px] cursor-pointer rounded border border-slate-300 px-2 py-1.5 text-right text-slate-900 bg-slate-50"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setLotPickerKey(line.key)}
+                                    className="shrink-0 rounded border border-slate-300 bg-slate-50 p-1.5 text-slate-700 hover:bg-slate-100"
+                                    title="LOT 선택"
+                                  >
+                                    <Search className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                              <td className="px-3 py-2 text-slate-700 text-sm whitespace-pre-wrap">
+                                {line.lotDatesSummary || (line.allocations.length === 0 ? "—" : "")}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void handleSave()}
+            className="px-5 py-2.5 rounded-lg bg-cyan-600 text-white text-sm font-medium hover:bg-cyan-700 disabled:opacity-60"
+          >
+            {saving ? "저장 중…" : editingHeaderId ? "생산입고 수정 저장" : "생산입고 저장"}
+          </button>
+        </div>
+      </div>
+
+      {pickerLine && (
+        <LotPickerModal
+          open={!!lotPickerKey}
+          onClose={() => setLotPickerKey(null)}
+          materialName={pickerLine.material_name}
+          category={pickerLine.material_category}
+          materialId={pickerLine.material_id}
+          initialAllocations={pickerLine.allocations}
+          onApply={(allocations, lotDatesSummary) => {
+            const sum = sumAllocations(allocations);
+            const key = lotPickerKey;
+            if (!key) return;
+            patchLine(key, {
+              allocations,
+              lotDatesSummary,
+              usageQty: String(sum),
+            });
+          }}
+        />
+      )}
+
+      {pickerOpen && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4">
+          <button type="button" className="absolute inset-0 bg-black/40" onClick={() => setPickerOpen(false)} />
+          <div className="relative w-full max-w-6xl max-h-[85vh] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-900">작업지시 라인 선택</h3>
+              <button type="button" className="text-sm text-slate-600" onClick={() => setPickerOpen(false)}>
+                닫기
+              </button>
+            </div>
+            <div className="overflow-auto max-h-[calc(85vh-3.5rem)]">
+              <table className="w-full min-w-[960px] text-sm text-slate-800">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-slate-600">
+                    <th className="px-3 py-2 text-left">요청번호</th>
+                    <th className="px-3 py-2 text-left">요청일</th>
+                    <th className="px-3 py-2 text-left">납기일</th>
+                    <th className="px-3 py-2 text-left">품목명</th>
+                    <th className="px-3 py-2 text-right">요청</th>
+                    <th className="px-3 py-2 text-right">완료</th>
+                    <th className="px-3 py-2 text-right">잔여</th>
+                    <th className="px-3 py-2 text-left">상태</th>
+                    <th className="px-3 py-2 text-left">선택</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingCandidates && (
+                    <tr>
+                      <td colSpan={9} className="px-3 py-8 text-center text-slate-500">불러오는 중...</td>
+                    </tr>
+                  )}
+                  {!loadingCandidates && requestCandidates.length === 0 && (
+                    <tr>
+                      <td colSpan={9} className="px-3 py-8 text-center text-slate-500">선택 가능한 작업지시 라인이 없습니다.</td>
+                    </tr>
+                  )}
+                  {!loadingCandidates &&
+                    requestCandidates.map((r) => (
+                      <tr key={r.line_id} className="border-b border-slate-100">
+                        <td className="px-3 py-2 font-mono text-xs">{r.request_no}</td>
+                        <td className="px-3 py-2">{r.request_date}</td>
+                        <td className="px-3 py-2">{r.due_date}</td>
+                        <td className="px-3 py-2">{r.product_name}</td>
+                        <td className="px-3 py-2 text-right">{r.requested_qty.toLocaleString("ko-KR")}</td>
+                        <td className="px-3 py-2 text-right">{r.produced_qty.toLocaleString("ko-KR")}</td>
+                        <td className="px-3 py-2 text-right">{r.remaining_qty.toLocaleString("ko-KR")}</td>
+                        <td className="px-3 py-2">{pickStatusLabel(r.status)}</td>
+                        <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            className="px-2 py-1 rounded border border-cyan-300 text-cyan-800 bg-cyan-50 text-xs"
+                            onClick={() => {
+                              void applySelectedLine(r);
+                              setPickerOpen(false);
+                            }}
+                          >
+                            선택
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -49,6 +49,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user, profile, loading, uiSettings, viewOrganizationCode, organization } = useAuth();
   const isHarangOrgAccount = organization?.organization_code === "200";
+  const isHeadquartersOpsUser =
+    organization?.organization_code === "100" && (profile?.role === "manager" || profile?.role === "admin");
+  const isGlobalAdmin000 = organization?.organization_code === "000" && profile?.role === "admin";
   const isLoginPage = pathname === LOGIN_PATH;
   const isChangePasswordPage = pathname === CHANGE_PASSWORD_PATH;
 
@@ -161,7 +164,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return null;
   }
   if (pathname === "/harang" || pathname.startsWith("/harang/")) {
-    const allowHarang = viewOrganizationCode === "200" || isHarangOrgAccount;
+    const allowHarang =
+      viewOrganizationCode === "200" ||
+      isHarangOrgAccount ||
+      isHeadquartersOpsUser ||
+      isGlobalAdmin000;
     if (!allowHarang) {
       router.replace("/");
       return null;

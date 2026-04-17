@@ -17,7 +17,15 @@ type StockRow = {
   recent_usage_date: string | null;
 };
 
-function categoryLabel(category: HarangCategory): string {
+type InventoryViewCategory = "parbake" | HarangCategory;
+
+function viewCategoryOf(row: Pick<StockRow, "category" | "item_name">): InventoryViewCategory {
+  if (row.category === "raw_material" && isParbakeDoughName(row.item_name)) return "parbake";
+  return row.category;
+}
+
+function categoryLabel(category: InventoryViewCategory): string {
+  if (category === "parbake") return "파베이크";
   return category === "raw_material" ? "원재료" : "부자재";
 }
 
@@ -32,7 +40,7 @@ function displayUnit(category: HarangCategory, itemName: string): "EA" | "g" {
 
 export default function HarangInventoryPage() {
   const [rows, setRows] = useState<StockRow[]>([]);
-  const [category, setCategory] = useState("");
+  const [category, setCategory] = useState<"" | InventoryViewCategory>("");
   const [keyword, setKeyword] = useState("");
   const [hasStock, setHasStock] = useState("");
   const [loading, setLoading] = useState(false);
@@ -89,7 +97,7 @@ export default function HarangInventoryPage() {
 
   const filtered = useMemo(() => {
     return rows.filter((row) => {
-      if (category && row.category !== category) return false;
+      if (category && viewCategoryOf(row) !== category) return false;
       if (hasStock === "yes" && row.current_qty <= 0) return false;
       if (hasStock === "no" && row.current_qty > 0) return false;
       if (keyword.trim()) {
@@ -110,8 +118,13 @@ export default function HarangInventoryPage() {
 
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <select value={category} onChange={(e) => setCategory(e.target.value)} className="px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 text-sm">
+            <select
+              value={category}
+              onChange={(e) => setCategory((e.target.value || "") as "" | InventoryViewCategory)}
+              className="px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 text-sm"
+            >
               <option value="">분류 전체</option>
+              <option value="parbake">파베이크</option>
               <option value="raw_material">원재료</option>
               <option value="packaging_material">부자재</option>
             </select>
@@ -144,7 +157,7 @@ export default function HarangInventoryPage() {
                 {!loading &&
                   filtered.map((row) => (
                     <tr key={row.lot_id} className="border-b border-slate-100 text-slate-900">
-                      <td className="px-3 py-2">{categoryLabel(row.category)}</td>
+                      <td className="px-3 py-2">{categoryLabel(viewCategoryOf(row))}</td>
                       <td className="px-3 py-2">{row.item_name}</td>
                       <td className="px-3 py-2 text-right tabular-nums">
                         {row.current_qty.toLocaleString("ko-KR")} {row.unit}

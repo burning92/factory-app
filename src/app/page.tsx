@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Factory, Inbox, Layers, Settings, User } from "lucide-react";
+import { Factory, Inbox, Layers, ListOrdered, Settings, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -75,6 +75,12 @@ export default function DashboardPage() {
     }[] = [
       { href: "/harang/inbound", title: "입고관리", hint: "입고 등록·목록", Icon: Inbox },
       { href: "/harang/inventory", title: "재고현황", hint: "LOT별 재고 조회", Icon: Layers },
+      {
+        href: "/harang/production-requests",
+        title: "생산요청",
+        hint: "요청 조회·생산 반영",
+        Icon: ListOrdered,
+      },
       { href: "/harang/production-input", title: "생산입력", hint: "생산·소모 등록", Icon: Factory },
       { href: "/account", title: "계정", hint: "비밀번호·로그아웃", Icon: User },
     ];

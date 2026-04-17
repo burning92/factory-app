@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Box, ClipboardList, Layers, Settings, ChevronRight } from "lucide-react";
+import { Box, ClipboardList, Layers, ListOrdered, Settings, ChevronRight } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 const HUB_ITEMS = [
@@ -16,6 +16,12 @@ const HUB_ITEMS = [
     label: "재고현황",
     description: "품목별 현재고, LOT별 잔량, 입출고 이력 조회",
     Icon: Layers,
+  },
+  {
+    href: "/harang/production-requests",
+    label: "생산요청",
+    description: "요청 조회·생산 반영·자재 예약·부족 현황(등록은 본사)",
+    Icon: ListOrdered,
   },
 ] as const;
 
@@ -33,7 +39,7 @@ export default function HarangHubPage() {
     <div className="min-h-[calc(100dvh-3.5rem-4rem)] md:min-h-0 p-4 md:p-6 max-w-5xl mx-auto">
       <header className="mb-5">
         <h1 className="text-2xl font-semibold text-slate-900">하랑 운영</h1>
-        <p className="mt-1 text-sm text-slate-600">입고관리와 재고현황을 중심으로 운영합니다.</p>
+        <p className="mt-1 text-sm text-slate-600">입고·생산요청·재고를 중심으로 운영합니다.</p>
       </header>
 
       <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">

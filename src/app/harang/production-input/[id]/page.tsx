@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
@@ -47,11 +48,13 @@ function sectionLabel(category: "raw_material" | "packaging_material"): string {
 
 export default function HarangProductionInputDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const id = params.id;
   const [header, setHeader] = useState<ProductionHeaderDetail | null>(null);
   const [lines, setLines] = useState<ProductionLine[]>([]);
   const [lotUsages, setLotUsages] = useState<ProductionLotUsage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!id) return;
@@ -88,6 +91,19 @@ export default function HarangProductionInputDetailPage() {
     setLines((linesRes.data ?? []) as ProductionLine[]);
     setLotUsages((lotsRes.data ?? []) as ProductionLotUsage[]);
   }, [id]);
+
+  const handleDelete = async () => {
+    if (!header) return;
+    if (!confirm("이 생산입고 내역을 삭제할까요? LOT/재고/요청 반영이 함께 되돌아갑니다.")) return;
+    setBusy(true);
+    const { error } = await supabase.rpc("delete_harang_production_with_usage", { p_header_id: header.id });
+    setBusy(false);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    router.replace("/harang/production-input");
+  };
 
   useEffect(() => {
     void loadData();
@@ -160,6 +176,20 @@ export default function HarangProductionInputDetailPage() {
               className="px-3 py-2 rounded-lg bg-cyan-600 text-white text-sm font-medium hover:bg-cyan-700"
             >
               출력
+            </button>
+            <Link
+              href={`/harang/production-input/new?edit_id=${id}`}
+              className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm bg-white"
+            >
+              수정
+            </Link>
+            <button
+              type="button"
+              onClick={() => void handleDelete()}
+              disabled={busy}
+              className="px-3 py-2 rounded-lg border border-red-300 text-red-700 text-sm bg-white disabled:opacity-60"
+            >
+              삭제
             </button>
             <Link href="/harang/production-input" className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm bg-white">
               목록으로

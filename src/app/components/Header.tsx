@@ -99,6 +99,7 @@ export default function Header() {
         { href: "/", label: "홈" },
         { href: "/harang/inbound", label: "입고관리" },
         { href: "/harang/inventory", label: "재고현황" },
+        { href: "/harang/production-requests", label: "생산요청" },
         { href: "/harang/production-input", label: "생산입력" },
         ...(isAdmin ? [{ href: "/harang/admin", label: "마스터관리" }] : []),
         { href: "/account", label: "계정" },
@@ -116,7 +117,9 @@ export default function Header() {
    * - 200 보기: 홈·입고·재고·생산입력·(관리자)마스터·계정
    */
   const showDesktopCategoryMenu = viewIsHarang
-    ? pathname === "/" || pathname.startsWith("/account") || pathname.startsWith("/harang")
+    ? pathname === "/" ||
+      pathname.startsWith("/account") ||
+      pathname.startsWith("/harang")
     : pathname === "/" ||
       ["/production", "/materials", "/daily", "/account", "/inventory", "/manage", "/executive", "/admin"].some(
         (prefix) => pathname === prefix || pathname.startsWith(prefix + "/")

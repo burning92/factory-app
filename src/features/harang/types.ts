@@ -99,6 +99,8 @@ export interface HarangProductionHeader {
   production_no: string;
   product_name: string;
   finished_qty: number;
+  request_id?: string | null;
+  request_line_id?: string | null;
   note: string | null;
   created_by: string | null;
   created_at: string;
