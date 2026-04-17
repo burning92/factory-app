@@ -130,8 +130,24 @@ export default function HarangProductionInputDetailPage() {
   }, [lines]);
 
   return (
-    <div className="px-4 sm:px-6 lg:px-8 py-8">
-      <div className="max-w-5xl mx-auto space-y-5">
+    <>
+      {/* 인쇄: A4 세로, 행 단위로 끊김 완화 (브라우저마다 차이 있음) */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+@media print {
+  @page { size: A4 portrait; margin: 10mm 12mm; }
+  .harang-production-print-root { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .harang-production-print-root .harang-print-table thead { display: table-header-group; }
+  .harang-production-print-root .harang-print-table tbody tr { break-inside: avoid; page-break-inside: avoid; }
+  .harang-production-print-root .harang-print-section { break-inside: auto; page-break-inside: auto; }
+  .harang-production-print-root .harang-print-section-title { break-after: avoid; page-break-after: avoid; }
+}
+`,
+        }}
+      />
+      <div className="harang-production-print-root px-4 sm:px-6 lg:px-8 py-8 print:px-2 print:py-4 print:bg-white">
+      <div className="max-w-5xl mx-auto space-y-5 print:max-w-none print:space-y-4">
         <div className="print:hidden flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">생산입고 내역</h1>
@@ -157,16 +173,22 @@ export default function HarangProductionInputDetailPage() {
           <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-500">내역을 찾을 수 없습니다.</div>
         ) : (
           <>
-            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                <div><p className="text-slate-500 text-xs">일자-No.</p><p className="mt-1 text-slate-900">{header.production_no}</p></div>
+            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm print:rounded-lg print:border-slate-300 print:p-3 print:shadow-none">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm print:gap-2 print:text-xs">
+                <div><p className="text-slate-500 text-xs">일자-No.</p><p className="mt-1 text-slate-900 break-words">{header.production_no}</p></div>
                 <div><p className="text-slate-500 text-xs">일자</p><p className="mt-1 text-slate-900">{header.production_date}</p></div>
-                <div><p className="text-slate-500 text-xs">제품명</p><p className="mt-1 text-slate-900">{header.product_name}</p></div>
-                <div><p className="text-slate-500 text-xs">생산수량</p><p className="mt-1 text-slate-900 tabular-nums">{Number(header.finished_qty).toLocaleString("ko-KR")}</p></div>
+                <div className="col-span-2 sm:col-span-1">
+                  <p className="text-slate-500 text-xs">생산수량</p>
+                  <p className="mt-1 text-slate-900 tabular-nums">{Number(header.finished_qty).toLocaleString("ko-KR")}</p>
+                </div>
               </div>
-              <div className="mt-3 text-sm">
+              <div className="mt-3 text-sm print:mt-2">
+                <p className="text-slate-500 text-xs">제품명</p>
+                <p className="mt-1 text-slate-900 text-sm md:text-base print:text-[11px] leading-snug break-words">{header.product_name}</p>
+              </div>
+              <div className="mt-3 text-sm print:mt-2 print:text-xs">
                 <p className="text-slate-500 text-xs">비고</p>
-                <p className="mt-1 text-slate-900">{header.note || "-"}</p>
+                <p className="mt-1 text-slate-900 break-words leading-snug">{header.note || "-"}</p>
               </div>
             </section>
 
@@ -175,22 +197,25 @@ export default function HarangProductionInputDetailPage() {
               { title: sectionLabel("raw_material"), rows: grouped.raw },
               { title: sectionLabel("packaging_material"), rows: grouped.pack },
             ] as const).map((section) => (
-              <section key={section.title} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h2 className="text-sm font-semibold text-slate-800 mb-3">{section.title}</h2>
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[760px] table-fixed text-sm">
+              <section
+                key={section.title}
+                className="harang-print-section rounded-xl border border-slate-200 bg-white p-4 shadow-sm print:rounded-lg print:border-slate-300 print:p-3 print:shadow-none"
+              >
+                <h2 className="harang-print-section-title text-sm font-semibold text-slate-800 mb-3 print:mb-2 print:text-xs">{section.title}</h2>
+                <div className="overflow-x-auto print:overflow-visible">
+                  <table className="harang-print-table w-full min-w-[760px] table-fixed text-sm print:min-w-0 print:w-full print:text-[11px]">
                     <colgroup>
-                      <col className="w-[36%]" />
-                      <col className="w-[19%]" />
-                      <col className="w-[19%]" />
-                      <col className="w-[26%]" />
+                      <col className="w-[34%] print:w-[32%]" />
+                      <col className="w-[18%] print:w-[17%]" />
+                      <col className="w-[18%] print:w-[17%]" />
+                      <col className="w-[30%] print:w-[34%]" />
                     </colgroup>
                     <thead>
-                      <tr className="border-b border-slate-200 text-slate-600">
-                        <th className="px-3 py-2 text-left">소모품목명</th>
-                        <th className="px-3 py-2 text-right">BOM(소요)</th>
-                        <th className="px-3 py-2 text-right">사용량</th>
-                        <th className="px-3 py-2 text-left">LOT(소비기한/제조일자)</th>
+                      <tr className="border-b border-slate-200 text-slate-600 print:border-slate-400">
+                        <th className="px-3 py-2 text-left print:px-1.5 print:py-1">소모품목명</th>
+                        <th className="px-3 py-2 text-right print:px-1.5 print:py-1">BOM(소요)</th>
+                        <th className="px-3 py-2 text-right print:px-1.5 print:py-1">사용량</th>
+                        <th className="px-3 py-2 text-left print:px-1.5 print:py-1">LOT(소비기한/제조일자)</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -212,15 +237,15 @@ export default function HarangProductionInputDetailPage() {
                                   .join("\n")
                               : "";
                           return (
-                            <tr key={line.id} className="border-b border-slate-100 text-slate-900">
-                              <td className="px-3 py-2">{line.material_name}</td>
-                              <td className="px-3 py-2 text-right tabular-nums">
+                            <tr key={line.id} className="border-b border-slate-100 text-slate-900 print:border-slate-200">
+                              <td className="px-3 py-2 align-top break-words print:px-1.5 print:py-1.5">{line.material_name}</td>
+                              <td className="px-3 py-2 text-right tabular-nums align-top print:px-1.5 print:py-1.5">
                                 {Number(line.bom_qty).toLocaleString("ko-KR", { maximumFractionDigits: 3 })} {unitLabel}
                               </td>
-                              <td className="px-3 py-2 text-right tabular-nums">
+                              <td className="px-3 py-2 text-right tabular-nums align-top print:px-1.5 print:py-1.5">
                                 {Number(line.usage_qty).toLocaleString("ko-KR", { maximumFractionDigits: 3 })} {unitLabel}
                               </td>
-                              <td className="px-3 py-2 whitespace-pre-line">
+                              <td className="px-3 py-2 whitespace-pre-line align-top break-words print:whitespace-pre-line print:px-1.5 print:py-1.5">
                                 {lotDetailText || line.lot_dates_summary || usage?.dates.join(" · ") || "-"}
                               </td>
                             </tr>
@@ -236,6 +261,7 @@ export default function HarangProductionInputDetailPage() {
         )}
       </div>
     </div>
+    </>
   );
 }
 
