@@ -1,6 +1,8 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
+import { Factory, Inbox, Layers, Settings, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -53,8 +55,9 @@ function homeHeroHeightClass() {
 const HOME_MEDIA_MOBILE = "object-contain object-center";
 
 export default function DashboardPage() {
-  const { viewOrganizationCode } = useAuth();
+  const { viewOrganizationCode, profile } = useAuth();
   const isHarang = viewOrganizationCode === "200";
+  const isHarangAdmin = profile?.role === "admin";
   const [homeSeason, setHomeSeason] = useState<HomeSeason>("spring");
 
   useEffect(() => {
@@ -64,24 +67,67 @@ export default function DashboardPage() {
   const homeHero = HOME_SEASON_ASSETS[homeSeason];
 
   if (isHarang) {
+    const quickLinks: {
+      href: string;
+      title: string;
+      hint: string;
+      Icon: typeof Inbox;
+    }[] = [
+      { href: "/harang/inbound", title: "입고관리", hint: "입고 등록·목록", Icon: Inbox },
+      { href: "/harang/inventory", title: "재고현황", hint: "LOT별 재고 조회", Icon: Layers },
+      { href: "/harang/production-input", title: "생산입력", hint: "생산·소모 등록", Icon: Factory },
+      { href: "/account", title: "계정", hint: "비밀번호·로그아웃", Icon: User },
+    ];
+    if (isHarangAdmin) {
+      quickLinks.push({
+        href: "/harang/admin",
+        title: "마스터관리",
+        hint: "원료·BOM 등",
+        Icon: Settings,
+      });
+    }
+
     return (
-      <div
-        className="min-h-[calc(100dvh-3.5rem-4rem)] md:min-h-[calc(100dvh-3.5rem)] px-4 flex items-center justify-center bg-slate-50 pb-[max(1rem,env(safe-area-inset-bottom,0px))]"
-      >
-        <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-sm p-6 sm:p-7 text-center">
-          <div className="mx-auto mb-5 w-24 h-24 rounded-2xl bg-slate-100 flex items-center justify-center">
-            <Image
-              src={HARANG_PEOPLE_ICON_SRC}
-              alt="하랑 아이콘"
-              width={72}
-              height={72}
-              className="object-contain"
-              priority
-            />
+      <div className="min-h-[calc(100dvh-3.5rem-4rem)] md:min-h-[calc(100dvh-3.5rem)] bg-gradient-to-b from-slate-50 via-slate-50 to-slate-100/90 pb-[max(1rem,env(safe-area-inset-bottom,0px))]">
+        <div className="mx-auto max-w-5xl px-4 py-10 md:py-14 lg:py-16">
+          <div className="mx-auto max-w-2xl text-center">
+            <div className="mx-auto mb-6 flex h-28 w-28 items-center justify-center rounded-3xl bg-white shadow-sm ring-1 ring-slate-200/80 md:h-32 md:w-32">
+              <Image
+                src={HARANG_PEOPLE_ICON_SRC}
+                alt=""
+                width={88}
+                height={88}
+                className="object-contain"
+                priority
+              />
+            </div>
+            <p className="text-xs font-medium uppercase tracking-[0.2em] text-cyan-700/80">Harang</p>
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900 md:text-3xl">하랑 작업 홈</h1>
+            <p className="mt-3 text-sm leading-relaxed text-slate-600 md:text-base">
+              상단 메뉴와 아래 바로가기에서 주요 업무로 이동할 수 있습니다.
+            </p>
           </div>
-          <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 mb-2">하랑 작업 페이지</h1>
-          <p className="text-slate-600 text-sm mb-1 leading-relaxed">필요한 메뉴만 순차적으로 제공됩니다.</p>
-          <p className="text-slate-600 text-sm leading-relaxed">계정 메뉴에서 비밀번호 변경/로그아웃이 가능합니다.</p>
+
+          <ul className="mt-10 grid list-none gap-4 sm:grid-cols-2 lg:mt-12 xl:grid-cols-3">
+            {quickLinks.map(({ href, title, hint, Icon }) => (
+              <li key={href}>
+                <Link
+                  href={href}
+                  className="group flex h-full flex-col rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm transition hover:border-cyan-500/35 hover:shadow-md hover:shadow-cyan-900/[0.06]"
+                >
+                  <span className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-50 text-cyan-700 transition group-hover:bg-cyan-100/90">
+                    <Icon className="h-5 w-5" strokeWidth={1.9} aria-hidden />
+                  </span>
+                  <span className="text-base font-semibold text-slate-900">{title}</span>
+                  <span className="mt-1 text-sm text-slate-500">{hint}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+
+          <p className="mt-10 text-center text-xs text-slate-500 md:mt-12">
+            계정에서는 비밀번호 변경과 로그아웃만 제공됩니다.
+          </p>
         </div>
       </div>
     );
