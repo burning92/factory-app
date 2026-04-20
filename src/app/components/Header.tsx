@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { SHOW_ORGANIZATION_VIEW_SWITCHER } from "@/lib/featureFlags";
 
 const HARANG_PEOPLE_ICON_SRC = "/harang/people-icon.png";
-const ARMORED_LOGO_SRC = "/brand/helmet-furnace-mark.png";
+const ARMORED_LOGO_SRC = "/apple-icon.png";
 
 
 type DropdownItem = { href: string; label: string } | { label: string; comingSoon: true };
