@@ -6,7 +6,8 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "AF Factory Hub",
   description: "출고 입력, 사용량 계산, 반죽사용량, 기준 정보, 관리일지",
-  icons: { icon: "/icon.png", apple: "/icon.png" },
+  manifest: "/site.webmanifest",
+  icons: { icon: "/icon.png", apple: "/apple-icon.png" },
 };
 
 export default function RootLayout({
