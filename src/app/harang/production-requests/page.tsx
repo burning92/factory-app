@@ -37,6 +37,7 @@ export default function HarangProductionRequestsPage() {
   const [lineMap, setLineMap] = useState<Map<string, LineRow[]>>(new Map());
   const [loading, setLoading] = useState(true);
   const [showClosedStatuses, setShowClosedStatuses] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -80,6 +81,45 @@ export default function HarangProductionRequestsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const quickEdit = async (row: RequestRow) => {
+    const dueDate = prompt("납기일(YYYY-MM-DD)", row.due_date);
+    if (!dueDate) return;
+    const priorityRaw = prompt("우선순위", String(row.priority));
+    if (!priorityRaw) return;
+    const noteRaw = prompt("비고", row.note ?? "");
+    if (noteRaw == null) return;
+    const priority = Number(priorityRaw);
+    if (!Number.isFinite(priority)) {
+      alert("우선순위는 숫자로 입력하세요.");
+      return;
+    }
+    setBusyId(row.id);
+    const { error } = await supabase.rpc("update_harang_production_request_header", {
+      p_header_id: row.id,
+      p_due_date: dueDate,
+      p_priority: priority,
+      p_note: noteRaw.trim() || null,
+    });
+    setBusyId(null);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    await load();
+  };
+
+  const quickDelete = async (row: RequestRow) => {
+    if (!confirm("이 요청을 완전 삭제할까요?")) return;
+    setBusyId(row.id);
+    const { error } = await supabase.rpc("delete_harang_production_request", { p_header_id: row.id });
+    setBusyId(null);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    await load();
+  };
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8">
@@ -131,7 +171,7 @@ export default function HarangProductionRequestsPage() {
                   <th className="px-3 py-2 text-center">부족</th>
                   <th className="px-3 py-2 text-right">우선</th>
                   <th className="px-3 py-2 text-left">상태</th>
-                  <th className="px-3 py-2 text-left">상세</th>
+                  <th className="px-3 py-2 text-left">작업</th>
                 </tr>
               </thead>
               <tbody>
@@ -179,12 +219,34 @@ export default function HarangProductionRequestsPage() {
                         <td className="px-3 py-2 text-right">{r.priority}</td>
                         <td className="px-3 py-2">{STATUS_LABEL[r.status] ?? r.status}</td>
                         <td className="px-3 py-2">
-                          <Link
-                            href={`/harang/production-requests/${r.id}`}
-                            className="text-cyan-700 hover:underline text-xs font-medium"
-                          >
-                            보기
-                          </Link>
+                          <div className="flex items-center gap-2">
+                            <Link
+                              href={`/harang/production-requests/${r.id}`}
+                              className="text-cyan-700 hover:underline text-xs font-medium"
+                            >
+                              보기
+                            </Link>
+                            {canRegister && !["cancelled"].includes(r.status) && (
+                              <button
+                                type="button"
+                                disabled={busyId === r.id}
+                                onClick={() => void quickEdit(r)}
+                                className="text-xs px-2 py-1 rounded border border-slate-300 text-slate-700 bg-white disabled:opacity-50"
+                              >
+                                수정
+                              </button>
+                            )}
+                            {canRegister && (
+                              <button
+                                type="button"
+                                disabled={busyId === r.id}
+                                onClick={() => void quickDelete(r)}
+                                className="text-xs px-2 py-1 rounded border border-red-300 text-red-700 bg-white disabled:opacity-50"
+                              >
+                                삭제
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
