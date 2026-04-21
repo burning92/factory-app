@@ -179,6 +179,12 @@ function formatStandardRequiredQty(row: OutboundStandardPreviewRow | null | unde
   return `${row.boxQty.toLocaleString()}박스 ${row.bagQty.toLocaleString()}개`;
 }
 
+function formatWeightInfoG(weight: number | null | undefined): string {
+  const n = Number(weight ?? 0);
+  if (!Number.isFinite(n) || n <= 0) return "-";
+  return `${n.toLocaleString("ko-KR")}g`;
+}
+
 /** 실제 총 출고량(g) = (출고 박스 * 박스용량) + (출고 낱개 * 낱개용량) + 출고 잔량(g) */
 function calcActualOutboundG(
   entries: { boxQty: number; bagQty: number; remainderG: number }[],
@@ -1031,11 +1037,15 @@ export default function OutboundPage() {
                         </p>
                         {standardPreviewByMaterial.get(row.materialName) && (() => {
                           const s = standardPreviewByMaterial.get(row.materialName)!;
+                          const mat = materials.find((m) => m.materialName === row.materialName);
                           return (
                             <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2">
                               <p className="text-[11px] text-amber-300 font-medium">출고기준 참고 (저장 미반영)</p>
                               <p className="text-xs text-slate-300 mt-0.5">
                                 {s.standardGPerEa}g/ea · 기준 {s.basis} · 필요 {s.totalG.toLocaleString()}g
+                              </p>
+                              <p className="text-[11px] text-slate-400 mt-0.5">
+                                1박스 중량: {formatWeightInfoG(mat?.boxWeightG)} · 1낱개 중량: {formatWeightInfoG(mat?.unitWeightG)}
                               </p>
                               <p className="text-[11px] text-slate-400 mt-0.5">
                                 환산: {s.quantityType === "g_only" ? "g 전용" : s.quantityType === "ea_only" ? `${s.bagQty.toLocaleString()}개` : `${s.boxQty.toLocaleString()}박스 ${s.bagQty.toLocaleString()}개`}
@@ -1121,7 +1131,9 @@ export default function OutboundPage() {
                   <span className="text-[11px] text-amber-300/90">저장 미반영</span>
                 </div>
                 <div className="space-y-2">
-                  {standardPreviewRows.map((s) => (
+                  {standardPreviewRows.map((s) => {
+                    const mat = materials.find((m) => m.materialName === s.materialName);
+                    return (
                     <div key={`${s.materialName}-${s.basis}`} className="rounded-lg border border-slate-700 bg-space-900/60 px-3 py-2">
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-sm font-medium text-slate-100">{s.materialName}</p>
@@ -1130,11 +1142,14 @@ export default function OutboundPage() {
                       <p className="text-xs text-slate-300 mt-1">
                         {s.standardGPerEa}g/ea × 수량 = {s.totalG.toLocaleString()}g
                       </p>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        1박스 중량: {formatWeightInfoG(mat?.boxWeightG)} · 1낱개 중량: {formatWeightInfoG(mat?.unitWeightG)}
+                      </p>
                       <p className="text-xs text-slate-500 mt-0.5">
                         환산: {s.quantityType === "g_only" ? "g 전용" : s.quantityType === "ea_only" ? `${s.bagQty.toLocaleString()}개` : `${s.boxQty.toLocaleString()}박스 ${s.bagQty.toLocaleString()}개`}
                       </p>
                     </div>
-                  ))}
+                  )})}
                 </div>
               </div>
             )}
