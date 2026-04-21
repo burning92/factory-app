@@ -152,7 +152,7 @@ function DoughUsageContent() {
   // 상단: 권장량 확인 + 실제 투입량 결정 (도우 BOM 연동: 선택된 전체 객체 보유)
   const [selectedDough, setSelectedDough] = useState<DoughBom | null>(null);
   const [doughDate, setDoughDate] = useState(todayStr());
-  const [hydrationPercent, setHydrationPercent] = useState(61);
+  const [hydrationPercentInput, setHydrationPercentInput] = useState("61");
   const [hydrationAutoMessage, setHydrationAutoMessage] = useState<string | null>(null);
   const [targetQty, setTargetQty] = useState("");
   const [actualBags, setActualBags] = useState("");
@@ -182,7 +182,7 @@ function DoughUsageContent() {
     setActualBags("");
     setExtraKg("");
     setSelectedDough(null);
-    setHydrationPercent(61);
+    setHydrationPercentInput("61");
     setHydrationAutoMessage(null);
     setAuthorName("");
     set반죽원료(INITIAL_반죽원료);
@@ -226,7 +226,7 @@ function DoughUsageContent() {
   useEffect(() => {
     if (isEditMode) return;
     const value = getHydrationByDayOfWeek(doughDate);
-    setHydrationPercent(value);
+    setHydrationPercentInput(String(value));
     const dayName = getDayNameKo(doughDate);
     if (dayName) setHydrationAutoMessage(`${dayName} 반죽으로 수분율 ${value}%가 자동 적용되었습니다.`);
     else setHydrationAutoMessage(null);
@@ -306,7 +306,7 @@ function DoughUsageContent() {
     }
 
     const doughDateForHydration = row.반죽일자 ?? row.사용일자;
-    setHydrationPercent(getHydrationByDayOfWeek(doughDateForHydration));
+    setHydrationPercentInput(String(getHydrationByDayOfWeek(doughDateForHydration)));
     setHydrationAutoMessage(null);
 
     if (row.dough_id && doughBoms.length > 0) {
@@ -382,6 +382,10 @@ function DoughUsageContent() {
   const targetQtyNum = Math.max(0, parseInt(targetQty, 10) || 0);
   const totalTargetQty = targetQtyNum + FIXED_LOSS_QTY;
   const qtyPerBag = selectedDough?.qtyPerBag ?? 0;
+  const hydrationPercent = useMemo(() => {
+    const parsed = parseFloat(hydrationPercentInput);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }, [hydrationPercentInput]);
 
   // 권장 포대 수·추가 kg: 목표+로스(totalTargetQty) 기준 총 반죽 중량으로 수분율 동적 계산
   const { recommendedBags, recommendedExtraKg } = useMemo(() => {
@@ -631,10 +635,9 @@ function DoughUsageContent() {
                 max={100}
                 inputMode="decimal"
                 step={0.5}
-                value={hydrationPercent}
+                value={hydrationPercentInput}
                 onChange={(e) => {
-                  const v = parseFloat(e.target.value);
-                  if (!Number.isNaN(v)) setHydrationPercent(v);
+                  setHydrationPercentInput(e.target.value);
                   setHydrationAutoMessage(null);
                 }}
                 className="w-full max-w-[6rem] px-3 py-2 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100"
