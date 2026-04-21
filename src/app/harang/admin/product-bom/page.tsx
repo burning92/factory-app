@@ -333,10 +333,6 @@ export default function HarangProductBomPage() {
       const existingIds = new Set(existingRows.map((row) => row.id));
       const keptIds = new Set(draftLines.filter((line) => line.id).map((line) => line.id as string));
       const deleteIds = Array.from(existingIds).filter((id) => !keptIds.has(id));
-      if (deleteIds.length > 0) {
-        const { error } = await supabase.from("harang_product_bom").delete().in("id", deleteIds);
-        if (error) throw error;
-      }
 
       for (const line of draftLines) {
         const rawMat = line.material_category === "raw_material" ? materials.find((m) => m.id === line.material_id) : null;
@@ -361,6 +357,11 @@ export default function HarangProductBomPage() {
           const { error } = await supabase.from("harang_product_bom").insert(payload);
           if (error) throw error;
         }
+      }
+
+      if (deleteIds.length > 0) {
+        const { error } = await supabase.from("harang_product_bom").delete().in("id", deleteIds);
+        if (error) throw error;
       }
 
       await loadAll();
