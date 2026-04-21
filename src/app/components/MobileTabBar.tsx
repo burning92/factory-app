@@ -36,7 +36,8 @@ function isActive(pathname: string, href: string): boolean {
 export default function MobileTabBar() {
   const pathname = usePathname();
   const { viewOrganizationCode, profile } = useAuth();
-  const viewIsHarang = viewOrganizationCode === "200";
+  const pathIsHarangRoute = pathname === "/harang" || pathname.startsWith("/harang/");
+  const viewIsHarang = viewOrganizationCode === "200" || pathIsHarangRoute;
   const isRestrictedWorker = profile?.role === "worker";
 
   const tabs = viewIsHarang

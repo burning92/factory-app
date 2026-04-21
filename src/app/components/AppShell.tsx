@@ -48,7 +48,14 @@ function isHarangBlockedPath(pathname: string): boolean {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, profile, loading, uiSettings, viewOrganizationCode, organization } = useAuth();
+  const {
+    user,
+    profile,
+    loading,
+    uiSettings,
+    viewOrganizationCode,
+    organization,
+  } = useAuth();
   const isHarangOrgAccount = organization?.organization_code === "200";
   const isHeadquartersOpsUser =
     organization?.organization_code === "100" &&
@@ -74,6 +81,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // 기본 랜딩: 조직 설정에 default_landing_path가 있으면 '/' 대신 해당 경로로
   useEffect(() => {
     if (!user || !profile || !uiSettings?.default_landing_path || pathname !== "/") return;
+    /** 하랑 보기(200)일 때는 AFF 쪽 자동 랜딩으로 치환하지 않음 — 새로고침·전환 UX 유지 */
+    if (viewOrganizationCode === "200") return;
     const path = uiSettings.default_landing_path.trim();
     // admin은 공통 진입("/") 유지. 기존 admin 전용 /manage 직행만 예외 처리.
     if (profile.role === "admin" && path === "/manage") return;
@@ -88,7 +97,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (path && path !== "/") {
       router.replace(path);
     }
-  }, [user, profile, uiSettings?.default_landing_path, pathname, router, isHarangOrgAccount]);
+  }, [user, profile, uiSettings?.default_landing_path, pathname, router, isHarangOrgAccount, viewOrganizationCode]);
 
   /** 설비 이상 등록: worker/assistant_manager URL 직접 접근 차단 */
   useEffect(() => {
@@ -218,10 +227,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   const showTabBar = true;
-  const mainClassName =
-    pathname === "/harang" || pathname.startsWith("/harang/")
-      ? "harang-theme relative z-0 flex-1 w-full bg-slate-50 pb-16 md:pb-0 print:pb-0"
-      : "relative z-0 flex-1 w-full bg-space-900 pb-16 md:pb-0 print:pb-0";
+  /** 경로(/harang) 또는 보기 모드(200)일 때 라이트 하랑 쉘 — '/' 하랑 작업 홈과 동일 테마 */
+  const harangVisualShell =
+    pathname === "/harang" || pathname.startsWith("/harang/") || viewOrganizationCode === "200";
+  const mainClassName = harangVisualShell
+    ? "harang-theme relative z-0 flex-1 w-full bg-slate-50 pb-16 md:pb-0 print:pb-0"
+    : "relative z-0 flex-1 w-full bg-space-900 pb-16 md:pb-0 print:pb-0";
 
   return (
     <div className="min-h-screen flex flex-col">

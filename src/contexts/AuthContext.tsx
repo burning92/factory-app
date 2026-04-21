@@ -18,8 +18,30 @@ import type { Organization, OrganizationUISettings, Profile } from "@/types/auth
 
 const AUTH_EMAIL_SUFFIX = ".local";
 
+/** manager/headquarters/admin: 하랑↔AFF 전환 값을 새로고침 후에도 유지 */
+const VIEW_ORGANIZATION_CODE_STORAGE_KEY = "fcatory-view-organization-code";
+
 /** manager/headquarters/admin만 전환 가능한 보기용 조직 코드 */
 const SWITCHABLE_ORG_CODES = ["100", "200"] as const;
+
+function resolveViewOrganizationCode(organization: Organization | null, profile: Profile): string | null {
+  if (!organization) return null;
+  if (organization.organization_code === "200") return "200";
+  const canPersistView =
+    SHOW_ORGANIZATION_VIEW_SWITCHER &&
+    (profile.role === "manager" || profile.role === "headquarters" || profile.role === "admin");
+  if (canPersistView && typeof window !== "undefined") {
+    try {
+      const stored = sessionStorage.getItem(VIEW_ORGANIZATION_CODE_STORAGE_KEY);
+      if (stored === "100" || stored === "200") {
+        return stored;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return organization.organization_code ?? null;
+}
 
 interface AuthState {
   user: User | null;
@@ -153,12 +175,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    const viewOrganizationCode = resolveViewOrganizationCode(organization, profile);
+
     setState((prev) => ({
       ...prev,
       profile,
       organization,
       uiSettings,
-      viewOrganizationCode: organization?.organization_code ?? null,
+      viewOrganizationCode,
     }));
   }, []);
 
@@ -312,6 +336,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading: false,
       error: null,
     });
+    try {
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem(VIEW_ORGANIZATION_CODE_STORAGE_KEY);
+      }
+    } catch {
+      /* ignore */
+    }
     router.replace("/login");
     supabase.auth.signOut();
   }, [router]);
@@ -366,6 +397,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (prev.organization?.organization_code === "200") return prev;
       const trimmed = (code ?? "").trim();
       if (SWITCHABLE_ORG_CODES.includes(trimmed as (typeof SWITCHABLE_ORG_CODES)[number])) {
+        try {
+          if (typeof window !== "undefined") {
+            sessionStorage.setItem(VIEW_ORGANIZATION_CODE_STORAGE_KEY, trimmed);
+          }
+        } catch {
+          /* ignore */
+        }
         return { ...prev, viewOrganizationCode: trimmed };
       }
       return prev;

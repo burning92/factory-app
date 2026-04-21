@@ -89,8 +89,9 @@ export default function Header() {
     canSwitchOrganization,
     setViewOrganizationCodeSafe,
   } = useAuth();
-  /** 헤더 메뉴/로고 분기는 보기용 조직 기준 */
-  const viewIsHarang = viewOrganizationCode === "200";
+  /** 헤더 메뉴/로고 분기: 보기 코드 + /harang 경로(새로고침 직후 세션 복원 전에도 일치) */
+  const pathIsHarangRoute = pathname === "/harang" || pathname.startsWith("/harang/");
+  const viewIsHarang = viewOrganizationCode === "200" || pathIsHarangRoute;
 
   const effectiveLogoUrl = viewIsHarang ? HARANG_PEOPLE_ICON_SRC : ARMORED_LOGO_SRC;
   const primaryColor = uiSettings?.primary_color?.trim() || "#06b6d4";
@@ -179,8 +180,8 @@ export default function Header() {
 
   const handleSwitchToHarang = () => {
     setViewOrganizationCodeSafe("200");
-    if (pathname.startsWith("/harang")) return;
-    router.replace("/harang");
+    if (pathname === "/" || pathname.startsWith("/harang")) return;
+    router.replace("/");
   };
 
   return (
