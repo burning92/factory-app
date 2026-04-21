@@ -3,7 +3,7 @@
 import { useState, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { SHOW_ORGANIZATION_VIEW_SWITCHER } from "@/lib/featureFlags";
 
@@ -80,6 +80,7 @@ type DropdownKey = "production" | "materials" | "daily" | "management";
 export default function Header() {
   const [activeDropdown, setActiveDropdown] = useState<DropdownKey | null>(null);
   const pathname = usePathname();
+  const router = useRouter();
   const desktopDropdownCloseTimeoutRef = useRef<number | null>(null);
   const {
     profile,
@@ -168,6 +169,18 @@ export default function Header() {
       setActiveDropdown(null);
       desktopDropdownCloseTimeoutRef.current = null;
     }, 120);
+  };
+
+  const handleSwitchToAff = () => {
+    setViewOrganizationCodeSafe("100");
+    if (pathname === "/" || !pathname.startsWith("/harang")) return;
+    router.replace("/");
+  };
+
+  const handleSwitchToHarang = () => {
+    setViewOrganizationCodeSafe("200");
+    if (pathname.startsWith("/harang")) return;
+    router.replace("/harang");
   };
 
   return (
@@ -375,7 +388,7 @@ export default function Header() {
           <div className="flex items-center gap-1" role="group" aria-label="조직 보기 전환">
             <button
               type="button"
-              onClick={() => setViewOrganizationCodeSafe("100")}
+              onClick={handleSwitchToAff}
               className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
                 viewOrganizationCode === "100"
                   ? "bg-cyan-500/25 text-cyan-300 border border-cyan-500/50"
@@ -387,7 +400,7 @@ export default function Header() {
             </button>
             <button
               type="button"
-              onClick={() => setViewOrganizationCodeSafe("200")}
+              onClick={handleSwitchToHarang}
               className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
                 viewOrganizationCode === "200"
                   ? "bg-cyan-500/25 text-cyan-300 border border-cyan-500/50"
