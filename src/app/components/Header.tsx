@@ -27,7 +27,7 @@ const DESKTOP_DROPDOWN_MATERIALS: DropdownItem[] = [
   { href: "/production/outbound", label: "생산 출고 입력" },
   { href: "/production/outbound-history", label: "생산 입고 현황" },
   { href: "/daily/raw-thawing", label: "원료 해동 일지" },
-  { href: "/daily/material-receiving-inspection", label: "원료 입고 검수일지" },
+  { href: "/materials/material-receiving-inspection", label: "원료 입고 검수일지" },
 ];
 
 type DailyDropdownBlock = { section: string; items: { href: string; label: string }[] };

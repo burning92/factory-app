@@ -75,6 +75,7 @@ export default function DailyMaterialReceivingInspectionViewPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [rejectReasonInput, setRejectReasonInput] = useState("");
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
 
   const canApproveReject = canShowDailyApproveReject(profile?.role, header?.status);
   const approverName = (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
@@ -86,7 +87,7 @@ export default function DailyMaterialReceivingInspectionViewPage() {
       return;
     }
     if (id.toLowerCase() === "new") {
-      router.replace("/daily/material-receiving-inspection/new");
+      router.replace("/materials/material-receiving-inspection/new");
       setLoading(false);
       return;
     }
@@ -142,7 +143,7 @@ export default function DailyMaterialReceivingInspectionViewPage() {
     return (
       <div className="min-h-[calc(100vh-3.5rem)] p-4 md:p-6 max-w-3xl mx-auto">
         <p className="text-red-400 text-sm mb-4">{error ?? "데이터가 없습니다."}</p>
-        <Link href="/daily/material-receiving-inspection" className="text-cyan-400 hover:text-cyan-300 text-sm">
+        <Link href="/materials/material-receiving-inspection" className="text-cyan-400 hover:text-cyan-300 text-sm">
           목록으로
         </Link>
       </div>
@@ -159,11 +160,11 @@ export default function DailyMaterialReceivingInspectionViewPage() {
   return (
     <div className="min-h-[calc(100vh-3.5rem)] p-4 md:p-6 max-w-3xl mx-auto pb-20 md:pb-6">
       <div className="flex items-center gap-2 mb-4">
-        <Link href="/daily" className="text-slate-400 hover:text-slate-200 text-sm">
-          데일리
+        <Link href="/materials" className="text-slate-400 hover:text-slate-200 text-sm">
+          원부자재
         </Link>
         <span className="text-slate-600">/</span>
-        <Link href="/daily/material-receiving-inspection" className="text-cyan-400 hover:text-cyan-300 text-sm">
+        <Link href="/materials/material-receiving-inspection" className="text-cyan-400 hover:text-cyan-300 text-sm">
           원료 입고 검수일지
         </Link>
         <span className="text-slate-600">/</span>
@@ -215,7 +216,7 @@ export default function DailyMaterialReceivingInspectionViewPage() {
                 </div>
                 <div className="min-w-0">
                   <dt className="text-slate-500">총중량(g)</dt>
-                  <dd className="text-slate-300 mt-0.5 m-0">
+                    <dd className="text-slate-300 mt-0.5 m-0">
                     {row.total_weight_g != null
                       ? row.total_weight_g.toLocaleString("ko-KR", { maximumFractionDigits: 1 })
                       : "—"}
@@ -231,12 +232,13 @@ export default function DailyMaterialReceivingInspectionViewPage() {
               )}
               {row.label_photo_url && (
                 <div>
-                  <p className="text-xs text-slate-500 mb-1">표시사항 사진</p>
+                  <p className="text-xs text-slate-500 mb-1">표시사항 사진 (눌러서 확대)</p>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={row.label_photo_url}
                     alt="표시사항"
-                    className="max-h-40 rounded border border-slate-600"
+                    className="max-h-40 rounded border border-slate-600 cursor-zoom-in"
+                    onClick={() => setPhotoPreviewUrl(row.label_photo_url)}
                   />
                 </div>
               )}
@@ -324,7 +326,7 @@ export default function DailyMaterialReceivingInspectionViewPage() {
 
       <div className="flex flex-wrap justify-end gap-2 mb-6">
         <Link
-          href={`/daily/material-receiving-inspection/${id}/edit`}
+          href={`/materials/material-receiving-inspection/${id}/edit`}
           className="px-4 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium"
         >
           수정
@@ -340,7 +342,7 @@ export default function DailyMaterialReceivingInspectionViewPage() {
               .eq("id", id);
             setActionLoading(false);
             if (err) setError(err.message);
-            else router.push("/daily/material-receiving-inspection");
+            else router.push("/materials/material-receiving-inspection");
           }}
           disabled={actionLoading}
           className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-medium"
@@ -399,12 +401,31 @@ export default function DailyMaterialReceivingInspectionViewPage() {
 
       <div className="flex justify-end">
         <Link
-          href="/daily/material-receiving-inspection"
+          href="/materials/material-receiving-inspection"
           className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700/50 text-sm"
         >
           목록으로
         </Link>
       </div>
+      {photoPreviewUrl && (
+        <div className="fixed inset-0 z-50 bg-black/80 p-4 flex items-center justify-center" onClick={() => setPhotoPreviewUrl(null)}>
+          <div className="max-w-4xl w-full flex flex-col items-end gap-2" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setPhotoPreviewUrl(null)}
+              className="px-3 py-1.5 rounded-lg border border-slate-500 text-slate-200 text-sm hover:bg-slate-700/50"
+            >
+              닫기
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={photoPreviewUrl}
+              alt="표시사항 확대"
+              className="w-full max-h-[80vh] object-contain rounded-lg border border-slate-600 bg-slate-900"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

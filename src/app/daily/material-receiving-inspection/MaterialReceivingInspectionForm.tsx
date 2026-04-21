@@ -112,6 +112,13 @@ function parseExpiryValue(raw: string | null): {
   return { mode: "text", dateValue: "", textValue: v };
 }
 
+function formatWeightNumberText(value: string): string {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "0";
+  if (Math.abs(n - Math.round(n)) < 1e-9) return Math.round(n).toLocaleString("ko-KR");
+  return n.toLocaleString("ko-KR", { maximumFractionDigits: 2 });
+}
+
 export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
   const { user, profile, viewOrganizationCode } = useAuth();
   const orgCode = viewOrganizationCode ?? "100";
@@ -688,11 +695,11 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
   return (
     <div className="min-h-[calc(100vh-3.5rem)] md:min-h-0 p-4 md:p-6 max-w-3xl mx-auto pb-20 md:pb-6">
       <div className="flex items-center gap-2 mb-4">
-        <Link href="/daily" className="text-slate-400 hover:text-slate-200 text-sm">
-          데일리
+        <Link href="/materials" className="text-slate-400 hover:text-slate-200 text-sm">
+          원부자재
         </Link>
         <span className="text-slate-600">/</span>
-        <Link href="/daily/material-receiving-inspection" className="text-slate-400 hover:text-slate-200 text-sm">
+        <Link href="/materials/material-receiving-inspection" className="text-slate-400 hover:text-slate-200 text-sm">
           원료 입고 검수일지
         </Link>
         <span className="text-slate-600">/</span>
@@ -870,31 +877,43 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
                 {hasBoxWeight && (
                   <label className="flex flex-col gap-1">
                     <span className="text-xs text-slate-500">1박스 중량 (g)</span>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      min={0}
-                      step="0.01"
-                      value={line.box_weight_g}
-                      onChange={(e) => updateLine(line.clientId, { box_weight_g: e.target.value })}
-                      disabled={!canEdit || isMasterSelected}
-                      className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
-                    />
+                    {isMasterSelected ? (
+                      <div className="px-3 py-2 rounded-lg border border-cyan-500/60 bg-slate-900 text-cyan-100 text-sm shadow-[inset_0_1px_0_rgba(34,211,238,0.15),0_2px_8px_rgba(0,0,0,0.35)]">
+                        {formatWeightNumberText(line.box_weight_g)}
+                      </div>
+                    ) : (
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        step="0.01"
+                        value={line.box_weight_g}
+                        onChange={(e) => updateLine(line.clientId, { box_weight_g: e.target.value })}
+                        disabled={!canEdit}
+                        className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
+                      />
+                    )}
                   </label>
                 )}
                 {hasUnitWeight && (
                   <label className="flex flex-col gap-1">
                     <span className="text-xs text-slate-500">1낱개 중량 (g)</span>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      min={0}
-                      step="0.01"
-                      value={line.unit_weight_g}
-                      onChange={(e) => updateLine(line.clientId, { unit_weight_g: e.target.value })}
-                      disabled={!canEdit || isMasterSelected}
-                      className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
-                    />
+                    {isMasterSelected ? (
+                      <div className="px-3 py-2 rounded-lg border border-cyan-500/60 bg-slate-900 text-cyan-100 text-sm shadow-[inset_0_1px_0_rgba(34,211,238,0.15),0_2px_8px_rgba(0,0,0,0.35)]">
+                        {formatWeightNumberText(line.unit_weight_g)}
+                      </div>
+                    ) : (
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        step="0.01"
+                        value={line.unit_weight_g}
+                        onChange={(e) => updateLine(line.clientId, { unit_weight_g: e.target.value })}
+                        disabled={!canEdit}
+                        className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
+                      />
+                    )}
                   </label>
                 )}
                 <div className="flex flex-col gap-1 sm:col-span-2">
@@ -1156,7 +1175,7 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
 
       <div className="flex justify-end">
         <Link
-          href="/daily/material-receiving-inspection"
+          href="/materials/material-receiving-inspection"
           className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700/50 text-sm"
         >
           목록으로

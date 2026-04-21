@@ -13,7 +13,7 @@ export default function DailyMaterialReceivingInspectionEditPage() {
 
   useEffect(() => {
     if (id && id.toLowerCase() === "new") {
-      router.replace("/daily/material-receiving-inspection/new");
+      router.replace("/materials/material-receiving-inspection/new");
     }
   }, [id, router]);
 

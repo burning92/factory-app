@@ -9,7 +9,7 @@ const LINK_ITEMS = [
   { href: "/production/outbound", label: "생산 출고 입력", Icon: Package },
   { href: "/production/outbound-history", label: "생산 입고 현황", Icon: ClipboardList },
   { href: "/daily/raw-thawing", label: "원료 해동 일지", Icon: Refrigerator },
-  { href: "/daily/material-receiving-inspection", label: "원료 입고 검수일지", Icon: PackageSearch },
+  { href: "/materials/material-receiving-inspection", label: "원료 입고 검수일지", Icon: PackageSearch },
 ] as const;
 
 const WORKER_MATERIAL_HREFS = new Set<string>(["/inventory/ecount", "/production/outbound-history"]);
