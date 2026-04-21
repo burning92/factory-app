@@ -24,8 +24,8 @@ const DESKTOP_DROPDOWN_PRODUCTION: DropdownItem[] = [
 
 const DESKTOP_DROPDOWN_MATERIALS: DropdownItem[] = [
   { href: "/inventory/ecount", label: "재고 현황" },
-  { href: "/production/outbound", label: "원료 생산 출고 입력" },
-  { href: "/production/outbound-history", label: "원료 생산 출고 현황" },
+  { href: "/production/outbound", label: "생산 출고 입력" },
+  { href: "/production/outbound-history", label: "생산 입고 현황" },
   { href: "/daily/raw-thawing", label: "원료 해동 일지" },
   { href: "/daily/material-receiving-inspection", label: "원료 입고 검수일지" },
 ];
@@ -67,6 +67,14 @@ const DESKTOP_DROPDOWN_MANAGEMENT: DropdownItem[] = [
   { href: "/admin/logs", label: "로그조회" },
 ];
 
+/** 워커: 생산 드롭다운에는 생산계획만 */
+const WORKER_DESKTOP_PRODUCTION: DropdownItem[] = [{ href: "/production/plan", label: "생산계획" }];
+/** 워커: 재고 현황 + 출고 현황만 */
+const WORKER_DESKTOP_MATERIALS: DropdownItem[] = [
+  { href: "/inventory/ecount", label: "재고 현황" },
+  { href: "/production/outbound-history", label: "생산 입고 현황" },
+];
+
 type DropdownKey = "production" | "materials" | "daily" | "management";
 
 export default function Header() {
@@ -86,10 +94,20 @@ export default function Header() {
   const effectiveLogoUrl = viewIsHarang ? HARANG_PEOPLE_ICON_SRC : ARMORED_LOGO_SRC;
   const primaryColor = uiSettings?.primary_color?.trim() || "#06b6d4";
   const isAdmin = profile?.role === "admin";
-  const isManagerOrAdmin = profile?.role === "admin" || profile?.role === "manager";
-  const desktopProductionItems: DropdownItem[] = isManagerOrAdmin
-    ? [...DESKTOP_DROPDOWN_PRODUCTION, { href: "/production/planning", label: "플래닝" }]
-    : DESKTOP_DROPDOWN_PRODUCTION;
+  const isManagerOrAdmin =
+    profile?.role === "admin" || profile?.role === "manager" || profile?.role === "headquarters";
+  const isRestrictedWorker = profile?.role === "worker";
+  const desktopProductionItems: DropdownItem[] = isRestrictedWorker
+    ? WORKER_DESKTOP_PRODUCTION
+    : isManagerOrAdmin
+      ? [...DESKTOP_DROPDOWN_PRODUCTION, { href: "/production/planning", label: "플래닝" }]
+      : DESKTOP_DROPDOWN_PRODUCTION;
+  const desktopMaterialsItems: DropdownItem[] = isRestrictedWorker
+    ? WORKER_DESKTOP_MATERIALS
+    : DESKTOP_DROPDOWN_MATERIALS;
+  const desktopNavDropdownKeys: DropdownKey[] = isRestrictedWorker
+    ? ["production", "materials"]
+    : ["production", "materials", "daily", ...(isAdmin ? (["management"] as const) : [])];
   /** 임원 대시보드: 로그인 사용자 전원(100 조직 보기 시) */
   const showExecutiveLink = !viewIsHarang;
 
@@ -105,12 +123,18 @@ export default function Header() {
         ...(isAdmin ? [{ href: "/harang/admin", label: "마스터관리" }] : []),
         { href: "/account", label: "계정" },
       ]
-    : [
-        { href: "/production", label: "생산" },
-        { href: "/materials", label: "원부자재" },
-        { href: "/daily", label: "데일리" },
-        { href: "/account", label: "계정" },
-      ];
+    : isRestrictedWorker
+      ? [
+          { href: "/production", label: "생산" },
+          { href: "/materials", label: "원부자재" },
+          { href: "/account", label: "계정" },
+        ]
+      : [
+          { href: "/production", label: "생산" },
+          { href: "/materials", label: "원부자재" },
+          { href: "/daily", label: "데일리" },
+          { href: "/account", label: "계정" },
+        ];
 
   /**
    * 데스크탑 상단 카테고리 메뉴 노출 범위
@@ -208,7 +232,7 @@ export default function Header() {
           })
         ) : (
           <>
-            {(["production", "materials", "daily", ...(isAdmin ? (["management"] as const) : [])] as const).map((key) => {
+            {desktopNavDropdownKeys.map((key) => {
               const href =
                 key === "production"
                   ? "/production"
@@ -221,7 +245,7 @@ export default function Header() {
                 key === "production"
                   ? desktopProductionItems
                   : key === "materials"
-                    ? DESKTOP_DROPDOWN_MATERIALS
+                    ? desktopMaterialsItems
                     : key === "daily"
                       ? null
                       : DESKTOP_DROPDOWN_MANAGEMENT;

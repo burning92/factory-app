@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getEquipmentHistoryAuthedClient } from "@/lib/equipmentHistoryRequestAuth";
 import { writeAuditLog } from "@/lib/serverAuditLog";
 
-/** 결과 이력 1건 삭제 — manager·admin (RLS + API 역할 이중 검증) */
+/** 결과 이력 1건 삭제 — manager·headquarters·admin (RLS + API 역할 이중 검증) */
 export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id: updateId } = await context.params;
   if (!updateId) {
@@ -13,7 +13,7 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
-  if (auth.role !== "manager" && auth.role !== "admin") {
+  if (auth.role !== "manager" && auth.role !== "headquarters" && auth.role !== "admin") {
     return NextResponse.json({ error: "삭제 권한이 없습니다." }, { status: 403 });
   }
 

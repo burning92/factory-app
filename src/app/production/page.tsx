@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Calculator, FileText, Plus, List, CalendarDays, ChevronRight, Package } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 const HUB_ITEMS = [
   {
@@ -62,7 +63,13 @@ const HUB_ITEMS = [
   },
 ] as const;
 
+const WORKER_HUB_HREFS = new Set<string>(["/production/plan"]);
+
 export default function ProductionHubPage() {
+  const { profile } = useAuth();
+  const canViewPlanningBoard =
+    profile?.role === "admin" || profile?.role === "manager" || profile?.role === "headquarters";
+  const isRestrictedWorker = profile?.role === "worker";
   const todayLabel = new Intl.DateTimeFormat("ko-KR", {
     month: "long",
     day: "numeric",
@@ -74,12 +81,19 @@ export default function ProductionHubPage() {
       <header className="mb-4 md:mb-5">
         <h1 className="text-xl md:text-2xl font-semibold text-slate-100">생산</h1>
         <p className="mt-1 text-sm text-slate-400">
-          {todayLabel} · 필요한 작업을 빠르게 선택하세요.
+          {todayLabel}
+          {isRestrictedWorker ? " · 생산계획 조회만 가능합니다." : " · 필요한 작업을 빠르게 선택하세요."}
         </p>
       </header>
 
       <ul className="grid grid-cols-1 md:grid-cols-2 gap-2.5 md:gap-3">
-        {HUB_ITEMS.map(({ href, label, description, badge, Icon, featured }) => (
+        {HUB_ITEMS
+          .filter((item) => {
+            if (item.href === "/production/planning") return canViewPlanningBoard;
+            if (isRestrictedWorker) return WORKER_HUB_HREFS.has(item.href);
+            return true;
+          })
+          .map(({ href, label, description, badge, Icon, featured }) => (
           <li key={href}>
             <Link
               href={href}

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import { CalendarDays, Save, Copy, Plus, Trash2, Download, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -95,6 +96,7 @@ function parseOtherNoteText(noteText: string): { detail: string; person_name: st
 }
 
 export default function PlanningBoardClient() {
+  const router = useRouter();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -124,7 +126,8 @@ export default function PlanningBoardClient() {
   const [baselineInput, setBaselineInput] = useState("");
 
   const { profile, loading: authLoading } = useAuth();
-  const canView = profile?.role === "admin" || profile?.role === "manager";
+  const canView =
+    profile?.role === "admin" || profile?.role === "manager" || profile?.role === "headquarters";
   const canEdit = canView;
   const yearOptions = useMemo(() => {
     const start = 2026;
@@ -134,6 +137,13 @@ export default function PlanningBoardClient() {
     return arr;
   }, [now]);
   const monthOptions = useMemo(() => Array.from({ length: 12 }, (_, i) => i + 1), []);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!canView) {
+      router.replace("/production");
+    }
+  }, [authLoading, canView, router]);
 
   const loadMonth = useCallback(async () => {
     if (authLoading) return;
@@ -215,6 +225,15 @@ export default function PlanningBoardClient() {
   useEffect(() => {
     loadMonth();
   }, [loadMonth]);
+
+  if (authLoading) {
+    return (
+      <div className="rounded-xl border border-slate-700 bg-space-800/60 p-8 text-slate-400 text-sm">
+        권한 확인 중...
+      </div>
+    );
+  }
+  if (!canView) return null;
 
   useEffect(() => {
     if (data?.month) {
@@ -845,7 +864,9 @@ export default function PlanningBoardClient() {
                                 {operationalMetrics.baselineHeadcount.toLocaleString("ko-KR")}
                               </p>
                             )}
-                            <p className="text-[10px] text-slate-500 mt-1">활성 프로필 {operationalMetrics.totalMembers}명 (참고)</p>
+                            <p className="text-[10px] text-slate-500 mt-1">
+                              현장 인원 집계(100~199조직, 워커·준매니저·매니저, test·admin 로그인 제외) {operationalMetrics.totalMembers}명 (참고)
+                            </p>
                             {canEdit ? (
                               <p className="text-[10px] text-slate-600 mt-1 leading-snug">월별로 다를 때만 숫자 바꾼 뒤 적용하세요.</p>
                             ) : null}

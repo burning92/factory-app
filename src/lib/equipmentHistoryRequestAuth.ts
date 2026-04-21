@@ -6,7 +6,7 @@ const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 export type EquipmentHistoryAuthedClient = {
   client: SupabaseClient;
   userId: string;
-  role: "worker" | "manager" | "admin" | undefined;
+  role: "worker" | "assistant_manager" | "manager" | "headquarters" | "admin" | undefined;
 };
 
 /** API 라우트: 요청 본문의 세션으로 Supabase 클라이언트·역할 조회 */

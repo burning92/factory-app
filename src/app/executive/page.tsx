@@ -711,7 +711,8 @@ export default function ExecutiveDashboardPage() {
                   </button>
                 }
               >
-                이번 달 평균 투입 인원을 기준 총원(baseline headcount)과 비교한 수치입니다. 활성 프로필 수는 보조값입니다. 생산성은 1인당 하루 평균 생산량입니다.
+                이번 달 평균 투입 인원을 기준 총원(baseline headcount)과 비교한 수치입니다. 참고 인원 수는 회사코드
+                100~199 소속이면서 worker·준매니저·매니저 역할만 집계합니다. 생산성은 1인당 하루 평균 생산량입니다.
               </ExecutivePortalTooltip>
             </div>
             {manpower?.productivityPerPersonDay != null && (
@@ -764,7 +765,7 @@ export default function ExecutiveDashboardPage() {
                       <p className="tabular-nums">
                         평균 투입 인원 {manpower.avgActualManpowerThisMonth?.toFixed(1) ?? "—"}명 · 기준 총원{" "}
                         {manpower.baselineHeadcount}명
-                        <span className="text-slate-500"> (활성 프로필 {manpower.totalMembers}명)</span>
+                        <span className="text-slate-500"> (현장 인원 집계 {manpower.totalMembers}명)</span>
                       </p>
                       <p className="mt-2 flex flex-wrap items-center gap-x-1 tabular-nums text-slate-400">
                         <span>

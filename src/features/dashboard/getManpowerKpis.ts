@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadPlanActualDashboardMetrics } from "@/features/dashboard/planVsActual";
+import {
+  organizationCodeFromProfileRow,
+  profileCountsTowardFieldHeadcount,
+} from "@/lib/profileFieldHeadcount";
 
 export type ManpowerKpis = {
   baselineHeadcount: number;
@@ -19,6 +23,7 @@ export type ManpowerKpis = {
  *
  * 정책(고정):
  * - 총원 기준: production_plan_months.baseline_headcount 우선
+ * - 참고 «활성 프로필» 수: 회사코드 100~199 + worker·assistant_manager·manager (로그인 test·admin 계열 제외)
  * - 가동일 기준: actual_manpower > 0 인 날짜
  * - 평균 투입 인원: 가동일의 actual_manpower 평균
  * - 평균 투입률: 평균 투입 인원 / baseline_headcount
@@ -43,16 +48,34 @@ export async function getManpowerKpis(
       ? `${year}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`
       : `${year}-12-31`;
 
-  const [{ data: months, error: monthErr }, { count: totalMembers, error: memberErr }] = await Promise.all([
+  const [{ data: months, error: monthErr }, { data: profileRows, error: memberErr }] = await Promise.all([
     supabase
       .from("production_plan_months")
       .select("id,plan_month,baseline_headcount")
       .eq("plan_year", year)
       .eq("version_type", "master"),
-    supabase.from("profiles").select("id", { count: "exact", head: true }).eq("is_active", true),
+    supabase
+      .from("profiles")
+      .select("id,login_id,role,is_active,organizations(organization_code)")
+      .eq("is_active", true),
   ]);
   if (monthErr) throw monthErr;
   if (memberErr) throw memberErr;
+
+  const totalMembers = (profileRows ?? []).filter((row) => {
+    const r = row as {
+      login_id?: string | null;
+      role?: string | null;
+      is_active?: boolean | null;
+      organizations?: { organization_code?: string | null } | { organization_code?: string | null }[] | null;
+    };
+    return profileCountsTowardFieldHeadcount({
+      isActive: r.is_active !== false,
+      role: r.role,
+      organizationCode: organizationCodeFromProfileRow(r.organizations),
+      loginId: r.login_id,
+    });
+  }).length;
 
   const monthRows = (months ?? []) as Array<{ id: string; plan_month: number; baseline_headcount: number | null }>;
   const currentMonthRow = monthRows.find((m) => Number(m.plan_month) === month);
@@ -61,7 +84,7 @@ export async function getManpowerKpis(
   if (monthIds.length === 0) {
     return {
       baselineHeadcount,
-      totalMembers: totalMembers ?? 0,
+      totalMembers,
       operatingDaysThisMonth: 0,
       operatingDaysYearToDate: 0,
       avgActualManpowerThisMonth: null,
@@ -119,7 +142,7 @@ export async function getManpowerKpis(
 
   return {
     baselineHeadcount,
-    totalMembers: totalMembers ?? 0,
+    totalMembers,
     operatingDaysThisMonth: monthValues.length,
     operatingDaysYearToDate: ytdValues.length,
     avgActualManpowerThisMonth,

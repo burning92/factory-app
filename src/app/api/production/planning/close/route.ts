@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
   const { data: me, error: meErr } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  if (meErr || !me || (me.role !== "admin" && me.role !== "manager")) {
+  if (meErr || !me || (me.role !== "admin" && me.role !== "manager" && me.role !== "headquarters")) {
     return NextResponse.json({ error: "권한 없음" }, { status: 403 });
   }
 

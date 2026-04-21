@@ -24,22 +24,22 @@ export function materialKey(category: HarangCategory, itemId: string): MaterialK
   return `${category}:${itemId}`;
 }
 
-/** 본사(100) 생산요청 등록·취소 등 (manager·admin만, worker 제외) */
+/** 본사(100) 생산요청 등록·취소 등 (manager·headquarters·admin, worker 제외) */
 export function canManageHqHarangProductionRequests(
   organizationCode: string | null | undefined,
   role: Profile["role"] | null | undefined,
 ): boolean {
   if (organizationCode === "000" && role === "admin") return true;
-  return organizationCode === "100" && (role === "manager" || role === "admin");
+  return organizationCode === "100" && (role === "manager" || role === "headquarters" || role === "admin");
 }
 
-/** 하랑(200) 생산 반영 UI (manager·worker). admin은 별도로 항상 허용하는 쪽에서 처리 */
+/** 하랑(200) 생산 반영 UI (manager·worker·assistant_manager). admin은 별도로 항상 허용하는 쪽에서 처리 */
 export function canApplyHarangProductionRequestLine(
   organizationCode: string | null | undefined,
   role: Profile["role"] | null | undefined,
 ): boolean {
   if (role === "admin") return true;
-  return organizationCode === "200" && (role === "manager" || role === "worker");
+  return organizationCode === "200" && (role === "manager" || role === "worker" || role === "assistant_manager");
 }
 
 /** 품목별 현재고 합계 (LOT 합산) */

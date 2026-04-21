@@ -79,7 +79,8 @@ export default function PlanningPrintPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { profile, loading: authLoading } = useAuth();
-  const canView = profile?.role === "admin" || profile?.role === "manager";
+  const canView =
+    profile?.role === "admin" || profile?.role === "manager" || profile?.role === "headquarters";
 
   const loadMonth = useCallback(async () => {
     if (authLoading) return;

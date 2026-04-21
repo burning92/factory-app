@@ -55,7 +55,7 @@ export async function POST(request: Request) {
   }
 
   const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  if (!profile || (profile.role !== "admin" && profile.role !== "manager")) {
+  if (!profile || (profile.role !== "admin" && profile.role !== "manager" && profile.role !== "headquarters")) {
     return NextResponse.json({ error: "관리자·매니저만 업로드할 수 있습니다." }, { status: 403 });
   }
 

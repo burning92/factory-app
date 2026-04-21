@@ -10,7 +10,8 @@ export default function ExecutiveEcountImportPage() {
   const router = useRouter();
   const { profile, loading: authLoading } = useAuth();
   const canView = !!profile;
-  const canPaste = profile?.role === "admin" || profile?.role === "manager";
+  const canPaste =
+    profile?.role === "admin" || profile?.role === "manager" || profile?.role === "headquarters";
 
   const [paste, setPaste] = useState("");
   const [dateFrom, setDateFrom] = useState("2024-01-02");
@@ -82,12 +83,6 @@ export default function ExecutiveEcountImportPage() {
         프로젝트 폴더에 파일을 넣을 필요는 없습니다. 엑셀에서 이카운트 자료 영역을 복사한 뒤 아래에
         붙여 넣으면 됩니다. 파일 이름도 따로 정할 필요 없습니다.
       </p>
-      {!canPaste && (
-        <p className="text-sm text-amber-200/90 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 mb-4">
-          이 화면의 <strong className="font-semibold">저장</strong>은 관리자·매니저만 사용할 수 있습니다. 일반
-          계정은 안내만 확인해 주세요.
-        </p>
-      )}
       <ul className="text-xs text-slate-600 space-y-1 mb-6 list-disc pl-5">
         <li>
           엑셀에서 <strong className="text-slate-500">열 전체를 선택해 복사</strong>하면 칸 사이가 탭으로

@@ -24,6 +24,8 @@ export function canonicalizeEcountProductName(nameRaw: string): string {
   }
   if (n.includes("마르게리따-2")) return "마르게리따";
   if (n.includes("우주인피자 트리플치즈 라구")) return "트리플치즈 라구";
+  // 트리플치즈 라구: 계획/실적 소스별 띄어쓰기 차이를 하나의 키로 통합
+  if (n.includes("트리플치즈라구") || n.includes("트리플치즈 라구")) return "트리플치즈 라구";
   if (n.includes("조선호텔 고르곤졸라 피자")) return "조선호텔 고르곤졸라";
   if (n.includes("시금치 베이컨 리코타")) return "시금치베이컨리코타";
   if (n.includes("멜팅치즈피자")) return "멜팅치즈";

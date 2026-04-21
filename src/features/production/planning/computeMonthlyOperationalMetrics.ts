@@ -4,7 +4,7 @@ import { monthDays, ymd } from "./calculations";
 export type MonthlyOperationalMetrics = {
   /** 기준 인원(월 헤더) */
   baselineHeadcount: number;
-  /** 활성 프로필 수(참고) */
+  /** 현장 인원 집계: 100~199조직·현장 직군, 로그인 test·admin 계열 제외 (참고) */
   totalMembers: number;
   /**
    * 해당 월에서 생산 수량이 1건이라도 있는 날짜 수.

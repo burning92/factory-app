@@ -28,7 +28,7 @@ export async function deleteEquipmentHistoryRecord(recordId: string, session: Se
   return { ok: true };
 }
 
-/** 결과 이력 1건 삭제 — API 경유 (manager·admin) */
+/** 결과 이력 1건 삭제 — API 경유 (manager·headquarters·admin) */
 export async function deleteEquipmentHistoryUpdate(updateId: string, session: Session | null): Promise<{ ok: true } | { error: string }> {
   if (!session?.access_token || !session.refresh_token) {
     return { error: "로그인이 필요합니다." };

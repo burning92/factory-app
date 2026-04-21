@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { canRegisterEquipmentIncident } from "@/features/daily/equipmentIncidentPermissions";
 import { supabase } from "@/lib/supabase";
@@ -45,7 +44,6 @@ function statusBadgeClass(s: LogStatus): string {
 }
 
 export default function DailyManufacturingEquipmentListPage() {
-  const searchParams = useSearchParams();
   const { viewOrganizationCode, profile } = useAuth();
   const canRegisterIncident = canRegisterEquipmentIncident(profile?.role);
   const [logs, setLogs] = useState<LogRow[]>([]);
@@ -75,18 +73,6 @@ export default function DailyManufacturingEquipmentListPage() {
   useEffect(() => {
     fetchLogs();
   }, [fetchLogs]);
-
-  useEffect(() => {
-    if (searchParams.get("incident") === "restricted") {
-      setToast({
-        message: "설비 이상 등록은 관리자·매니저 권한에서만 가능합니다.",
-        error: true,
-      });
-      if (typeof window !== "undefined") {
-        window.history.replaceState(null, "", "/daily/manufacturing-equipment");
-      }
-    }
-  }, [searchParams]);
 
   const getRowHref = (log: LogRow) => {
     if (log.status === "draft" || log.status === "rejected") return `/daily/manufacturing-equipment/${log.id}/edit`;

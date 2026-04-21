@@ -18,7 +18,7 @@ import type { Organization, OrganizationUISettings, Profile } from "@/types/auth
 
 const AUTH_EMAIL_SUFFIX = ".local";
 
-/** manager/admin만 전환 가능한 보기용 조직 코드 */
+/** manager/headquarters/admin만 전환 가능한 보기용 조직 코드 */
 const SWITCHABLE_ORG_CODES = ["100", "200"] as const;
 
 interface AuthState {
@@ -26,16 +26,16 @@ interface AuthState {
   profile: Profile | null;
   organization: Organization | null;
   uiSettings: OrganizationUISettings | null;
-  /** 보기용 조직 코드. worker는 로그인 조직으로 고정, manager/admin만 전환 가능 */
+  /** 보기용 조직 코드. worker는 로그인 조직으로 고정, manager/headquarters/admin만 전환 가능 */
   viewOrganizationCode: string | null;
   loading: boolean;
   error: string | null;
 }
 
 interface AuthContextValue extends AuthState {
-  /** manager/admin만 true. 조직 전환 버튼 노출 여부 등에 사용 */
+  /** manager/headquarters/admin만 true. 조직 전환 버튼 노출 여부 등에 사용 */
   canSwitchOrganization: boolean;
-  /** manager/admin만 유효. "100" 또는 "200"으로 보기용 조직 전환. 그 외 값은 무시 */
+  /** manager/headquarters/admin만 유효. "100" 또는 "200"으로 보기용 조직 전환. 그 외 값은 무시 */
   setViewOrganizationCodeSafe: (code: string) => void;
   signIn: (
     organizationCode: string,
@@ -320,11 +320,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, error: null }));
   }, []);
 
-  /** 스위처를 끈 동안 manager/admin 보기는 AFF(100)로 고정 */
+  /** 스위처를 끈 동안 manager/headquarters/admin 보기는 AFF(100)로 고정 */
   useEffect(() => {
     if (SHOW_ORGANIZATION_VIEW_SWITCHER) return;
     const role = state.profile?.role;
-    if (role !== "manager" && role !== "admin") return;
+    if (role !== "manager" && role !== "headquarters" && role !== "admin") return;
     if (state.viewOrganizationCode === "100" || state.viewOrganizationCode == null) return;
     setState((prev) => ({ ...prev, viewOrganizationCode: "100" }));
   }, [
@@ -355,7 +355,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const canSwitchOrganization =
-    (state.profile?.role === "manager" || state.profile?.role === "admin") &&
+    (state.profile?.role === "manager" ||
+      state.profile?.role === "headquarters" ||
+      state.profile?.role === "admin") &&
     state.organization?.organization_code !== "200";
 
   const setViewOrganizationCodeSafe = useCallback((code: string) => {

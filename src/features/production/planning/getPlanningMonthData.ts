@@ -1,4 +1,8 @@
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
+import {
+  organizationCodeFromProfileRow,
+  profileCountsTowardFieldHeadcount,
+} from "@/lib/profileFieldHeadcount";
 import type {
   PlanningBomRow,
   PlanningEntryRow,
@@ -96,7 +100,10 @@ export async function getPlanningMonthData(year: number, month: number, version:
       .from("ecount_inventory_current")
       .select("item_code,qty,box_weight_g,unit_weight_g")
       .not("item_code", "is", null),
-    supabase.from("profiles").select("id,display_name,login_id").eq("is_active", true),
+    supabase
+      .from("profiles")
+      .select("id,display_name,login_id,role,is_active,organizations(organization_code)")
+      .eq("is_active", true),
   ]);
   if (leavesRes.error) throw leavesRes.error;
 
@@ -183,7 +190,25 @@ export async function getPlanningMonthData(year: number, month: number, version:
     new Set((monthsRes.data ?? []).map((r) => String((r as { version_type?: string }).version_type ?? "master")))
   ).filter((v): v is PlanningVersionType => v === "master" || v === "draft" || v === "end");
 
-  const people = ((profilesRes.data ?? []) as { id: string; display_name: string | null; login_id: string | null }[])
+  const profileRows = (profilesRes.data ?? []) as Array<{
+    id: string;
+    display_name: string | null;
+    login_id: string | null;
+    role?: string | null;
+    is_active?: boolean | null;
+    organizations?: { organization_code?: string | null } | { organization_code?: string | null }[] | null;
+  }>;
+
+  const fieldHeadcountProfiles = profileRows.filter((p) =>
+    profileCountsTowardFieldHeadcount({
+      isActive: p.is_active !== false,
+      role: p.role,
+      organizationCode: organizationCodeFromProfileRow(p.organizations),
+      loginId: p.login_id,
+    })
+  );
+
+  const people = fieldHeadcountProfiles
     .map((p) => ({
       id: p.id,
       name: (p.display_name ?? "").trim() || (p.login_id ?? "").trim(),
@@ -204,6 +229,6 @@ export async function getPlanningMonthData(year: number, month: number, version:
     bomRows,
     submaterialRows,
     inventoryRows,
-    totalMembers: (profilesRes.data ?? []).length,
+    totalMembers: fieldHeadcountProfiles.length,
   };
 }

@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import Header from "./Header";
 import MobileTabBar from "./MobileTabBar";
+import { isAffRestrictedWorkerRole, isAffWorkerAllowedPath } from "@/lib/affWorkerRouteAccess";
 
 const LOGIN_PATH = "/login";
 const CHANGE_PASSWORD_PATH = "/login/change-password";
@@ -50,7 +51,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, profile, loading, uiSettings, viewOrganizationCode, organization } = useAuth();
   const isHarangOrgAccount = organization?.organization_code === "200";
   const isHeadquartersOpsUser =
-    organization?.organization_code === "100" && (profile?.role === "manager" || profile?.role === "admin");
+    organization?.organization_code === "100" &&
+    (profile?.role === "manager" || profile?.role === "headquarters" || profile?.role === "admin");
   const isGlobalAdmin000 = organization?.organization_code === "000" && profile?.role === "admin";
   const isLoginPage = pathname === LOGIN_PATH;
   const isChangePasswordPage = pathname === CHANGE_PASSWORD_PATH;
@@ -79,19 +81,23 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (isHarangOrgAccount && path && path !== "/" && !path.startsWith("/harang") && !path.startsWith("/account")) {
       return;
     }
+    if (isAffRestrictedWorkerRole(profile.role) && path && path !== "/" && !isAffWorkerAllowedPath(path)) {
+      router.replace("/production");
+      return;
+    }
     if (path && path !== "/") {
       router.replace(path);
     }
   }, [user, profile, uiSettings?.default_landing_path, pathname, router, isHarangOrgAccount]);
 
-  /** 설비 이상 등록: worker URL 직접 접근 차단 */
+  /** 설비 이상 등록: worker/assistant_manager URL 직접 접근 차단 */
   useEffect(() => {
     if (loading || !profile) return;
     if (
       pathname === "/daily/manufacturing-equipment/incident/new" &&
-      profile.role === "worker"
+      (profile.role === "worker" || profile.role === "assistant_manager")
     ) {
-      router.replace("/daily/manufacturing-equipment?incident=restricted");
+      router.replace("/daily/manufacturing-equipment");
     }
   }, [loading, profile, pathname, router]);
 
@@ -135,6 +141,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     })().catch(() => {});
   }, [loading, user, profile, pathname]);
 
+  /** AFF: 워커는 생산계획·재고/출고현황·대시보드·계정만 (데일리 등 직접 URL 차단) */
+  useEffect(() => {
+    if (loading || !profile) return;
+    if (!isAffRestrictedWorkerRole(profile.role)) return;
+    if (pathname === LOGOUT_PATH || pathname === LOGIN_PATH || isChangePasswordPage) return;
+    if (pathname.startsWith("/harang")) return;
+    if (isAffWorkerAllowedPath(pathname)) return;
+    router.replace("/production");
+  }, [loading, profile, pathname, router, isChangePasswordPage]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-space-900">
@@ -163,6 +179,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     router.replace("/account");
     return null;
   }
+
   if (pathname === "/harang" || pathname.startsWith("/harang/")) {
     const allowHarang =
       viewOrganizationCode === "200" ||
