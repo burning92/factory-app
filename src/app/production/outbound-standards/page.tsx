@@ -55,6 +55,9 @@ export default function OutboundStandardsPage() {
     { id: "r0", materialName: "", standardGPerEa: "", basis: "완제품" },
   ]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [quickAddByProduct, setQuickAddByProduct] = useState<
+    Record<string, { materialName: string; standardGPerEa: string; basis: "완제품" | "도우" }>
+  >({});
 
   useEffect(() => {
     fetchMaterials();
@@ -174,6 +177,36 @@ export default function OutboundStandardsPage() {
       await deleteOutboundStandardRow(id);
     } catch {
       alert("삭제에 실패했습니다.");
+    }
+  };
+
+  const handleQuickAddForProduct = async (productName: string, list: OutboundStandard[]) => {
+    const draft = quickAddByProduct[productName] ?? { materialName: "", standardGPerEa: "", basis: "완제품" };
+    const materialName = draft.materialName.trim();
+    const standard = Number.parseFloat(draft.standardGPerEa);
+    if (!materialName || !Number.isFinite(standard) || standard < 0) {
+      alert("원료와 출고 기준(g)을 올바르게 입력해 주세요.");
+      return;
+    }
+    if (list.some((x) => x.materialName === materialName && x.basis === draft.basis)) {
+      alert("이미 같은 원료·기준 조합이 등록되어 있습니다.");
+      return;
+    }
+    try {
+      await addOutboundStandardRows([
+        {
+          productName,
+          materialName,
+          standardGPerEa: standard,
+          basis: draft.basis,
+        },
+      ]);
+      setQuickAddByProduct((prev) => ({
+        ...prev,
+        [productName]: { materialName: "", standardGPerEa: "", basis: "완제품" },
+      }));
+    } catch {
+      alert("원료 추가에 실패했습니다.");
     }
   };
 
@@ -329,33 +362,104 @@ export default function OutboundStandardsPage() {
                     {open ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
                   </button>
                   {open && (
-                    <ul className="divide-y divide-slate-700">
-                      {sorted.map((row) => (
-                        <li key={row.id} className="px-4 py-3 flex items-center gap-3">
-                          <div className="min-w-0 flex-1">
-                            <p className="text-slate-100 font-medium">{row.materialName}</p>
-                            <p className="text-xs text-slate-500">기준: {row.basis}</p>
-                          </div>
-                          <p className="text-cyan-300 font-semibold tabular-nums text-sm whitespace-nowrap">
-                            {row.standardGPerEa}g/ea
-                          </p>
+                    <div>
+                      <ul className="divide-y divide-slate-700">
+                        {sorted.map((row) => (
+                          <li key={row.id} className="px-4 py-3 flex items-center gap-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-slate-100 font-medium">{row.materialName}</p>
+                              <p className="text-xs text-slate-500">기준: {row.basis}</p>
+                            </div>
+                            <p className="text-cyan-300 font-semibold tabular-nums text-sm whitespace-nowrap">
+                              {row.standardGPerEa}g/ea
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => handleInlineEdit(row)}
+                              className="px-2 py-1 rounded border border-slate-600 text-xs text-slate-300 hover:border-cyan-500/50 hover:text-cyan-300"
+                            >
+                              수정
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(row.id)}
+                              className="px-2 py-1 rounded border border-slate-600 text-xs text-slate-300 hover:border-red-500/50 hover:text-red-300"
+                            >
+                              삭제
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="border-t border-slate-700 px-4 py-3 bg-space-900/30">
+                        <p className="text-xs font-medium text-slate-400 mb-2">원료 추가</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px_110px_64px] gap-2">
+                          <select
+                            value={quickAddByProduct[productName]?.materialName ?? ""}
+                            onChange={(e) =>
+                              setQuickAddByProduct((prev) => ({
+                                ...prev,
+                                [productName]: {
+                                  materialName: e.target.value,
+                                  standardGPerEa: prev[productName]?.standardGPerEa ?? "",
+                                  basis: prev[productName]?.basis ?? "완제품",
+                                },
+                              }))
+                            }
+                            className="w-full px-3 py-2 bg-space-900 border border-slate-600 rounded-lg text-slate-100 text-sm"
+                          >
+                            <option value="">원료 선택</option>
+                            {materialOptions.map((m) => (
+                              <option key={m} value={m}>
+                                {m}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={quickAddByProduct[productName]?.standardGPerEa ?? ""}
+                            onChange={(e) =>
+                              setQuickAddByProduct((prev) => ({
+                                ...prev,
+                                [productName]: {
+                                  materialName: prev[productName]?.materialName ?? "",
+                                  standardGPerEa: e.target.value,
+                                  basis: prev[productName]?.basis ?? "완제품",
+                                },
+                              }))
+                            }
+                            placeholder="기준(g)"
+                            className="w-full px-3 py-2 bg-space-900 border border-slate-600 rounded-lg text-slate-100 text-sm tabular-nums"
+                          />
+                          <select
+                            value={quickAddByProduct[productName]?.basis ?? "완제품"}
+                            onChange={(e) =>
+                              setQuickAddByProduct((prev) => ({
+                                ...prev,
+                                [productName]: {
+                                  materialName: prev[productName]?.materialName ?? "",
+                                  standardGPerEa: prev[productName]?.standardGPerEa ?? "",
+                                  basis: e.target.value as "완제품" | "도우",
+                                },
+                              }))
+                            }
+                            className="w-full px-3 py-2 bg-space-900 border border-slate-600 rounded-lg text-slate-100 text-sm"
+                          >
+                            <option value="완제품">완제품</option>
+                            <option value="도우">도우</option>
+                          </select>
                           <button
                             type="button"
-                            onClick={() => handleInlineEdit(row)}
-                            className="px-2 py-1 rounded border border-slate-600 text-xs text-slate-300 hover:border-cyan-500/50 hover:text-cyan-300"
+                            onClick={() => handleQuickAddForProduct(productName, sorted)}
+                            disabled={isSaving}
+                            className="px-3 py-2 rounded-lg bg-cyan-500 text-space-900 text-sm font-medium hover:bg-cyan-400 disabled:opacity-50"
                           >
-                            수정
+                            추가
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(row.id)}
-                            className="px-2 py-1 rounded border border-slate-600 text-xs text-slate-300 hover:border-red-500/50 hover:text-red-300"
-                          >
-                            삭제
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
               );

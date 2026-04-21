@@ -25,7 +25,6 @@ const DESKTOP_DROPDOWN_PRODUCTION: DropdownItem[] = [
 const DESKTOP_DROPDOWN_MATERIALS: DropdownItem[] = [
   { href: "/inventory/ecount", label: "재고 현황" },
   { href: "/production/outbound", label: "원료 생산 출고 입력" },
-  { href: "/production/outbound-standards", label: "제품 출고 기준 관리" },
   { href: "/production/outbound-history", label: "원료 생산 출고 현황" },
   { href: "/daily/raw-thawing", label: "원료 해동 일지" },
   { href: "/daily/material-receiving-inspection", label: "원료 입고 검수일지" },
@@ -60,6 +59,7 @@ const DESKTOP_DROPDOWN_DAILY_BLOCKS: DailyDropdownBlock[] = [
 
 const DESKTOP_DROPDOWN_MANAGEMENT: DropdownItem[] = [
   { href: "/production/admin", label: "제품정보관리" },
+  { href: "/production/outbound-standards", label: "제품 출고 기준 관리" },
   { href: "/manage", label: "사용자관리" },
   { href: "/manage/leave", label: "연월차관리" },
   { href: "/admin/equipment", label: "제조설비등록" },

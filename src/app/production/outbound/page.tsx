@@ -168,6 +168,17 @@ function formatRequiredQty(row: OutboundRow | null | undefined): string {
   return parts.length ? parts.join(" ") : "0박스";
 }
 
+function formatStandardRequiredQty(row: OutboundStandardPreviewRow | null | undefined): string {
+  if (!row) return "";
+  if (row.quantityType === "g_only") {
+    return `${row.totalG.toLocaleString()}g`;
+  }
+  if (row.quantityType === "ea_only") {
+    return `${row.bagQty.toLocaleString()}개`;
+  }
+  return `${row.boxQty.toLocaleString()}박스 ${row.bagQty.toLocaleString()}개`;
+}
+
 /** 실제 총 출고량(g) = (출고 박스 * 박스용량) + (출고 낱개 * 낱개용량) + 출고 잔량(g) */
 function calcActualOutboundG(
   entries: { boxQty: number; bagQty: number; remainderG: number }[],
@@ -257,6 +268,7 @@ function OutboundModal({
   materialName,
   inventoryItemCode,
   requiredText,
+  standardRequiredText,
   defaultExpiryDate,
   initialEntries,
   quantityType,
@@ -266,6 +278,7 @@ function OutboundModal({
   materialName: string;
   inventoryItemCode?: string;
   requiredText: string;
+  standardRequiredText?: string;
   defaultExpiryDate: string;
   initialEntries?: { expiryDate: string; boxQty: number; bagQty: number; remainderG: number }[];
   quantityType: "g_only" | "ea_only" | "box_ea";
@@ -413,7 +426,13 @@ function OutboundModal({
       >
         <div className="p-5 border-b border-slate-600">
           <h3 className="text-lg font-bold text-slate-100">{materialName || "원료"}</h3>
-          <p className="text-sm text-slate-400 mt-1">필요 수량: {requiredText}</p>
+          <p className="text-sm text-slate-400 mt-1">BOM 필요 수량: {requiredText}</p>
+          {standardRequiredText && (
+            <p className="text-sm text-amber-300 mt-1">
+              출고기준 참고: {standardRequiredText}
+              <span className="text-slate-500 ml-1">(저장 미반영)</span>
+            </p>
+          )}
         </div>
         <div className="p-5 overflow-y-auto flex-1">
           {inventoryHint && (
@@ -1147,6 +1166,7 @@ export default function OutboundPage() {
             materialName={String(modal.row.materialName ?? "")}
             inventoryItemCode={materials.find((m) => m.materialName === String(modal.row.materialName ?? ""))?.inventoryItemCode}
             requiredText={formatRequiredQty(modal.row)}
+            standardRequiredText={formatStandardRequiredQty(standardPreviewByMaterial.get(String(modal.row.materialName ?? "")))}
             defaultExpiryDate={getDefaultExpiry(modal.row.materialName)}
             initialEntries={Array.isArray(pendingOutbound[modal.row.materialName]?.entries) ? pendingOutbound[modal.row.materialName].entries : undefined}
             quantityType={modal.row.quantityType === "g_only" || modal.row.quantityType === "ea_only" || modal.row.quantityType === "box_ea" ? modal.row.quantityType : "g_only"}
