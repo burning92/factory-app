@@ -5,6 +5,7 @@ import {
   normalizeMasterRows,
   normalizeInventoryRows,
 } from "@/features/ecount/sync/normalizeInventory";
+import { getErrorMessage } from "@/lib/getErrorMessage";
 
 const SYNC_NAME = "ecount_inventory";
 
@@ -125,7 +126,7 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = getErrorMessage(err);
     await supabase.from("ecount_sync_status").upsert(
       {
         sync_name: SYNC_NAME,

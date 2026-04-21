@@ -96,7 +96,7 @@ export interface ProductionLog {
   dough_data?: DoughProcessData;
 }
 
-type SavingKind = "" | "materials" | "bom" | "planningSubmaterial" | "doughBom" | "logs";
+type SavingKind = "" | "materials" | "bom" | "planningSubmaterial" | "doughBom" | "outboundStandard" | "logs";
 
 /** 도우 BOM: 밀가루 1kg 기준 부재료(g). 1포대당 생산 수량으로 권장 포대 수 계산 */
 export interface DoughBom {
@@ -109,6 +109,15 @@ export interface DoughBom {
   oil: number;
   sugar: number;
   improver: number;
+}
+
+/** 제품별 출고 기준(참고용): BOM과 분리된 g/ea */
+export interface OutboundStandard {
+  id: string;
+  productName: string;
+  materialName: string;
+  standardGPerEa: number;
+  basis: "완제품" | "도우";
 }
 
 /** Independent dough log keyed by usage_date (사용일자). Used for auto-join on production date when printing journal. */
@@ -177,6 +186,7 @@ interface MasterState {
   materials: Material[];
   planningSubmaterialItems: PlanningSubmaterialItem[];
   bomList: BomRow[];
+  outboundStandards: OutboundStandard[];
   planningSubmaterials: PlanningSubmaterialRow[];
   /** 도우 BOM 목록 (반죽사용량 입력 페이지 드롭다운·배합 비율 계산) */
   doughBoms: DoughBom[];
@@ -191,6 +201,7 @@ interface MasterState {
   materialsLoading: boolean;
   planningSubmaterialItemsLoading: boolean;
   bomLoading: boolean;
+  outboundStandardsLoading: boolean;
   planningSubmaterialsLoading: boolean;
   doughBomsLoading: boolean;
   productionLogsLoading: boolean;
@@ -205,6 +216,7 @@ interface MasterState {
   updatePlanningSubmaterialItem: (id: string, patch: Partial<Omit<PlanningSubmaterialItem, "id">>) => Promise<void>;
   deletePlanningSubmaterialItem: (id: string) => Promise<void>;
   fetchBom: () => Promise<void>;
+  fetchOutboundStandards: () => Promise<void>;
   fetchPlanningSubmaterials: () => Promise<void>;
   addPlanningSubmaterialRows: (rows: Omit<PlanningSubmaterialRow, "id">[]) => Promise<void>;
   updatePlanningSubmaterialRow: (id: string, patch: Partial<Omit<PlanningSubmaterialRow, "id">>) => Promise<void>;
@@ -256,6 +268,9 @@ interface MasterState {
   addBomRows: (rows: Omit<BomRow, "id">[]) => Promise<void>;
   updateBomRow: (id: string, patch: Partial<Omit<BomRow, "id">>) => Promise<void>;
   deleteBomRow: (id: string) => Promise<void>;
+  addOutboundStandardRows: (rows: Omit<OutboundStandard, "id">[]) => Promise<void>;
+  updateOutboundStandardRow: (id: string, patch: Partial<Omit<OutboundStandard, "id">>) => Promise<void>;
+  deleteOutboundStandardRow: (id: string) => Promise<void>;
 
   addProductionLog: (log: Omit<ProductionLog, "id" | "상태"> & { 상태?: "출고됨" }) => Promise<void>;
   closeProductionLog: (id: string, patch: { 실사용량_g: number; 상태: "마감완료"; 작업자?: string; 작성자2?: string; 반죽량?: number; 반죽폐기량?: number; 전일재고_g?: number; 당일잔량_g?: number; 출고_라인?: OutboundLine[] }) => Promise<void>;
@@ -308,6 +323,22 @@ function mapBomFromDb(row: { id: string; product_name: string; material_name: st
     productName: row.product_name,
     materialName: row.material_name,
     bomGPerEa: row.bom_g_per_ea ?? 0,
+    basis: row.basis,
+  };
+}
+
+function mapOutboundStandardFromDb(row: {
+  id: string;
+  product_name: string;
+  material_name: string;
+  standard_g_per_ea: number;
+  basis: "완제품" | "도우";
+}): OutboundStandard {
+  return {
+    id: row.id,
+    productName: row.product_name,
+    materialName: row.material_name,
+    standardGPerEa: row.standard_g_per_ea ?? 0,
     basis: row.basis,
   };
 }
@@ -530,6 +561,7 @@ export const useMasterStore = create<MasterState>((set, get) => ({
   materials: [],
   planningSubmaterialItems: [],
   bomList: [],
+  outboundStandards: [],
   planningSubmaterials: [],
   doughBoms: [],
   productionLogs: [],
@@ -543,6 +575,7 @@ export const useMasterStore = create<MasterState>((set, get) => ({
   materialsLoading: false,
   planningSubmaterialItemsLoading: false,
   bomLoading: false,
+  outboundStandardsLoading: false,
   planningSubmaterialsLoading: false,
   doughBomsLoading: false,
   productionLogsLoading: false,
@@ -672,6 +705,27 @@ export const useMasterStore = create<MasterState>((set, get) => ({
       set({
         bomLoading: false,
         error: err instanceof Error ? err.message : "BOM 목록을 불러오지 못했습니다.",
+      });
+    }
+  },
+
+  fetchOutboundStandards: async () => {
+    set({ outboundStandardsLoading: true, error: null });
+    try {
+      const { data, error: e } = await supabase
+        .from("outbound_standards")
+        .select("id, product_name, material_name, standard_g_per_ea, basis")
+        .order("product_name")
+        .order("material_name");
+      if (e) throw e;
+      set({
+        outboundStandards: (data ?? []).map(mapOutboundStandardFromDb),
+        outboundStandardsLoading: false,
+      });
+    } catch (err) {
+      set({
+        outboundStandardsLoading: false,
+        error: err instanceof Error ? err.message : "출고 기준 목록을 불러오지 못했습니다.",
       });
     }
   },
@@ -1443,6 +1497,75 @@ export const useMasterStore = create<MasterState>((set, get) => ({
       set({
         saving: "",
         error: err instanceof Error ? err.message : "BOM 삭제에 실패했습니다.",
+      });
+      throw err;
+    }
+  },
+
+  addOutboundStandardRows: async (rows) => {
+    set({ saving: "outboundStandard", error: null });
+    try {
+      const inserts = rows.map((r) => ({
+        product_name: r.productName,
+        material_name: r.materialName,
+        standard_g_per_ea: r.standardGPerEa,
+        basis: r.basis,
+      }));
+      const { data, error: e } = await supabase
+        .from("outbound_standards")
+        .insert(inserts)
+        .select("id, product_name, material_name, standard_g_per_ea, basis");
+      if (e) throw e;
+      const newRows = (data ?? []).map(mapOutboundStandardFromDb);
+      set((state) => ({
+        outboundStandards: [...state.outboundStandards, ...newRows],
+        saving: "",
+      }));
+    } catch (err) {
+      set({
+        saving: "",
+        error: err instanceof Error ? err.message : "출고 기준 등록에 실패했습니다.",
+      });
+      throw err;
+    }
+  },
+
+  updateOutboundStandardRow: async (id, patch) => {
+    set({ saving: "outboundStandard", error: null });
+    try {
+      const payload: Record<string, unknown> = {};
+      if (patch.productName != null) payload.product_name = patch.productName;
+      if (patch.materialName != null) payload.material_name = patch.materialName;
+      if (patch.standardGPerEa != null) payload.standard_g_per_ea = patch.standardGPerEa;
+      if (patch.basis != null) payload.basis = patch.basis;
+      const { error: e } = await supabase.from("outbound_standards").update(payload).eq("id", id);
+      if (e) throw e;
+      set((state) => ({
+        outboundStandards: state.outboundStandards.map((x) => (x.id === id ? { ...x, ...patch } : x)),
+        saving: "",
+      }));
+    } catch (err) {
+      set({
+        saving: "",
+        error: err instanceof Error ? err.message : "출고 기준 수정에 실패했습니다.",
+      });
+      throw err;
+    }
+  },
+
+  deleteOutboundStandardRow: async (id) => {
+    set({ saving: "outboundStandard", error: null });
+    try {
+      const { error: e } = await supabase.from("outbound_standards").delete().eq("id", id);
+      if (e) throw e;
+      set((state) => ({
+        outboundStandards: state.outboundStandards.filter((x) => x.id !== id),
+        saving: "",
+      }));
+    } catch (err) {
+      set({
+        saving: "",
+        error: err instanceof Error ? err.message : "출고 기준 삭제에 실패했습니다.",
       });
       throw err;
     }

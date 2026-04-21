@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 
 const SIDEBAR_MENUS = [
   { href: "/production/outbound", label: "Stock Output" },
+  { href: "/production/outbound-standards", label: "Outbound Standards" },
   { href: "/production/history", label: "Usage Calculation" },
   { href: "/production/dough-usage", label: "Dough Usage" },
   { href: "/production/admin", label: "Reference Data" },

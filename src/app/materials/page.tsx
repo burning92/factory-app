@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { Boxes, Package, ClipboardList, Refrigerator, PackageSearch } from "lucide-react";
+import { Boxes, Package, ClipboardList, Refrigerator, PackageSearch, SlidersHorizontal } from "lucide-react";
 
 const LINK_ITEMS = [
   { href: "/inventory/ecount", label: "재고 현황", Icon: Boxes },
   { href: "/production/outbound", label: "원료 생산 출고 입력", Icon: Package },
+  { href: "/production/outbound-standards", label: "제품 출고 기준 관리", Icon: SlidersHorizontal },
   { href: "/production/outbound-history", label: "원료 생산 출고 현황", Icon: ClipboardList },
   { href: "/daily/raw-thawing", label: "원료 해동 일지", Icon: Refrigerator },
   { href: "/daily/material-receiving-inspection", label: "원료 입고 검수일지", Icon: PackageSearch },

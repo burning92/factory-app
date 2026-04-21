@@ -50,6 +50,16 @@ interface OutboundRow {
   quantityType: "g_only" | "ea_only" | "box_ea";
 }
 
+interface OutboundStandardPreviewRow {
+  materialName: string;
+  basis: "완제품" | "도우";
+  standardGPerEa: number;
+  totalG: number;
+  boxQty: number;
+  bagQty: number;
+  quantityType: "g_only" | "ea_only" | "box_ea";
+}
+
 function splitProductName(value: string): { baseName: string; option: string } {
   const raw = String(value ?? "").trim();
   const idx = raw.indexOf("-");
@@ -122,6 +132,26 @@ function calcOutbound(
   }
 
   return result;
+}
+
+function calcQuantityFromTotalG(
+  totalG: number,
+  material: { boxWeightG: number; unitWeightG: number } | undefined
+): Pick<OutboundStandardPreviewRow, "boxQty" | "bagQty" | "quantityType"> {
+  if (!material) return { boxQty: 0, bagQty: 0, quantityType: "g_only" };
+  const boxWeight = material.boxWeightG ?? 0;
+  const eaWeight = material.unitWeightG ?? 0;
+  const isGOnly = boxWeight === 0 && eaWeight === 0;
+  const isEaOnly = boxWeight === 0 && eaWeight > 0;
+  if (isGOnly) return { boxQty: 0, bagQty: 0, quantityType: "g_only" };
+  if (isEaOnly) return { boxQty: 0, bagQty: eaWeight > 0 ? Math.ceil(totalG / eaWeight) : 0, quantityType: "ea_only" };
+
+  const bagG = eaWeight > 0 ? eaWeight : boxWeight;
+  const bagsPerBox = boxWeight > 0 && bagG > 0 ? Math.floor(boxWeight / bagG) : 1;
+  const totalBagsNeeded = Math.ceil(totalG / bagG);
+  const boxQty = Math.floor(totalBagsNeeded / bagsPerBox);
+  const bagQty = totalBagsNeeded - boxQty * bagsPerBox;
+  return { boxQty, bagQty, quantityType: "box_ea" };
 }
 
 function formatRequiredQty(row: OutboundRow | null | undefined): string {
@@ -506,13 +536,16 @@ export default function OutboundPage() {
   const {
     materials,
     bomList,
+    outboundStandards,
     lastUsedDates,
     materialsLoading,
     bomLoading,
+    outboundStandardsLoading,
     saving,
     error,
     fetchMaterials,
     fetchBom,
+    fetchOutboundStandards,
     fetchLastUsedDates,
     fetchProductionLogs,
     addProductionLog,
@@ -536,8 +569,9 @@ export default function OutboundPage() {
   useEffect(() => {
     fetchMaterials();
     fetchBom();
+    fetchOutboundStandards();
     fetchLastUsedDates();
-  }, [fetchMaterials, fetchBom, fetchLastUsedDates]);
+  }, [fetchMaterials, fetchBom, fetchOutboundStandards, fetchLastUsedDates]);
 
   /** 마운트 시 작성자 최초값: 로그인 사용자명 1순위. 없을 때만 Supabase → localStorage fallback */
   useEffect(() => {
@@ -645,6 +679,42 @@ export default function OutboundPage() {
     const result = calcOutbound(productName.trim(), d, f, bomList, materials);
     setRows(result);
   };
+
+  const standardPreviewRows = useMemo<OutboundStandardPreviewRow[]>(() => {
+    const name = productName.trim();
+    if (!name) return [];
+    const d = isParbakeUse ? 0 : (parseInt(doughQty, 10) || 0);
+    const f = parseInt(finishedQty, 10) || 0;
+    if (isParbakeUse ? f <= 0 : d <= 0 && f <= 0) return [];
+
+    const list = outboundStandards.filter((s) => s.productName === name);
+    return list
+      .map((s) => {
+        const perDough = s.basis === "도우" ? s.standardGPerEa : 0;
+        const perFinished = s.basis === "완제품" ? s.standardGPerEa : 0;
+        const totalG = perDough * d + perFinished * f;
+        const material = materials.find((m) => m.materialName === s.materialName);
+        const qty = calcQuantityFromTotalG(totalG, material);
+        return {
+          materialName: s.materialName,
+          basis: s.basis,
+          standardGPerEa: s.standardGPerEa,
+          totalG,
+          boxQty: qty.boxQty,
+          bagQty: qty.bagQty,
+          quantityType: qty.quantityType,
+        };
+      })
+      .sort((a, b) => a.materialName.localeCompare(b.materialName, "ko"));
+  }, [productName, isParbakeUse, doughQty, finishedQty, outboundStandards, materials]);
+
+  const standardPreviewByMaterial = useMemo(() => {
+    const map = new Map<string, OutboundStandardPreviewRow>();
+    for (const row of standardPreviewRows) {
+      if (!map.has(row.materialName)) map.set(row.materialName, row);
+    }
+    return map;
+  }, [standardPreviewRows]);
 
   const getDefaultExpiry = (materialName: string) =>
     (lastUsedDates ?? {})[String(materialName ?? "")] || todayStr();
@@ -787,7 +857,7 @@ export default function OutboundPage() {
             {error}
           </div>
         )}
-        {(materialsLoading || bomLoading) && (
+        {(materialsLoading || bomLoading || outboundStandardsLoading) && (
           <p className="mb-4 text-slate-400 flex items-center gap-2">
             <span className="inline-block w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
             로딩 중...
@@ -940,6 +1010,20 @@ export default function OutboundPage() {
                         <p className="mt-2 text-right text-sm font-semibold text-cyan-400 tabular-nums">
                           실제 총 출고량: {pending ? actualOutboundG.toLocaleString() : "-"}g
                         </p>
+                        {standardPreviewByMaterial.get(row.materialName) && (() => {
+                          const s = standardPreviewByMaterial.get(row.materialName)!;
+                          return (
+                            <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2">
+                              <p className="text-[11px] text-amber-300 font-medium">출고기준 참고 (저장 미반영)</p>
+                              <p className="text-xs text-slate-300 mt-0.5">
+                                {s.standardGPerEa}g/ea · 기준 {s.basis} · 필요 {s.totalG.toLocaleString()}g
+                              </p>
+                              <p className="text-[11px] text-slate-400 mt-0.5">
+                                환산: {s.quantityType === "g_only" ? "g 전용" : s.quantityType === "ea_only" ? `${s.bagQty.toLocaleString()}개` : `${s.boxQty.toLocaleString()}박스 ${s.bagQty.toLocaleString()}개`}
+                              </p>
+                            </div>
+                          );
+                        })()}
                         <button
                           type="button"
                           onClick={() => openOutboundModal(row)}
@@ -1010,6 +1094,31 @@ export default function OutboundPage() {
                 </div>
               </div>
             </>
+
+            {standardPreviewRows.length > 0 && (
+              <div className="mt-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <h3 className="text-sm font-semibold text-amber-200">출고기준 참고 계산</h3>
+                  <span className="text-[11px] text-amber-300/90">저장 미반영</span>
+                </div>
+                <div className="space-y-2">
+                  {standardPreviewRows.map((s) => (
+                    <div key={`${s.materialName}-${s.basis}`} className="rounded-lg border border-slate-700 bg-space-900/60 px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-medium text-slate-100">{s.materialName}</p>
+                        <p className="text-xs text-slate-400">{s.basis}</p>
+                      </div>
+                      <p className="text-xs text-slate-300 mt-1">
+                        {s.standardGPerEa}g/ea × 수량 = {s.totalG.toLocaleString()}g
+                      </p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        환산: {s.quantityType === "g_only" ? "g 전용" : s.quantityType === "ea_only" ? `${s.bagQty.toLocaleString()}개` : `${s.boxQty.toLocaleString()}박스 ${s.bagQty.toLocaleString()}개`}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="mt-6">
               {saving === "logs" && (
