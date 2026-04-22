@@ -994,9 +994,12 @@ export const useMasterStore = create<MasterState>((set, get) => ({
       }
       set({ lastUsedDates: map, lastUsedDatesLoading: false });
     } catch (err) {
+      // 소비기한 기본값은 보조 데이터이며, 실패 시에도 화면은 "오늘" 기본값으로 동작 가능
+      // (모바일/권한/뷰 미존재 환경에서 진입을 막지 않도록 배너 에러 대신 안전 폴백)
+      console.warn("[fetchLastUsedDates] fallback to today default:", getErrorMessage(err));
       set({
+        lastUsedDates: {},
         lastUsedDatesLoading: false,
-        error: err instanceof Error ? err.message : "소비기한 기본값을 불러오지 못했습니다.",
       });
     }
   },
