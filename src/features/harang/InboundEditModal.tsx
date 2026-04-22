@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { supabase } from "@/lib/supabase";
 import type { HarangCategory, HarangInboundHeader, HarangMasterItem } from "@/features/harang/types";
 import { effectiveRawMaterialUnit } from "@/features/harang/rawMaterialUnit";
@@ -65,6 +66,7 @@ type Props = {
 };
 
 export function InboundEditModal({ open, headerId, readonly = false, onClose, onSaved }: Props) {
+  const [portalReady, setPortalReady] = useState(false);
   const [inboundDate, setInboundDate] = useState("");
   const [inboundNo, setInboundNo] = useState("");
   const [inboundRoute, setInboundRoute] = useState<(typeof ROUTES)[number]>("AF발송");
@@ -74,6 +76,10 @@ export function InboundEditModal({ open, headerId, readonly = false, onClose, on
   const [packagingMaterials, setPackagingMaterials] = useState<HarangMasterItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
 
   const loadMasters = useCallback(async () => {
     const [rawRes, packRes] = await Promise.all([
@@ -296,9 +302,11 @@ export function InboundEditModal({ open, headerId, readonly = false, onClose, on
   };
 
   if (!open) return null;
+  if (!portalReady) return null;
 
-  return (
-    <div className="fixed inset-0 z-[110] overflow-y-auto overscroll-contain bg-black/45">
+  /* AppShell의 <main className="relative z-0"> 때문에 본문 안의 fixed 레이어는 헤더(z-50)보다 아래에 그려짐 → body로 포털 */
+  return createPortal(
+    <div className="fixed inset-0 z-[300] overflow-y-auto overscroll-contain bg-black/45">
       {/* 상단을 넉넉히 비워 헤더·브라우저 UI와 겹쳐 보이지 않게 함 */}
       <div className="flex min-h-[100dvh] w-full flex-col items-center px-4 pb-10 pt-[max(5.5rem,calc(env(safe-area-inset-top,0px)+3.25rem))] sm:px-8 sm:pb-14 sm:pt-[max(6.5rem,calc(env(safe-area-inset-top,0px)+3.5rem))]">
         <div
@@ -629,6 +637,7 @@ export function InboundEditModal({ open, headerId, readonly = false, onClose, on
         </div>
       </div>
     </div>
-  </div>
+  </div>,
+    document.body,
   );
 }
