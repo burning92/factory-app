@@ -442,7 +442,7 @@ export default function HarangProductionRequestDetailPage() {
             <section key={line.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
               <div className="flex flex-wrap justify-between gap-2">
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-900">
+                  <h2 className="text-lg font-semibold text-slate-900 break-words pr-1">
                     {displayHarangProductName(line.product_name)}
                   </h2>
                   <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">

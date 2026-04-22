@@ -207,18 +207,18 @@ export default function HarangProductionRequestsPage() {
                             )
                             .join(" · ");
                     return (
-                      <tr key={r.id} className="border-b border-slate-100">
+                      <tr key={r.id} className="border-b border-slate-100 [&>td]:align-top">
                         <td className="px-3 py-2 font-mono text-xs">{r.request_no}</td>
                         <td className="px-3 py-2">{r.request_date}</td>
                         <td className="px-3 py-2">{r.due_date}</td>
-                        <td className="px-3 py-2 min-w-[220px] max-w-[340px]" title={titleSummary}>
+                        <td className="px-3 py-2 min-w-[220px] max-w-[340px]" title={titleSummary || undefined}>
                           {lines.length === 0 ? (
                             "-"
                           ) : (
                             <div className="space-y-2">
                               {lines.map((l) => (
                                 <div key={l.id} className="space-y-0.5">
-                                  <div className="font-semibold text-slate-900 leading-snug">
+                                  <div className="font-semibold text-slate-900 leading-snug break-words">
                                     {displayHarangProductName(l.product_name)}
                                   </div>
                                   <div className="text-base font-bold tabular-nums text-cyan-900">
@@ -233,13 +233,12 @@ export default function HarangProductionRequestsPage() {
                                     : "text-[11px] text-slate-500"
                                 }
                               >
-                                {lines.length > 1 && (
+                                {lines.length > 1 ? (
                                   <>
                                     합계 요청 {requestedSum.toLocaleString("ko-KR")} · 완료 {producedSum.toLocaleString("ko-KR")} ·
                                     잔여 {remainSum.toLocaleString("ko-KR")}
                                   </>
-                                )}
-                                {lines.length === 1 && (
+                                ) : (
                                   <>
                                     완료 {producedSum.toLocaleString("ko-KR")} · 잔여 {remainSum.toLocaleString("ko-KR")}
                                   </>
