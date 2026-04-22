@@ -43,7 +43,10 @@ const PARBAKE_RAW_MATERIAL_CODES = new Set(["HR-PARBAKE-DOUGH-TOMATO", "HR-PARBA
 const PARBAKE_MATERIAL_NAMES = new Set(["파베이크도우 - 토마토", "파베이크도우 - 베샤멜"]);
 const DRAFT_STORAGE_KEY = "harang-production-input-draft-v1";
 
-function isParbakeDoughLine(line: DraftLine): boolean {
+/** 직접입력 `DraftLine`·작업지시 `ExecDraftLine` 공통 — 파베이크 판별에 필요한 필드만 */
+type ParbakeDoughLineLike = Pick<DraftLine, "material_category" | "material_code" | "material_name">;
+
+function isParbakeDoughLine(line: ParbakeDoughLineLike): boolean {
   if (line.material_category !== "raw_material") return false;
   if (PARBAKE_RAW_MATERIAL_CODES.has(line.material_code)) return true;
   if (PARBAKE_MATERIAL_NAMES.has(line.material_name.trim())) return true;
