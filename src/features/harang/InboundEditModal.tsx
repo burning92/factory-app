@@ -298,13 +298,15 @@ export function InboundEditModal({ open, headerId, readonly = false, onClose, on
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-start justify-center overflow-y-auto bg-black/45 px-4 pb-10 sm:px-8 sm:pb-12 [padding-top:max(2rem,calc(env(safe-area-inset-top,0px)+1.25rem))] sm:[padding-top:max(2.75rem,calc(env(safe-area-inset-top,0px)+1.5rem))]">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="inbound-edit-title"
-        className="mb-6 w-full max-w-7xl shrink-0 rounded-xl border border-slate-200 bg-white shadow-xl sm:mb-10"
-      >
+    <div className="fixed inset-0 z-[110] overflow-y-auto overscroll-contain bg-black/45">
+      {/* 상단을 넉넉히 비워 헤더·브라우저 UI와 겹쳐 보이지 않게 함 */}
+      <div className="flex min-h-[100dvh] w-full flex-col items-center px-4 pb-10 pt-[max(5.5rem,calc(env(safe-area-inset-top,0px)+3.25rem))] sm:px-8 sm:pb-14 sm:pt-[max(6.5rem,calc(env(safe-area-inset-top,0px)+3.5rem))]">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="inbound-edit-title"
+          className="w-full max-w-7xl shrink-0 rounded-xl border border-slate-200 bg-white shadow-xl"
+        >
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-5">
           <div>
             <h2 id="inbound-edit-title" className="text-lg font-semibold text-slate-900">
@@ -627,5 +629,6 @@ export function InboundEditModal({ open, headerId, readonly = false, onClose, on
         </div>
       </div>
     </div>
+  </div>
   );
 }
