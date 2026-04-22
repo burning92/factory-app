@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Box, ClipboardList, Layers, ListOrdered, Settings, ChevronRight } from "lucide-react";
+import { Box, ClipboardList, Layers, ListOrdered, Settings, ChevronRight, User } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 const HUB_ITEMS = [
@@ -18,9 +18,21 @@ const HUB_ITEMS = [
     Icon: ClipboardList,
   },
   {
+    href: "/harang/outbound/clients",
+    label: "출고처관리",
+    description: "출고처 등록·수정 및 기본 정보 관리",
+    Icon: ClipboardList,
+  },
+  {
     href: "/harang/inventory",
-    label: "재고현황",
-    description: "품목별 현재고, LOT별 잔량, 입출고 이력 조회",
+    label: "원부자재 재고현황",
+    description: "원재료/부자재 LOT별 잔량 및 이력 조회",
+    Icon: Layers,
+  },
+  {
+    href: "/harang/inventory/finished-products",
+    label: "완제품 재고현황",
+    description: "완제품 LOT(소비기한) 기준 잔여 재고 조회",
     Icon: Layers,
   },
   {
@@ -28,6 +40,18 @@ const HUB_ITEMS = [
     label: "생산요청",
     description: "요청 조회·생산 반영·자재 예약·부족 현황(등록은 본사)",
     Icon: ListOrdered,
+  },
+  {
+    href: "/harang/production-input",
+    label: "생산입력",
+    description: "생산입고 등록 및 사용 LOT 상세 확인",
+    Icon: ClipboardList,
+  },
+  {
+    href: "/account",
+    label: "계정",
+    description: "로그아웃 및 비밀번호 변경",
+    Icon: User,
   },
 ] as const;
 
