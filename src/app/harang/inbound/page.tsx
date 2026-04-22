@@ -69,7 +69,8 @@ export default function HarangInboundListPage() {
     keyword: "",
   });
   const [loading, setLoading] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [modalHeaderId, setModalHeaderId] = useState<string | null>(null);
+  const [modalReadOnly, setModalReadOnly] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const loadRows = useCallback(async () => {
@@ -182,11 +183,12 @@ export default function HarangInboundListPage() {
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8">
       <InboundEditModal
-        open={editingId !== null}
-        headerId={editingId}
-        onClose={() => setEditingId(null)}
+        open={modalHeaderId !== null}
+        headerId={modalHeaderId}
+        readonly={modalReadOnly}
+        onClose={() => setModalHeaderId(null)}
         onSaved={() => {
-          setEditingId(null);
+          setModalHeaderId(null);
           void loadRows();
         }}
       />
@@ -301,7 +303,19 @@ export default function HarangInboundListPage() {
                     <tr key={row.id} className="border-b border-slate-100 text-slate-900">
                       <td className="px-3 py-2">{row.inbound_no}</td>
                       <td className="px-3 py-2">{summarizeCategory(row)}</td>
-                      <td className="px-3 py-2">{summarizeItemName(row)}</td>
+                      <td className="px-3 py-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModalReadOnly(true);
+                            setModalHeaderId(row.id);
+                          }}
+                          className="text-left font-medium text-cyan-700 hover:text-cyan-900 hover:underline underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 rounded-sm"
+                          title="입고 내역 보기"
+                        >
+                          {summarizeItemName(row)}
+                        </button>
+                      </td>
                       <td className="px-3 py-2">{row.inbound_route}</td>
                       <td className="px-3 py-2">{sumQuantity(row)}</td>
                       <td className="px-3 py-2 text-slate-600">{row.note ?? "-"}</td>
@@ -310,7 +324,10 @@ export default function HarangInboundListPage() {
                       <td className="px-3 py-2 whitespace-nowrap">
                         <button
                           type="button"
-                          onClick={() => setEditingId(row.id)}
+                          onClick={() => {
+                            setModalReadOnly(false);
+                            setModalHeaderId(row.id);
+                          }}
                           className="mr-2 rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 bg-white hover:bg-slate-50"
                         >
                           수정

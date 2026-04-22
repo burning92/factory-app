@@ -58,11 +58,13 @@ function isParbakeDoughName(name: string): boolean {
 type Props = {
   open: boolean;
   headerId: string | null;
+  /** true면 조회만 (저장·라인추가·삭제 불가) */
+  readonly?: boolean;
   onClose: () => void;
   onSaved: () => void;
 };
 
-export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
+export function InboundEditModal({ open, headerId, readonly = false, onClose, onSaved }: Props) {
   const [inboundDate, setInboundDate] = useState("");
   const [inboundNo, setInboundNo] = useState("");
   const [inboundRoute, setInboundRoute] = useState<(typeof ROUTES)[number]>("AF발송");
@@ -214,6 +216,7 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
   };
 
   const handleSave = async () => {
+    if (readonly) return;
     if (!headerId) return;
     if (!inboundDate) return alert("일자를 입력해 주세요.");
     let payloadItems: {
@@ -305,9 +308,13 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-5">
           <div>
             <h2 id="inbound-edit-title" className="text-lg font-semibold text-slate-900">
-              하랑 입고 수정
+              {readonly ? "입고 내역" : "하랑 입고 수정"}
             </h2>
-            <p className="mt-0.5 text-xs text-slate-500">입고 헤더와 상세라인을 수정하면 LOT·입고 트랜잭션이 다시 생성됩니다.</p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {readonly
+                ? "등록된 입고 헤더·품목 라인입니다. 수정은 목록의 수정 버튼을 이용해 주세요."
+                : "입고 헤더와 상세라인을 수정하면 LOT·입고 트랜잭션이 다시 생성됩니다."}
+            </p>
           </div>
           <button
             type="button"
@@ -332,7 +339,8 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
                       type="date"
                       value={inboundDate}
                       onChange={(e) => setInboundDate(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 text-sm"
+                      disabled={readonly}
+                      className={`w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 text-sm ${readonly ? "bg-slate-100 cursor-default" : "bg-white"}`}
                     />
                   </div>
                   <div>
@@ -348,7 +356,8 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
                     <select
                       value={inboundRoute}
                       onChange={(e) => setInboundRoute(e.target.value as (typeof ROUTES)[number])}
-                      className="w-full px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 text-sm"
+                      disabled={readonly}
+                      className={`w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 text-sm ${readonly ? "bg-slate-100 cursor-default" : "bg-white"}`}
                     >
                       {ROUTES.map((route) => (
                         <option key={route} value={route}>
@@ -362,7 +371,8 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
                     <input
                       value={note}
                       onChange={(e) => setNote(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 text-sm"
+                      readOnly={readonly}
+                      className={`w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 text-sm ${readonly ? "bg-slate-100 cursor-default" : "bg-white"}`}
                     />
                   </div>
                 </div>
@@ -371,13 +381,17 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
               <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-semibold text-slate-800">상세라인</h3>
-                  <button
-                    type="button"
-                    onClick={addLine}
-                    className="px-3 py-2 rounded-lg border border-cyan-500/60 text-cyan-700 bg-cyan-50 text-sm"
-                  >
-                    + 라인 추가
-                  </button>
+                  {!readonly ? (
+                    <button
+                      type="button"
+                      onClick={addLine}
+                      className="px-3 py-2 rounded-lg border border-cyan-500/60 text-cyan-700 bg-cyan-50 text-sm"
+                    >
+                      + 라인 추가
+                    </button>
+                  ) : (
+                    <span />
+                  )}
                 </div>
                 <div className="overflow-x-hidden">
                   <table className="w-full table-fixed text-sm">
@@ -391,7 +405,7 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
                         <th className="px-2 py-2 text-right">잔량(g)</th>
                         <th className="px-2 py-2 text-right">입고수량</th>
                         <th className="px-2 py-2 text-left">비고</th>
-                        <th className="px-2 py-2 text-right">삭제</th>
+                        {!readonly ? <th className="px-2 py-2 text-right">삭제</th> : null}
                       </tr>
                     </thead>
                     <tbody>
@@ -427,7 +441,8 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
                                     unit: "",
                                   })
                                 }
-                                className="w-full min-w-0 px-2 py-1.5 rounded bg-white border border-slate-300"
+                                disabled={readonly}
+                                className={`w-full min-w-0 px-2 py-1.5 rounded border border-slate-300 ${readonly ? "bg-slate-100 cursor-default" : "bg-white"}`}
                               >
                                 <option value="raw_material">원재료</option>
                                 <option value="packaging_material">부자재</option>
@@ -437,7 +452,8 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
                               <select
                                 value={line.item_id}
                                 onChange={(e) => handleSelectItem(line.line_id, e.target.value)}
-                                className="w-full min-w-0 px-2 py-1.5 rounded bg-white border border-slate-300"
+                                disabled={readonly}
+                                className={`w-full min-w-0 px-2 py-1.5 rounded border border-slate-300 ${readonly ? "bg-slate-100 cursor-default" : "bg-white"}`}
                               >
                                 <option value="">품목 선택</option>
                                 {options.map((item) => (
@@ -445,6 +461,11 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
                                     {item.item_name}
                                   </option>
                                 ))}
+                                {readonly &&
+                                line.item_id &&
+                                !options.some((o) => o.id === line.item_id) ? (
+                                  <option value={line.item_id}>{line.item_name || line.item_code || "(품목)"}</option>
+                                ) : null}
                               </select>
                             </td>
                             <td className="px-2 py-2">
@@ -452,7 +473,8 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
                                 type="date"
                                 value={line.lot_date}
                                 onChange={(e) => handleChangeLine(line.line_id, { lot_date: e.target.value })}
-                                className="w-full min-w-0 px-2 py-1.5 rounded bg-white border border-slate-300"
+                                disabled={readonly}
+                                className={`w-full min-w-0 px-2 py-1.5 rounded border border-slate-300 ${readonly ? "bg-slate-100 cursor-default" : "bg-white"}`}
                               />
                             </td>
                             <td className="px-2 py-2 text-right align-top">
@@ -464,8 +486,8 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
                                 value={line.box_qty}
                                 onChange={(e) => handleChangeLine(line.line_id, { box_qty: e.target.value })}
                                 onBlur={() => handleChangeLine(line.line_id, { box_qty: formatNumberInput(line.box_qty, 0) })}
-                                disabled={!useBoxUnitInput}
-                                className={`w-full min-w-0 px-2 py-1.5 rounded border border-slate-300 text-right ${useBoxUnitInput ? "bg-white" : "bg-slate-100 text-slate-400"}`}
+                                disabled={readonly || !useBoxUnitInput}
+                                className={`w-full min-w-0 px-2 py-1.5 rounded border border-slate-300 text-right ${readonly || !useBoxUnitInput ? "bg-slate-100 text-slate-400" : "bg-white"}`}
                               />
                               {isParbakeDough ? (
                                 <p className="mt-1 text-[10px] text-slate-500">
@@ -487,8 +509,8 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
                                 value={line.unit_qty}
                                 onChange={(e) => handleChangeLine(line.line_id, { unit_qty: e.target.value })}
                                 onBlur={() => handleChangeLine(line.line_id, { unit_qty: formatNumberInput(line.unit_qty, 0) })}
-                                disabled={!useBoxUnitInput}
-                                className={`w-full min-w-0 px-2 py-1.5 rounded border border-slate-300 text-right ${useBoxUnitInput ? "bg-white" : "bg-slate-100 text-slate-400"}`}
+                                disabled={readonly || !useBoxUnitInput}
+                                className={`w-full min-w-0 px-2 py-1.5 rounded border border-slate-300 text-right ${readonly || !useBoxUnitInput ? "bg-slate-100 text-slate-400" : "bg-white"}`}
                               />
                               {isParbakeDough ? (
                                 <p className="mt-1 text-[10px] text-slate-500">ea</p>
@@ -508,8 +530,8 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
                                 value={line.remainder_g}
                                 onChange={(e) => handleChangeLine(line.line_id, { remainder_g: e.target.value })}
                                 onBlur={() => handleChangeLine(line.line_id, { remainder_g: formatNumberInput(line.remainder_g, 3) })}
-                                disabled={!hasWeightSpec}
-                                className={`w-full min-w-0 px-2 py-1.5 rounded border border-slate-300 text-right ${hasWeightSpec ? "bg-white" : "bg-slate-100 text-slate-400"}`}
+                                disabled={readonly || !hasWeightSpec}
+                                className={`w-full min-w-0 px-2 py-1.5 rounded border border-slate-300 text-right ${readonly || !hasWeightSpec ? "bg-slate-100 text-slate-400" : "bg-white"}`}
                               />
                               {hasWeightSpec ? (
                                 <p className="mt-1 text-[10px] text-slate-500">g 직접입력</p>
@@ -522,7 +544,7 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
                                 min="0"
                                 step="0.001"
                                 value={useBoxUnitInput ? String(calcQuantity || "") : line.quantity}
-                                readOnly={useBoxUnitInput}
+                                readOnly={readonly || useBoxUnitInput}
                                 onChange={(e) => handleChangeLine(line.line_id, { quantity: e.target.value })}
                                 onBlur={() => {
                                   if (!useBoxUnitInput) {
@@ -530,7 +552,7 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
                                   }
                                 }}
                                 className={`w-full min-w-0 px-2 py-1.5 rounded border border-slate-300 text-right ${
-                                  useBoxUnitInput ? "bg-slate-100 text-slate-800" : "bg-white"
+                                  readonly || useBoxUnitInput ? "bg-slate-100 text-slate-800 cursor-default" : "bg-white"
                                 }`}
                               />
                               {useBoxUnitInput ? (
@@ -543,18 +565,21 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
                               <input
                                 value={line.note}
                                 onChange={(e) => handleChangeLine(line.line_id, { note: e.target.value })}
-                                className="w-full min-w-0 px-2 py-1.5 rounded bg-white border border-slate-300"
+                                readOnly={readonly}
+                                className={`w-full min-w-0 px-2 py-1.5 rounded border border-slate-300 ${readonly ? "bg-slate-100 cursor-default" : "bg-white"}`}
                               />
                             </td>
-                            <td className="px-2 py-2 text-right">
-                              <button
-                                type="button"
-                                onClick={() => removeLine(line.line_id)}
-                                className="px-2 py-1 rounded border border-red-700/70 text-red-600 text-xs"
-                              >
-                                삭제
-                              </button>
-                            </td>
+                            {!readonly ? (
+                              <td className="px-2 py-2 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => removeLine(line.line_id)}
+                                  className="px-2 py-1 rounded border border-red-700/70 text-red-600 text-xs"
+                                >
+                                  삭제
+                                </button>
+                              </td>
+                            ) : null}
                           </tr>
                         );
                       })}
@@ -569,21 +594,33 @@ export function InboundEditModal({ open, headerId, onClose, onSaved }: Props) {
               </section>
 
               <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2.5 rounded-lg border border-slate-300 text-slate-700 text-sm bg-white"
-                >
-                  취소
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleSave()}
-                  disabled={saving || loading}
-                  className="px-5 py-2.5 rounded-lg bg-cyan-500 text-space-900 font-medium text-sm disabled:opacity-60"
-                >
-                  {saving ? "저장 중..." : "저장"}
-                </button>
+                {!readonly ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      className="px-4 py-2.5 rounded-lg border border-slate-300 text-slate-700 text-sm bg-white"
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleSave()}
+                      disabled={saving || loading}
+                      className="px-5 py-2.5 rounded-lg bg-cyan-500 text-space-900 font-medium text-sm disabled:opacity-60"
+                    >
+                      {saving ? "저장 중..." : "저장"}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="px-5 py-2.5 rounded-lg bg-cyan-600 text-white font-medium text-sm hover:bg-cyan-500"
+                  >
+                    확인
+                  </button>
+                )}
               </div>
             </>
           )}
