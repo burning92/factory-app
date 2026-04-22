@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import type { HarangBomRow, HarangMasterItem } from "@/features/harang/types";
 import { effectiveRawMaterialUnit } from "@/features/harang/rawMaterialUnit";
+import { displayHarangProductName } from "@/features/harang/displayProductName";
 
 type MaterialCategory = "raw_material" | "packaging_material";
 
@@ -505,7 +506,7 @@ export default function HarangProductBomPage() {
                 {!fetching &&
                   groupedProducts.map((product) => (
                     <tr key={product.product_name} className="border-b border-slate-100 text-slate-900">
-                      <td className="px-3 py-2">{product.product_name}</td>
+                      <td className="px-3 py-2">{displayHarangProductName(product.product_name)}</td>
                       <td className="px-3 py-2 text-right tabular-nums">
                         {product.material_count}
                         <span className="ml-2 text-xs text-slate-500">
@@ -558,7 +559,9 @@ export default function HarangProductBomPage() {
           <section className="rounded-xl border border-cyan-200 bg-cyan-50/40 p-4 sm:p-5 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <div>
-                <h2 className="text-base font-semibold text-slate-900">{editingProductName}</h2>
+                <h2 className="text-base font-semibold text-slate-900">
+                  {displayHarangProductName(editingProductName)}
+                </h2>
                 <p className="text-xs text-slate-600">원재료 라인을 수정하고, 새 원재료를 추가할 수 있습니다.</p>
               </div>
               <button

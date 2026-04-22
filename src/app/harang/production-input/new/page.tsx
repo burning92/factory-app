@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import type { HarangBomRow, HarangCategory } from "@/features/harang/types";
 import LotPickerModal, { type LotAllocation } from "@/features/harang/LotPickerModal";
 import { STATUS_LABEL } from "@/features/harang/productionRequests";
+import { displayHarangProductName } from "@/features/harang/displayProductName";
 
 type DraftLine = {
   key: string;
@@ -451,7 +452,7 @@ function LegacyHarangProductionInputNewPage() {
                         ) : (
                           sectionLines.map((line) => (
                             <tr key={line.key} className="border-b border-slate-100 align-top">
-                              <td className="px-3 py-2 text-slate-900">{line.product_name}</td>
+                              <td className="px-3 py-2 text-slate-900">{displayHarangProductName(line.product_name)}</td>
                               <td className="px-3 py-2 text-slate-900">{line.material_name}</td>
                               <td className="px-3 py-2 text-right tabular-nums text-slate-800">
                                 {bomUnit === "force_g"
@@ -963,14 +964,18 @@ export default function HarangProductionInputNewPage() {
                 className="mt-1 w-full px-3 py-2 rounded-lg border border-cyan-300 bg-cyan-50 text-cyan-800 text-sm text-left"
               >
                 {selectedLine
-                  ? `${selectedLine.request_no} · ${selectedLine.product_name} · 잔여 ${selectedLine.remaining_qty.toLocaleString("ko-KR")}`
+                  ? `${selectedLine.request_no} · ${displayHarangProductName(selectedLine.product_name)} · 잔여 ${selectedLine.remaining_qty.toLocaleString("ko-KR")}`
                   : "작업지시 라인 선택"}
               </button>
             </div>
 
             <label className="block text-xs text-slate-600">
               품목명
-              <input readOnly value={selectedLine?.product_name ?? ""} className="mt-1 w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-800 text-sm" />
+              <input
+                readOnly
+                value={selectedLine ? displayHarangProductName(selectedLine.product_name) : ""}
+                className="mt-1 w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-800 text-sm"
+              />
             </label>
             <label className="block text-xs text-slate-600">
               납기일
@@ -978,15 +983,21 @@ export default function HarangProductionInputNewPage() {
             </label>
             <label className="block text-xs text-slate-600">
               요청수량 / 누적생산 / 잔여
-              <input
-                readOnly
-                value={
-                  selectedLine
-                    ? `${selectedLine.requested_qty.toLocaleString("ko-KR")} / ${selectedLine.produced_qty.toLocaleString("ko-KR")} / ${selectedLine.remaining_qty.toLocaleString("ko-KR")}`
-                    : ""
-                }
-                className="mt-1 w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-800 text-sm"
-              />
+              <div className="mt-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                {selectedLine ? (
+                  <>
+                    <div className="text-xl font-bold tabular-nums text-slate-900">
+                      요청 {selectedLine.requested_qty.toLocaleString("ko-KR")}
+                    </div>
+                    <div className="mt-1 text-sm text-slate-600 tabular-nums">
+                      누적생산 {selectedLine.produced_qty.toLocaleString("ko-KR")} · 잔여{" "}
+                      {selectedLine.remaining_qty.toLocaleString("ko-KR")}
+                    </div>
+                  </>
+                ) : (
+                  <span className="text-sm text-slate-400">—</span>
+                )}
+              </div>
             </label>
             <label className="block text-xs text-slate-600">
               요청 반영수량 / 초과생산수량
@@ -1164,8 +1175,10 @@ export default function HarangProductionInputNewPage() {
                         <td className="px-3 py-2 font-mono text-xs">{r.request_no}</td>
                         <td className="px-3 py-2">{r.request_date}</td>
                         <td className="px-3 py-2">{r.due_date}</td>
-                        <td className="px-3 py-2">{r.product_name}</td>
-                        <td className="px-3 py-2 text-right">{r.requested_qty.toLocaleString("ko-KR")}</td>
+                        <td className="px-3 py-2">{displayHarangProductName(r.product_name)}</td>
+                        <td className="px-3 py-2 text-right font-semibold tabular-nums text-slate-900">
+                          {r.requested_qty.toLocaleString("ko-KR")}
+                        </td>
                         <td className="px-3 py-2 text-right">{r.produced_qty.toLocaleString("ko-KR")}</td>
                         <td className="px-3 py-2 text-right">{r.remaining_qty.toLocaleString("ko-KR")}</td>
                         <td className="px-3 py-2">{pickStatusLabel(r.status)}</td>

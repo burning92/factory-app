@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { displayHarangProductName } from "@/features/harang/displayProductName";
 
 type ProductionLine = {
   id: string;
@@ -214,7 +215,9 @@ export default function HarangProductionInputDetailPage() {
               </div>
               <div className="mt-3 text-sm print:mt-2">
                 <p className="text-slate-500 text-xs">제품명</p>
-                <p className="mt-1 text-slate-900 text-sm md:text-base print:text-[11px] leading-snug break-words">{header.product_name}</p>
+                <p className="mt-1 text-slate-900 text-sm md:text-base print:text-[11px] leading-snug break-words">
+                  {displayHarangProductName(header.product_name)}
+                </p>
               </div>
               <div className="mt-3 text-sm print:mt-2 print:text-xs">
                 <p className="text-slate-500 text-xs">비고</p>

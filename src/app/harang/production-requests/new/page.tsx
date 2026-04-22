@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { canManageHqHarangProductionRequests } from "@/features/harang/productionRequests";
+import { displayHarangProductName } from "@/features/harang/displayProductName";
 import { supabase } from "@/lib/supabase";
 
 type LineForm = { product_name: string; requested_qty: string; note: string };
@@ -151,7 +152,7 @@ export default function NewHarangProductionRequestPage() {
                   <option value="">선택</option>
                   {products.map((p) => (
                     <option key={p} value={p}>
-                      {p}
+                      {displayHarangProductName(p)}
                     </option>
                   ))}
                 </select>

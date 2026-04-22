@@ -9,6 +9,7 @@ import {
   canManageHqHarangProductionRequests,
   type HarangProductionRequestStatus,
 } from "@/features/harang/productionRequests";
+import { displayHarangProductName } from "@/features/harang/displayProductName";
 
 type RequestRow = {
   id: string;
@@ -196,21 +197,54 @@ export default function HarangProductionRequestsPage() {
                     const producedSum = lines.reduce((a, l) => a + Number(l.produced_qty), 0);
                     const remainSum = lines.reduce((a, l) => a + Number(l.remaining_qty), 0);
                     const anyShort = lines.some((l) => l.material_shortage_flag && Number(l.remaining_qty) > 0);
-                    const productSummary =
+                    const titleSummary =
                       lines.length === 0
-                        ? "-"
-                        : lines.map((l) => `${l.product_name} (${Number(l.requested_qty).toLocaleString("ko-KR")})`).join(", ");
+                        ? ""
+                        : lines
+                            .map(
+                              (l) =>
+                                `${displayHarangProductName(l.product_name)} 요청 ${Number(l.requested_qty).toLocaleString("ko-KR")}`,
+                            )
+                            .join(" · ");
                     return (
                       <tr key={r.id} className="border-b border-slate-100">
                         <td className="px-3 py-2 font-mono text-xs">{r.request_no}</td>
                         <td className="px-3 py-2">{r.request_date}</td>
                         <td className="px-3 py-2">{r.due_date}</td>
-                        <td className="px-3 py-2 max-w-[280px] truncate" title={productSummary}>
-                          {productSummary}
-                          {lines.length > 0 && (
-                            <div className="mt-0.5 text-[11px] text-slate-500">
-                              요청 {requestedSum.toLocaleString("ko-KR")} · 완료 {producedSum.toLocaleString("ko-KR")} · 잔여{" "}
-                              {remainSum.toLocaleString("ko-KR")}
+                        <td className="px-3 py-2 min-w-[220px] max-w-[340px]" title={titleSummary}>
+                          {lines.length === 0 ? (
+                            "-"
+                          ) : (
+                            <div className="space-y-2">
+                              {lines.map((l) => (
+                                <div key={l.id} className="space-y-0.5">
+                                  <div className="font-semibold text-slate-900 leading-snug">
+                                    {displayHarangProductName(l.product_name)}
+                                  </div>
+                                  <div className="text-base font-bold tabular-nums text-cyan-900">
+                                    요청 {Number(l.requested_qty).toLocaleString("ko-KR")}
+                                  </div>
+                                </div>
+                              ))}
+                              <div
+                                className={
+                                  lines.length > 1
+                                    ? "pt-1.5 mt-0.5 border-t border-slate-100 text-[11px] text-slate-500"
+                                    : "text-[11px] text-slate-500"
+                                }
+                              >
+                                {lines.length > 1 && (
+                                  <>
+                                    합계 요청 {requestedSum.toLocaleString("ko-KR")} · 완료 {producedSum.toLocaleString("ko-KR")} ·
+                                    잔여 {remainSum.toLocaleString("ko-KR")}
+                                  </>
+                                )}
+                                {lines.length === 1 && (
+                                  <>
+                                    완료 {producedSum.toLocaleString("ko-KR")} · 잔여 {remainSum.toLocaleString("ko-KR")}
+                                  </>
+                                )}
+                              </div>
                             </div>
                           )}
                         </td>

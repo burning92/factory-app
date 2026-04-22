@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { HarangProductionHeader } from "@/features/harang/types";
+import { displayHarangProductName } from "@/features/harang/displayProductName";
 
 function authorLabel(header: HarangProductionHeader): string {
   const profile = Array.isArray(header.profiles) ? header.profiles[0] : header.profiles;
@@ -62,8 +63,9 @@ export default function HarangProductionInputListPage() {
       if (appliedFilters.keyword.trim()) {
         const q = appliedFilters.keyword.trim().toLowerCase();
         const name = row.product_name.toLowerCase();
+        const displayName = displayHarangProductName(row.product_name).toLowerCase();
         const note = (row.note ?? "").toLowerCase();
-        if (!name.includes(q) && !note.includes(q)) return false;
+        if (!name.includes(q) && !displayName.includes(q) && !note.includes(q)) return false;
       }
       return true;
     });
@@ -207,7 +209,7 @@ export default function HarangProductionInputListPage() {
                   filtered.map((row) => (
                     <tr key={row.id} className="border-b border-slate-100 text-slate-900">
                       <td className="px-3 py-2">{row.production_no}</td>
-                      <td className="px-3 py-2">{row.product_name}</td>
+                      <td className="px-3 py-2">{displayHarangProductName(row.product_name)}</td>
                       <td className="px-3 py-2 text-right tabular-nums">
                         {Number(row.finished_qty).toLocaleString(undefined, { maximumFractionDigits: 3 })}
                       </td>

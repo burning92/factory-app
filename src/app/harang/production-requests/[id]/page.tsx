@@ -12,6 +12,7 @@ import {
   canManageHqHarangProductionRequests,
 } from "@/features/harang/productionRequests";
 import type { HarangCategory } from "@/features/harang/types";
+import { displayHarangProductName } from "@/features/harang/displayProductName";
 import { supabase } from "@/lib/supabase";
 
 type Line = {
@@ -441,15 +442,21 @@ export default function HarangProductionRequestDetailPage() {
             <section key={line.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
               <div className="flex flex-wrap justify-between gap-2">
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-900">{line.product_name}</h2>
-                  <p className="text-sm text-slate-600 tabular-nums">
-                    요청 {Number(line.requested_qty).toLocaleString("ko-KR")} · 완료{" "}
-                    {Number(line.produced_qty).toLocaleString("ko-KR")} · 잔여{" "}
-                    {Number(line.remaining_qty).toLocaleString("ko-KR")}
-                    {shortageLabels.length > 0 && line.remaining_qty > 0 && (
-                      <span className="ml-2 text-amber-700 font-medium">{shortageLabels.join(" · ")}</span>
-                    )}
-                  </p>
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    {displayHarangProductName(line.product_name)}
+                  </h2>
+                  <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                    <span className="text-2xl font-bold tabular-nums text-slate-900">
+                      요청 {Number(line.requested_qty).toLocaleString("ko-KR")}
+                    </span>
+                    <span className="text-sm text-slate-600 tabular-nums">
+                      완료 {Number(line.produced_qty).toLocaleString("ko-KR")} · 잔여{" "}
+                      {Number(line.remaining_qty).toLocaleString("ko-KR")}
+                      {shortageLabels.length > 0 && line.remaining_qty > 0 && (
+                        <span className="ml-2 text-amber-700 font-medium">{shortageLabels.join(" · ")}</span>
+                      )}
+                    </span>
+                  </div>
                 </div>
                 {!["completed", "settled", "cancelled"].includes(header.status) && (
                   <div className="flex items-end gap-2">
