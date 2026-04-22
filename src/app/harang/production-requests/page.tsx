@@ -186,7 +186,7 @@ export default function HarangProductionRequestsPage() {
 
         <section className="overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-sm ring-1 ring-slate-900/[0.04]">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[960px] text-sm text-slate-800">
+            <table className="w-full min-w-[960px] border-collapse text-sm text-slate-800">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-100/90">
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700">요청번호</th>
@@ -232,41 +232,56 @@ export default function HarangProductionRequestsPage() {
                             )
                             .join(" · ");
                     return (
-                      <tr
-                        key={r.id}
-                        className="border-b border-slate-100 transition-colors hover:bg-slate-50/70 [&>td]:align-top"
-                      >
-                        <td className="px-4 py-3 font-mono text-xs text-slate-800">{r.request_no}</td>
-                        <td className="px-4 py-3 tabular-nums text-slate-800">{r.request_date}</td>
-                        <td className="px-4 py-3 tabular-nums text-slate-800">{r.due_date}</td>
-                        <td className="px-4 py-3 min-w-[220px] max-w-[340px]" title={titleSummary || undefined}>
+                      <tr key={r.id} className="border-b border-slate-100 transition-colors hover:bg-slate-50/70">
+                        <td className="align-top px-4 py-2.5 font-mono text-xs leading-snug text-slate-800">{r.request_no}</td>
+                        <td className="align-top px-4 py-2.5 tabular-nums leading-snug text-slate-800">{r.request_date}</td>
+                        <td className="align-top px-4 py-2.5 tabular-nums leading-snug text-slate-800">{r.due_date}</td>
+                        <td
+                          className="align-top px-4 py-2.5 min-w-[220px] max-w-[min(100%,380px)]"
+                          title={titleSummary || undefined}
+                        >
                           {lines.length === 0 ? (
                             "-"
                           ) : (
-                            <div className="space-y-2">
-                              {lines.map((l) => (
-                                <div key={l.id} className="space-y-1">
-                                  <div className="font-semibold leading-snug text-slate-900 break-words">
-                                    {displayHarangProductName(l.product_name)}
+                            <div
+                              className={
+                                lines.length > 1
+                                  ? "rounded-lg border border-slate-200/80 bg-slate-50/90 p-2 shadow-sm"
+                                  : ""
+                              }
+                            >
+                              <div className={lines.length > 1 ? "space-y-2" : "space-y-1"}>
+                                {lines.map((l, idx) => (
+                                  <div
+                                    key={l.id}
+                                    className={
+                                      idx > 0 && lines.length > 1
+                                        ? "border-t border-slate-200/70 pt-2"
+                                        : ""
+                                    }
+                                  >
+                                    <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
+                                      <span className="min-w-0 flex-1 font-semibold leading-snug text-slate-900 break-words">
+                                        {displayHarangProductName(l.product_name)}
+                                      </span>
+                                      <span className="shrink-0 rounded-md bg-cyan-50 px-2 py-0.5 text-xs font-bold tabular-nums text-cyan-900 ring-1 ring-cyan-100/90">
+                                        요청 {Number(l.requested_qty).toLocaleString("ko-KR")}
+                                      </span>
+                                    </div>
                                   </div>
-                                  <div className="inline-flex tabular-nums">
-                                    <span className="rounded-md bg-cyan-50 px-2 py-0.5 text-sm font-bold text-cyan-900 ring-1 ring-cyan-100/80">
-                                      요청 {Number(l.requested_qty).toLocaleString("ko-KR")}
-                                    </span>
-                                  </div>
-                                </div>
-                              ))}
+                                ))}
+                              </div>
                               <div
                                 className={
                                   lines.length > 1
-                                    ? "pt-1.5 mt-0.5 border-t border-slate-100 text-[11px] text-slate-500"
-                                    : "text-[11px] text-slate-500"
+                                    ? "mt-2 border-t border-dashed border-slate-200 pt-1.5 text-[11px] leading-relaxed text-slate-600"
+                                    : "mt-1 text-[11px] leading-relaxed text-slate-500"
                                 }
                               >
                                 {lines.length > 1 ? (
                                   <>
-                                    합계 요청 {requestedSum.toLocaleString("ko-KR")} · 완료 {producedSum.toLocaleString("ko-KR")} ·
-                                    잔여 {remainSum.toLocaleString("ko-KR")}
+                                    합계 요청 {requestedSum.toLocaleString("ko-KR")} · 완료 {producedSum.toLocaleString("ko-KR")} · 잔여{" "}
+                                    {remainSum.toLocaleString("ko-KR")}
                                   </>
                                 ) : (
                                   <>
@@ -277,10 +292,10 @@ export default function HarangProductionRequestsPage() {
                             </div>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-right text-sm tabular-nums font-medium text-slate-900">
+                        <td className="align-top px-4 py-2.5 text-right text-sm tabular-nums font-medium leading-snug text-slate-900">
                           {remainSum.toLocaleString("ko-KR")}
                         </td>
-                        <td className="px-4 py-3 text-center">
+                        <td className="align-top px-4 py-2.5 text-center">
                           {anyShort ? (
                             <span className="inline-flex min-w-[2rem] justify-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-900 ring-1 ring-amber-200/80">
                               Y
@@ -289,16 +304,18 @@ export default function HarangProductionRequestsPage() {
                             <span className="text-slate-400">—</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-right tabular-nums text-slate-800">{r.priority}</td>
-                        <td className="px-4 py-3">
+                        <td className="align-top px-4 py-2.5 text-right tabular-nums leading-snug text-slate-800">
+                          {r.priority}
+                        </td>
+                        <td className="align-top px-4 py-2.5">
                           <span
                             className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${statusBadgeClass(r.status)}`}
                           >
                             {STATUS_LABEL[r.status] ?? r.status}
                           </span>
                         </td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap items-center gap-1.5">
+                        <td className="align-top px-4 py-2.5">
+                          <div className="flex flex-wrap items-start gap-1.5">
                             <Link
                               href={`/harang/production-requests/${r.id}`}
                               className={`${actionBtn} border-cyan-200 bg-white text-cyan-800 hover:border-cyan-300 hover:bg-cyan-50/90`}
