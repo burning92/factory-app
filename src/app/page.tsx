@@ -74,7 +74,15 @@ export default function DashboardPage() {
       Icon: typeof Inbox;
     }[] = [
       { href: "/harang/inbound", title: "입고관리", hint: "입고 등록·목록", Icon: Inbox },
-      { href: "/harang/inventory", title: "재고현황", hint: "LOT별 재고 조회", Icon: Layers },
+      { href: "/harang/outbound", title: "출고관리", hint: "완제품 출고 등록·목록", Icon: Inbox },
+      { href: "/harang/outbound/clients", title: "출고처관리", hint: "출고처 등록·수정", Icon: Inbox },
+      { href: "/harang/inventory", title: "원부자재 재고현황", hint: "LOT별 재고 조회", Icon: Layers },
+      {
+        href: "/harang/inventory/finished-products",
+        title: "완제품 재고현황",
+        hint: "완제품 LOT 기준 재고 조회",
+        Icon: Layers,
+      },
       {
         href: "/harang/production-requests",
         title: "생산요청",
