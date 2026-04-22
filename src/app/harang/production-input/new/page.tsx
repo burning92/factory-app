@@ -621,9 +621,6 @@ export default function HarangProductionInputNewPage() {
   const editIdParam = searchParams.get("edit_id");
 
   const [productionDate, setProductionDate] = useState(() => new Date().toISOString().slice(0, 10));
-  /** 완제품 시리얼/LOT(제조일자). 기본은 생산일자와 동일 */
-  const [productLotDate, setProductLotDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [previewNo, setPreviewNo] = useState("");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -649,19 +646,6 @@ export default function HarangProductionInputNewPage() {
     () => (selectedLine ? Math.max(0, finishedQty - selectedLine.remaining_qty) : 0),
     [finishedQty, selectedLine],
   );
-
-  const loadPreviewNo = useCallback(async (date: string) => {
-    const { count, error } = await supabase
-      .from("harang_production_headers")
-      .select("id", { count: "exact", head: true })
-      .eq("production_date", date);
-    if (error) return;
-    setPreviewNo(`${date.replaceAll("-", "/")}-${(count ?? 0) + 1}`);
-  }, []);
-
-  useEffect(() => {
-    void loadPreviewNo(productionDate);
-  }, [productionDate, loadPreviewNo]);
 
   const loadCandidates = useCallback(async () => {
     setLoadingCandidates(true);
@@ -760,8 +744,7 @@ export default function HarangProductionInputNewPage() {
     setMaterials(mats);
     setFinishedQtyStr(String(picked.remaining_qty));
     setLines(buildExecLines(mats, picked.remaining_qty));
-    setProductLotDate(productionDate);
-  }, [loadLineMaterials, productionDate]);
+  }, [loadLineMaterials]);
 
   useEffect(() => {
     void loadCandidates();
@@ -817,14 +800,7 @@ export default function HarangProductionInputNewPage() {
       }
 
       setEditingHeaderId(String(headRes.data.id));
-      const prodD = String(headRes.data.production_date).slice(0, 10);
-      setProductionDate(prodD);
-      setProductLotDate(
-        String((headRes.data as { finished_product_lot_date?: string | null }).finished_product_lot_date ?? prodD).slice(
-          0,
-          10,
-        ),
-      );
+      setProductionDate(String(headRes.data.production_date).slice(0, 10));
       setNote(String(headRes.data.note ?? ""));
       setSelectedLine(picked);
       setMaterials(mats);
@@ -915,7 +891,7 @@ export default function HarangProductionInputNewPage() {
       allocations: line.allocations,
     }));
 
-    const lotYmd = (productLotDate || productionDate).slice(0, 10);
+    const lotYmd = harangProductExpiryFromProductionDate(productionDate) || productionDate.slice(0, 10);
 
     setSaving(true);
     const { error } = editingHeaderId
@@ -968,17 +944,9 @@ export default function HarangProductionInputNewPage() {
               <input
                 type="date"
                 value={productionDate}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setProductionDate(v);
-                  setProductLotDate(v);
-                }}
+                onChange={(e) => setProductionDate(e.target.value)}
                 className="mt-1 w-full px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 text-sm"
               />
-            </label>
-            <label className="block text-xs text-slate-600">
-              생산입고 No.
-              <input readOnly value={previewNo} className="mt-1 w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-700 text-sm" />
             </label>
             <div className="block text-xs text-slate-600 sm:col-span-2">
               작업지시 라인 선택
@@ -1006,21 +974,11 @@ export default function HarangProductionInputNewPage() {
               <input readOnly value={selectedLine?.due_date ?? ""} className="mt-1 w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-800 text-sm" />
             </label>
             <label className="block text-xs text-slate-600">
-              제품 시리얼 / LOT
-              <input
-                type="date"
-                value={selectedLine ? productLotDate : ""}
-                onChange={(e) => setProductLotDate(e.target.value)}
-                disabled={!selectedLine}
-                className="mt-1 w-full px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 text-sm disabled:bg-slate-100 disabled:text-slate-500"
-              />
-            </label>
-            <label className="block text-xs text-slate-600">
-              제품 소비기한
+              제품 소비기한 / LOT
               <input
                 readOnly
                 value={
-                  productionDate
+                  selectedLine && productionDate
                     ? formatYmdDot(harangProductExpiryFromProductionDate(productionDate))
                     : ""
                 }
