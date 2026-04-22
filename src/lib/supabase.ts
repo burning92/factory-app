@@ -78,14 +78,32 @@ const storage =
     : undefined;
 
 export const supabase = createClient(url, key, {
-  auth: {
-    storage: storage ?? undefined,
-    persistSession: true,
-    /**
-     * 모바일 브라우저(특히 WebView/일부 안드로이드)에서 Navigator LockManager 기반
-     * auth-token 락 획득이 timeout 되는 이슈가 있어 멀티탭 동기화를 비활성화한다.
-     * 단일 탭 사용이 대부분인 운영 환경에서는 안정성이 우선이다.
-     */
-    multiTab: false,
-  },
+  auth: (() => {
+    const authOptions: {
+      storage?: Storage;
+      persistSession: boolean;
+      lock?: <T>(
+        name: string,
+        acquireTimeout: number,
+        fn: () => Promise<T>,
+      ) => Promise<T>;
+    } = {
+      storage: storage ?? undefined,
+      persistSession: true,
+    };
+
+    if (typeof window !== "undefined") {
+      /**
+       * 모바일 브라우저(특히 WebView/일부 안드로이드)에서 Navigator LockManager 기반
+       * auth-token 락 획득 timeout 이슈가 있어, 락 구현을 단순 직렬 실행으로 우회한다.
+       */
+      authOptions.lock = async <T>(
+        _name: string,
+        _acquireTimeout: number,
+        fn: () => Promise<T>,
+      ) => fn();
+    }
+
+    return authOptions;
+  })(),
 });
