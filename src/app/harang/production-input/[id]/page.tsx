@@ -6,6 +6,10 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { displayHarangProductName } from "@/features/harang/displayProductName";
+import {
+  formatYmdDot,
+  harangProductExpiryFromProductionDate,
+} from "@/features/harang/finishedProductExpiry";
 
 type ProductionLine = {
   id: string;
@@ -39,6 +43,7 @@ type ProductionHeaderDetail = {
   production_no: string;
   product_name: string;
   finished_qty: number;
+  finished_product_lot_date?: string | null;
   note: string | null;
   created_at: string;
 };
@@ -63,7 +68,7 @@ export default function HarangProductionInputDetailPage() {
     const [headerRes, linesRes, lotsRes] = await Promise.all([
       supabase
         .from("harang_production_headers")
-        .select("id, production_date, production_no, product_name, finished_qty, note, created_at")
+        .select("id, production_date, production_no, product_name, finished_qty, finished_product_lot_date, note, created_at")
         .eq("id", id)
         .single(),
       supabase
@@ -211,6 +216,20 @@ export default function HarangProductionInputDetailPage() {
                 <div className="col-span-2 sm:col-span-1">
                   <p className="text-slate-500 text-xs">생산수량</p>
                   <p className="mt-1 text-slate-900 tabular-nums">{Number(header.finished_qty).toLocaleString("ko-KR")}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500 text-xs">제품 시리얼 / LOT</p>
+                  <p className="mt-1 text-slate-900 tabular-nums">
+                    {formatYmdDot(
+                      (header.finished_product_lot_date ?? header.production_date).slice(0, 10),
+                    )}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-slate-500 text-xs">제품 소비기한</p>
+                  <p className="mt-1 text-slate-900 tabular-nums">
+                    {formatYmdDot(harangProductExpiryFromProductionDate(header.production_date))}
+                  </p>
                 </div>
               </div>
               <div className="mt-3 text-sm print:mt-2">

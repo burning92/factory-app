@@ -10,6 +10,11 @@ import { SHOW_ORGANIZATION_VIEW_SWITCHER } from "@/lib/featureFlags";
 const HARANG_PEOPLE_ICON_SRC = "/harang/people-icon.png";
 const ARMORED_LOGO_SRC = "/apple-icon.png";
 
+const HARANG_INVENTORY_SUBMENU = [
+  { href: "/harang/inventory", label: "원부자재 재고현황" },
+  { href: "/harang/inventory/finished-products", label: "완제품 재고현황" },
+] as const;
+
 
 type DropdownItem = { href: string; label: string } | { label: string; comingSoon: true };
 
@@ -82,6 +87,7 @@ export default function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const desktopDropdownCloseTimeoutRef = useRef<number | null>(null);
+  const harangInventoryCloseTimeoutRef = useRef<number | null>(null);
   const {
     profile,
     uiSettings,
@@ -172,6 +178,21 @@ export default function Header() {
     }, 120);
   };
 
+  const cancelHarangInventoryClose = () => {
+    if (harangInventoryCloseTimeoutRef.current != null) {
+      window.clearTimeout(harangInventoryCloseTimeoutRef.current);
+      harangInventoryCloseTimeoutRef.current = null;
+    }
+  };
+
+  const scheduleHarangInventoryClose = () => {
+    cancelHarangInventoryClose();
+    harangInventoryCloseTimeoutRef.current = window.setTimeout(() => {
+      setActiveDropdown((prev) => (prev === "materials" ? null : prev));
+      harangInventoryCloseTimeoutRef.current = null;
+    }, 120);
+  };
+
   const handleSwitchToAff = () => {
     setViewOrganizationCodeSafe("100");
     if (pathname === "/" || !pathname.startsWith("/harang")) return;
@@ -231,17 +252,77 @@ export default function Header() {
       <nav className="hidden md:flex flex-1 justify-center items-center gap-6 min-w-0" aria-label="업무 카테고리">
         {showDesktopCategoryMenu && (viewIsHarang ? (
           desktopNavItems.map(({ href, label }) => {
+            const isInventoryMenu = href === "/harang/inventory";
             const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
+
+            if (!isInventoryMenu) {
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={`text-sm font-medium whitespace-nowrap transition-colors ${
+                    isActive ? "text-cyan-300" : "text-slate-400 hover:text-slate-100"
+                  }`}
+                >
+                  {label}
+                </Link>
+              );
+            }
+
+            const isOpen = activeDropdown === "materials";
             return (
-              <Link
+              <div
                 key={href}
-                href={href}
-                className={`text-sm font-medium whitespace-nowrap transition-colors ${
-                  isActive ? "text-cyan-300" : "text-slate-400 hover:text-slate-100"
-                }`}
+                className="relative"
+                onMouseEnter={() => {
+                  cancelHarangInventoryClose();
+                  setActiveDropdown("materials");
+                }}
+                onMouseLeave={() => {
+                  scheduleHarangInventoryClose();
+                }}
               >
-                {label}
-              </Link>
+                <button
+                  type="button"
+                  className={`text-sm font-medium whitespace-nowrap transition-colors ${
+                    isActive ? "text-cyan-300" : "text-slate-400 hover:text-slate-100"
+                  }`}
+                  aria-haspopup="menu"
+                  aria-expanded={isOpen}
+                  onFocus={() => {
+                    cancelHarangInventoryClose();
+                    setActiveDropdown("materials");
+                  }}
+                  onBlur={() => {
+                    scheduleHarangInventoryClose();
+                  }}
+                >
+                  {label}
+                </button>
+                {isOpen && (
+                  <div
+                    className="absolute left-1/2 top-full z-[200] mt-0 min-w-[240px] -translate-x-1/2 pt-1"
+                    role="menu"
+                  >
+                    <div className="rounded-lg border border-slate-600 bg-slate-900 py-2 shadow-2xl shadow-black/50 ring-1 ring-slate-700/80">
+                      {HARANG_INVENTORY_SUBMENU.map((item) => (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className={`block px-4 py-2 text-sm transition-colors ${
+                            pathname === item.href || pathname.startsWith(item.href + "/")
+                              ? "text-cyan-300 bg-cyan-500/10"
+                              : "text-slate-300 hover:bg-slate-700/80 hover:text-slate-100"
+                          }`}
+                          role="menuitem"
+                        >
+                          {item.label}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             );
           })
         ) : (

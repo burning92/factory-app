@@ -9,6 +9,10 @@ import type { HarangBomRow, HarangCategory } from "@/features/harang/types";
 import LotPickerModal, { type LotAllocation } from "@/features/harang/LotPickerModal";
 import { STATUS_LABEL } from "@/features/harang/productionRequests";
 import { displayHarangProductName } from "@/features/harang/displayProductName";
+import {
+  formatYmdDot,
+  harangProductExpiryFromProductionDate,
+} from "@/features/harang/finishedProductExpiry";
 
 type DraftLine = {
   key: string;
@@ -617,6 +621,8 @@ export default function HarangProductionInputNewPage() {
   const editIdParam = searchParams.get("edit_id");
 
   const [productionDate, setProductionDate] = useState(() => new Date().toISOString().slice(0, 10));
+  /** 완제품 시리얼/LOT(제조일자). 기본은 생산일자와 동일 */
+  const [productLotDate, setProductLotDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [previewNo, setPreviewNo] = useState("");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
@@ -754,7 +760,8 @@ export default function HarangProductionInputNewPage() {
     setMaterials(mats);
     setFinishedQtyStr(String(picked.remaining_qty));
     setLines(buildExecLines(mats, picked.remaining_qty));
-  }, [loadLineMaterials]);
+    setProductLotDate(productionDate);
+  }, [loadLineMaterials, productionDate]);
 
   useEffect(() => {
     void loadCandidates();
@@ -773,7 +780,7 @@ export default function HarangProductionInputNewPage() {
     void (async () => {
       const headRes = await supabase
         .from("harang_production_headers")
-        .select("id, production_date, note, finished_qty, request_line_id")
+        .select("id, production_date, note, finished_qty, request_line_id, finished_product_lot_date")
         .eq("id", editIdParam)
         .single();
       if (headRes.error) return;
@@ -810,7 +817,14 @@ export default function HarangProductionInputNewPage() {
       }
 
       setEditingHeaderId(String(headRes.data.id));
-      setProductionDate(String(headRes.data.production_date));
+      const prodD = String(headRes.data.production_date).slice(0, 10);
+      setProductionDate(prodD);
+      setProductLotDate(
+        String((headRes.data as { finished_product_lot_date?: string | null }).finished_product_lot_date ?? prodD).slice(
+          0,
+          10,
+        ),
+      );
       setNote(String(headRes.data.note ?? ""));
       setSelectedLine(picked);
       setMaterials(mats);
@@ -901,6 +915,8 @@ export default function HarangProductionInputNewPage() {
       allocations: line.allocations,
     }));
 
+    const lotYmd = (productLotDate || productionDate).slice(0, 10);
+
     setSaving(true);
     const { error } = editingHeaderId
       ? await supabase.rpc("update_harang_production_from_request_line", {
@@ -910,6 +926,7 @@ export default function HarangProductionInputNewPage() {
           p_finished_qty: finishedQty,
           p_note: note.trim() || null,
           p_lines: payload,
+          p_finished_product_lot_date: lotYmd,
         })
       : await supabase.rpc("create_harang_production_from_request_line", {
           p_production_date: productionDate,
@@ -917,6 +934,7 @@ export default function HarangProductionInputNewPage() {
           p_finished_qty: finishedQty,
           p_note: note.trim() || null,
           p_lines: payload,
+          p_finished_product_lot_date: lotYmd,
         });
     setSaving(false);
     if (error) {
@@ -950,7 +968,11 @@ export default function HarangProductionInputNewPage() {
               <input
                 type="date"
                 value={productionDate}
-                onChange={(e) => setProductionDate(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setProductionDate(v);
+                  setProductLotDate(v);
+                }}
                 className="mt-1 w-full px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 text-sm"
               />
             </label>
@@ -982,6 +1004,29 @@ export default function HarangProductionInputNewPage() {
             <label className="block text-xs text-slate-600">
               납기일
               <input readOnly value={selectedLine?.due_date ?? ""} className="mt-1 w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-800 text-sm" />
+            </label>
+            <label className="block text-xs text-slate-600">
+              제품 시리얼 / LOT
+              <input
+                type="date"
+                value={selectedLine ? productLotDate : ""}
+                onChange={(e) => setProductLotDate(e.target.value)}
+                disabled={!selectedLine}
+                className="mt-1 w-full px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 text-sm disabled:bg-slate-100 disabled:text-slate-500"
+              />
+            </label>
+            <label className="block text-xs text-slate-600">
+              제품 소비기한
+              <input
+                readOnly
+                value={
+                  productionDate
+                    ? formatYmdDot(harangProductExpiryFromProductionDate(productionDate))
+                    : ""
+                }
+                className="mt-1 w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-800 text-sm tabular-nums"
+                title="생산일자 + 364일"
+              />
             </label>
             <label className="block text-xs text-slate-600">
               요청수량 / 누적생산 / 잔여

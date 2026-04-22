@@ -99,6 +99,8 @@ export interface HarangProductionHeader {
   production_no: string;
   product_name: string;
   finished_qty: number;
+  /** 완제품 LOT(제조일자). 없으면 생산일과 동일로 볼 수 있음 */
+  finished_product_lot_date?: string | null;
   request_id?: string | null;
   request_line_id?: string | null;
   note: string | null;

@@ -112,8 +112,8 @@ export default function HarangInventoryPage() {
     <div className="px-4 sm:px-6 lg:px-8 py-8">
       <div className="max-w-7xl mx-auto space-y-5">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">하랑 재고현황</h1>
-          <p className="mt-1 text-sm text-slate-600">LOT별 현재고와 이력을 조회합니다.</p>
+          <h1 className="text-2xl font-semibold text-slate-900">원부자재 재고현황</h1>
+          <p className="mt-1 text-sm text-slate-600">원재료/부자재 LOT별 현재고와 이력을 조회합니다.</p>
         </div>
 
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
