@@ -289,17 +289,16 @@ export default function HarangInboundListPage() {
                   <th className="px-3 py-2 text-left">입고경로</th>
                   <th className="px-3 py-2 text-left">합계수량</th>
                   <th className="px-3 py-2 text-left">비고</th>
-                  <th className="px-3 py-2 text-left">등록일시</th>
                   <th className="px-3 py-2 text-left">등록자</th>
                   <th className="px-3 py-2 text-left">관리</th>
                 </tr>
               </thead>
               <tbody>
                 {loading && (
-                  <tr><td colSpan={9} className="px-3 py-6 text-center text-slate-500">불러오는 중...</td></tr>
+                  <tr><td colSpan={8} className="px-3 py-6 text-center text-slate-500">불러오는 중...</td></tr>
                 )}
                 {!loading && filtered.length === 0 && (
-                  <tr><td colSpan={9} className="px-3 py-6 text-center text-slate-500">입고내역이 없습니다.</td></tr>
+                  <tr><td colSpan={8} className="px-3 py-6 text-center text-slate-500">입고내역이 없습니다.</td></tr>
                 )}
                 {!loading &&
                   filtered.map((row) => (
@@ -322,7 +321,6 @@ export default function HarangInboundListPage() {
                       <td className="px-3 py-2">{row.inbound_route}</td>
                       <td className="px-3 py-2">{sumQuantity(row)}</td>
                       <td className="px-3 py-2 text-slate-600">{row.note ?? "-"}</td>
-                      <td className="px-3 py-2">{new Date(row.created_at).toLocaleString("ko-KR")}</td>
                       <td className="px-3 py-2">{authorLabel(row)}</td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <button
