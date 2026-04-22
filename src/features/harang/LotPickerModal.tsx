@@ -28,6 +28,10 @@ type Props = {
   category: HarangCategory;
   materialId: string;
   initialAllocations: LotAllocation[];
+  /** 이번 생산수량 기준 BOM 소요량(상세 표의 BOM 열과 동일). LOT 입력 시 참고용. */
+  bomRequiredQty?: number | null;
+  /** 표시 단위(예: g, EA). 없으면 재고 LOT의 unit을 쓸 수 있음 */
+  bomUnit?: string | null;
   /** 적용 시 LOT 입력 합계가 사용량이 되며, 표시용 날짜 요약 문자열이 함께 전달됩니다. */
   onApply: (allocations: LotAllocation[], lotDatesSummary: string) => void;
 };
@@ -39,6 +43,8 @@ export default function LotPickerModal({
   category,
   materialId,
   initialAllocations,
+  bomRequiredQty,
+  bomUnit,
   onApply,
 }: Props) {
   const [lots, setLots] = useState<HarangInventoryLot[]>([]);
@@ -222,6 +228,13 @@ export default function LotPickerModal({
   };
 
   const sumInput = useMemo(() => rows.reduce((s, r) => s + r.qty, 0), [rows]);
+  const bomUnitDisplay = useMemo(() => {
+    const u = (bomUnit ?? "").trim();
+    if (u) return u;
+    const fromLot = lots[0]?.unit;
+    return fromLot ? String(fromLot) : "";
+  }, [bomUnit, lots]);
+
   const totalCurrentStock = useMemo(
     () => rows.reduce((s, r) => s + Number(r.lot.current_quantity || 0), 0),
     [rows],
@@ -276,6 +289,16 @@ export default function LotPickerModal({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {bomRequiredQty != null && Number.isFinite(bomRequiredQty) && bomRequiredQty >= 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-cyan-100 bg-cyan-50/90 px-4 py-2">
+            <span className="text-xs font-semibold text-cyan-950">이번 생산 BOM 필요량</span>
+            <span className="text-sm font-bold tabular-nums text-cyan-900">
+              {bomRequiredQty.toLocaleString("ko-KR", { maximumFractionDigits: 3 })}
+              {bomUnitDisplay ? <span className="ml-1 font-semibold text-cyan-800">{bomUnitDisplay}</span> : null}
+            </span>
+          </div>
+        )}
 
         <div className="px-4 py-2 border-b border-slate-100 flex items-center gap-2 text-xs text-slate-600">
           <Search className="w-4 h-4 shrink-0" />

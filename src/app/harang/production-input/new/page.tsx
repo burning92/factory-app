@@ -532,6 +532,8 @@ function LegacyHarangProductionInputNewPage() {
           category={pickerLine.material_category}
           materialId={pickerLine.material_id}
           initialAllocations={pickerLine.allocations}
+          bomRequiredQty={pickerLine.requiredQty}
+          bomUnit={pickerLine.unit}
           onApply={(allocations, lotDatesSummary) => {
             const sum = sumAllocations(allocations);
             const key = pickerKey;
@@ -1120,6 +1122,8 @@ export default function HarangProductionInputNewPage() {
           category={pickerLine.material_category}
           materialId={pickerLine.material_id}
           initialAllocations={pickerLine.allocations}
+          bomRequiredQty={pickerLine.requiredQty}
+          bomUnit={pickerLine.unit}
           onApply={(allocations, lotDatesSummary) => {
             const sum = sumAllocations(allocations);
             const key = lotPickerKey;
