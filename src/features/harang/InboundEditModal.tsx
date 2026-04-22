@@ -298,12 +298,12 @@ export function InboundEditModal({ open, headerId, readonly = false, onClose, on
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 p-4 sm:p-8">
+    <div className="fixed inset-0 z-[110] flex items-start justify-center overflow-y-auto bg-black/45 px-4 pb-10 sm:px-8 sm:pb-12 [padding-top:max(2rem,calc(env(safe-area-inset-top,0px)+1.25rem))] sm:[padding-top:max(2.75rem,calc(env(safe-area-inset-top,0px)+1.5rem))]">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="inbound-edit-title"
-        className="my-auto w-full max-w-7xl rounded-xl border border-slate-200 bg-white shadow-xl"
+        className="mb-6 w-full max-w-7xl shrink-0 rounded-xl border border-slate-200 bg-white shadow-xl sm:mb-10"
       >
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-5">
           <div>
