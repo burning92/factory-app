@@ -105,7 +105,17 @@ export default function HarangProductionInputDetailPage() {
     const { error } = await supabase.rpc("delete_harang_production_with_usage", { p_header_id: header.id });
     setBusy(false);
     if (error) {
-      alert(error.message);
+      const msg = String(error.message ?? "");
+      if (
+        msg.includes("harang_finished_product_outbound_line_production_header_id_fkey") ||
+        msg.includes("harang_finished_product_outbound_line_lots")
+      ) {
+        alert(
+          "이미 완제품 출고에 사용된 생산입고 내역입니다.\n출고내역을 먼저 취소/삭제한 뒤 생산입고를 삭제해 주세요.",
+        );
+        return;
+      }
+      alert(msg);
       return;
     }
     router.replace("/harang/production-input");
