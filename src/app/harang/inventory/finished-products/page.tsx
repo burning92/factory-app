@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { displayHarangProductName } from "@/features/harang/displayProductName";
 import {
@@ -16,6 +17,8 @@ type FinishedStockRow = {
   product_name: string;
   finished_qty: number;
   created_at: string;
+  used_qty: number;
+  remain_qty: number;
 };
 
 function finishedDisplayName(productName: string): string {
@@ -29,17 +32,36 @@ export default function HarangFinishedProductInventoryPage() {
 
   const loadRows = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("harang_production_headers")
-      .select("id, production_no, production_date, finished_product_lot_date, product_name, finished_qty, created_at")
-      .order("production_date", { ascending: false })
-      .order("created_at", { ascending: false });
+    const [prodRes, usedRes] = await Promise.all([
+      supabase
+        .from("harang_production_headers")
+        .select("id, production_no, production_date, finished_product_lot_date, product_name, finished_qty, created_at")
+        .order("production_date", { ascending: false })
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("harang_finished_product_outbound_line_lots")
+        .select("production_header_id, quantity_used"),
+    ]);
     setLoading(false);
-    if (error) {
-      alert(error.message);
+    if (prodRes.error) {
+      alert(prodRes.error.message);
       return;
     }
-    setRows(((data ?? []) as FinishedStockRow[]).filter((r) => Number(r.finished_qty) > 0));
+    if (usedRes.error) {
+      alert(usedRes.error.message);
+      return;
+    }
+    const usedByHeader = new Map<string, number>();
+    for (const u of usedRes.data ?? []) {
+      const key = String(u.production_header_id);
+      usedByHeader.set(key, (usedByHeader.get(key) ?? 0) + Number(u.quantity_used ?? 0));
+    }
+    const merged = ((prodRes.data ?? []) as Omit<FinishedStockRow, "used_qty" | "remain_qty">[]).map((r) => {
+      const used = usedByHeader.get(r.id) ?? 0;
+      const remain = Math.max(0, Number(r.finished_qty) - used);
+      return { ...r, used_qty: used, remain_qty: remain };
+    });
+    setRows(merged.filter((r) => r.remain_qty > 0));
   }, []);
 
   useEffect(() => {
@@ -94,19 +116,20 @@ export default function HarangFinishedProductInventoryPage() {
                   <th className="px-3 py-2 text-left">완제품명</th>
                   <th className="px-3 py-2 text-left">제품 시리얼 / LOT</th>
                   <th className="px-3 py-2 text-left">제품 소비기한</th>
-                  <th className="px-3 py-2 text-right">재고수량</th>
+                  <th className="px-3 py-2 text-right">잔여재고</th>
                   <th className="px-3 py-2 text-left">생성일시</th>
+                  <th className="px-3 py-2 text-left">내역</th>
                 </tr>
               </thead>
               <tbody>
                 {loading && (
                   <tr>
-                    <td colSpan={6} className="px-3 py-6 text-center text-slate-500">불러오는 중...</td>
+                    <td colSpan={7} className="px-3 py-6 text-center text-slate-500">불러오는 중...</td>
                   </tr>
                 )}
                 {!loading && filtered.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-3 py-6 text-center text-slate-500">완제품 재고 데이터가 없습니다.</td>
+                    <td colSpan={7} className="px-3 py-6 text-center text-slate-500">완제품 재고 데이터가 없습니다.</td>
                   </tr>
                 )}
                 {!loading &&
@@ -120,9 +143,17 @@ export default function HarangFinishedProductInventoryPage() {
                         <td className="px-3 py-2 tabular-nums">{formatYmdDot(lotYmd)}</td>
                         <td className="px-3 py-2 tabular-nums">{formatYmdDot(expiryYmd)}</td>
                         <td className="px-3 py-2 text-right tabular-nums font-medium">
-                          {Number(row.finished_qty).toLocaleString("ko-KR")}
+                          {Number(row.remain_qty).toLocaleString("ko-KR")}
                         </td>
                         <td className="px-3 py-2">{new Date(row.created_at).toLocaleString("ko-KR")}</td>
+                        <td className="px-3 py-2">
+                          <Link
+                            href={`/harang/outbound?product=${encodeURIComponent(displayHarangProductName(row.product_name))}`}
+                            className="px-2.5 py-1.5 rounded border border-cyan-300 text-cyan-800 bg-cyan-50 text-xs"
+                          >
+                            출고내역
+                          </Link>
+                        </td>
                       </tr>
                     );
                   })}

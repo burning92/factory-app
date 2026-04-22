@@ -12,7 +12,6 @@ import {
   Inbox,
   Factory,
   Layers,
-  ListOrdered,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -24,9 +23,9 @@ const TAB_DAILY = { href: "/daily", label: "데일리", Icon: CalendarDays };
 const TAB_EXECUTIVE = { href: "/executive", label: "대시보드", Icon: LayoutDashboard };
 const TAB_ACCOUNT = { href: "/account", label: "계정", Icon: User };
 const TAB_HARANG_INBOUND = { href: "/harang/inbound", label: "입고", Icon: Inbox };
+const TAB_HARANG_OUTBOUND = { href: "/harang/outbound", label: "출고", Icon: Inbox };
 const TAB_HARANG_PRODUCTION = { href: "/harang/production-input", label: "생산", Icon: Factory };
 const TAB_HARANG_INVENTORY = { href: "/harang/inventory", label: "재고", Icon: Layers };
-const TAB_HARANG_REQUESTS = { href: "/harang/production-requests", label: "요청", Icon: ListOrdered };
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
@@ -44,8 +43,8 @@ export default function MobileTabBar() {
     ? [
         TAB_HOME,
         TAB_HARANG_INBOUND,
+        TAB_HARANG_OUTBOUND,
         TAB_HARANG_INVENTORY,
-        TAB_HARANG_REQUESTS,
         TAB_HARANG_PRODUCTION,
         TAB_ACCOUNT,
       ]

@@ -125,6 +125,7 @@ export default function Header() {
     ? [
         { href: "/", label: "홈" },
         { href: "/harang/inbound", label: "입고관리" },
+        { href: "/harang/outbound", label: "출고관리" },
         { href: "/harang/inventory", label: "재고현황" },
         { href: "/harang/production-requests", label: "생산요청" },
         { href: "/harang/production-input", label: "생산입력" },

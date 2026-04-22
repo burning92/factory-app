@@ -52,6 +52,9 @@ function authorLabel(header: HarangInboundHeader): string {
   return profile?.display_name || profile?.login_id || "-";
 }
 
+const actionBtn =
+  "inline-flex items-center justify-center rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors disabled:pointer-events-none disabled:opacity-50";
+
 export default function HarangInboundListPage() {
   const [rows, setRows] = useState<HarangInboundHeader[]>([]);
   const [yearFilter, setYearFilter] = useState<string>("");
@@ -325,10 +328,20 @@ export default function HarangInboundListPage() {
                         <button
                           type="button"
                           onClick={() => {
+                            setModalReadOnly(true);
+                            setModalHeaderId(row.id);
+                          }}
+                          className={`${actionBtn} mr-2 border-cyan-200 bg-white text-cyan-800 hover:border-cyan-300 hover:bg-cyan-50/90`}
+                        >
+                          보기
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
                             setModalReadOnly(false);
                             setModalHeaderId(row.id);
                           }}
-                          className="mr-2 rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 bg-white hover:bg-slate-50"
+                          className={`${actionBtn} mr-2 border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50`}
                         >
                           수정
                         </button>
@@ -336,7 +349,7 @@ export default function HarangInboundListPage() {
                           type="button"
                           disabled={deletingId === row.id}
                           onClick={() => void handleDelete(row.id)}
-                          className="rounded border border-red-600/70 px-2 py-1 text-xs text-red-700 bg-white hover:bg-red-50 disabled:opacity-50"
+                          className={`${actionBtn} border-red-200 bg-white text-red-700 hover:border-red-300 hover:bg-red-50`}
                         >
                           {deletingId === row.id ? "삭제 중..." : "삭제"}
                         </button>

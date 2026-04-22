@@ -12,6 +12,12 @@ const HUB_ITEMS = [
     Icon: ClipboardList,
   },
   {
+    href: "/harang/outbound",
+    label: "출고관리",
+    description: "완제품 출고내역 조회 및 신규 출고 등록",
+    Icon: ClipboardList,
+  },
+  {
     href: "/harang/inventory",
     label: "재고현황",
     description: "품목별 현재고, LOT별 잔량, 입출고 이력 조회",
