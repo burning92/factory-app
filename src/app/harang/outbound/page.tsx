@@ -149,9 +149,9 @@ export default function HarangOutboundListPage() {
                       <tr key={row.id} className="border-b border-slate-100 text-slate-900">
                         <td className="px-3 py-2 font-mono text-xs">{row.outbound_no}</td>
                         <td className="px-3 py-2">{row.outbound_date}</td>
-                        <td className="px-3 py-2">{summarizeProducts(row.lines)}</td>
+                        <td className="px-3 py-2 max-w-[260px] break-words">{summarizeProducts(row.lines)}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{total.toLocaleString("ko-KR")}</td>
-                        <td className="px-3 py-2 text-slate-600">{row.note ?? "-"}</td>
+                        <td className="px-3 py-2 text-slate-600 max-w-[220px] break-words">{row.note ?? "-"}</td>
                         <td className="px-3 py-2">{authorLabel(row)}</td>
                         <td className="px-3 py-2">
                           <div className="flex items-center gap-2">

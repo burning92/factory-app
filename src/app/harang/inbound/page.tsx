@@ -203,7 +203,7 @@ export default function HarangInboundListPage() {
           </div>
           <Link
             href="/harang/inbound/new"
-            className="px-4 py-2 rounded-lg bg-cyan-500 text-space-900 text-sm font-medium hover:bg-cyan-400"
+            className="px-4 py-2 rounded-lg bg-cyan-500 text-white text-sm font-medium hover:bg-cyan-400"
           >
             입고입력
           </Link>
@@ -305,7 +305,7 @@ export default function HarangInboundListPage() {
                     <tr key={row.id} className="border-b border-slate-100 text-slate-900">
                       <td className="px-3 py-2">{row.inbound_no}</td>
                       <td className="px-3 py-2">{summarizeCategory(row)}</td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2 max-w-[260px] break-words">
                         <button
                           type="button"
                           onClick={() => {
@@ -320,7 +320,7 @@ export default function HarangInboundListPage() {
                       </td>
                       <td className="px-3 py-2">{row.inbound_route}</td>
                       <td className="px-3 py-2">{sumQuantity(row)}</td>
-                      <td className="px-3 py-2 text-slate-600">{row.note ?? "-"}</td>
+                      <td className="px-3 py-2 text-slate-600 max-w-[240px] break-words">{row.note ?? "-"}</td>
                       <td className="px-3 py-2">{authorLabel(row)}</td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <button

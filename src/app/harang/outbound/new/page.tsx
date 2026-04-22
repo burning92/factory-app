@@ -643,8 +643,8 @@ export default function HarangOutboundNewPage() {
                           ))}
                         </select>
                       </td>
-                      <td className="px-2 py-2 font-mono text-xs text-slate-900">{productionSummary}</td>
-                      <td className="px-2 py-2 tabular-nums text-slate-900">{lotSummary}</td>
+                      <td className="px-2 py-2 max-w-[180px] break-all font-mono text-xs text-slate-900">{productionSummary}</td>
+                      <td className="px-2 py-2 max-w-[180px] break-words tabular-nums text-slate-900">{lotSummary}</td>
                       <td className="px-2 py-2 text-right tabular-nums text-slate-900">{lineTotalAvailable(line).toLocaleString("ko-KR")}</td>
                       <td className="px-2 py-2 text-right tabular-nums font-semibold text-slate-900">{lineTotalQty(line).toLocaleString("ko-KR")}</td>
                       <td className="px-2 py-2">

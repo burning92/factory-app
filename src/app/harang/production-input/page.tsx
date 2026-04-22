@@ -11,6 +11,9 @@ function authorLabel(header: HarangProductionHeader): string {
   return profile?.display_name || profile?.login_id || "-";
 }
 
+const actionBtn =
+  "inline-flex items-center justify-center rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors disabled:pointer-events-none disabled:opacity-50";
+
 export default function HarangProductionInputListPage() {
   const [rows, setRows] = useState<HarangProductionHeader[]>([]);
   const [yearFilter, setYearFilter] = useState("");
@@ -108,7 +111,7 @@ export default function HarangProductionInputListPage() {
           </div>
           <Link
             href="/harang/production-input/new"
-            className="px-4 py-2 rounded-lg bg-cyan-500 text-space-900 text-sm font-medium hover:bg-cyan-400"
+            className="px-4 py-2 rounded-lg bg-cyan-500 text-white text-sm font-medium hover:bg-cyan-400"
           >
             생산입고
           </Link>
@@ -208,7 +211,7 @@ export default function HarangProductionInputListPage() {
                   filtered.map((row) => (
                     <tr key={row.id} className="border-b border-slate-100 text-slate-900">
                       <td className="px-3 py-2">{row.production_no}</td>
-                      <td className="px-3 py-2">{displayHarangProductName(row.product_name)}</td>
+                      <td className="px-3 py-2 max-w-[260px] break-words">{displayHarangProductName(row.product_name)}</td>
                       <td className="px-3 py-2 text-right tabular-nums">
                         {Number(row.finished_qty).toLocaleString(undefined, { maximumFractionDigits: 3 })}
                       </td>
@@ -216,7 +219,7 @@ export default function HarangProductionInputListPage() {
                       <td className="px-3 py-2">
                         <Link
                           href={`/harang/production-input/${row.id}`}
-                          className="rounded border border-cyan-700/70 px-2 py-1 text-xs text-cyan-300 hover:bg-cyan-950/20"
+                          className={`${actionBtn} border-cyan-200 bg-white text-cyan-800 hover:border-cyan-300 hover:bg-cyan-50/90`}
                         >
                           내역보기
                         </Link>

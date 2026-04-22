@@ -275,10 +275,10 @@ export default function HarangOutboundClientsPage() {
                 {!loading &&
                   rows.map((row) => (
                     <tr key={row.id} className="border-b border-slate-100 text-slate-900">
-                      <td className="px-3 py-2">{row.name}</td>
-                      <td className="px-3 py-2">{row.manager_name || "-"}</td>
-                      <td className="px-3 py-2">{row.phone || "-"}</td>
-                      <td className="px-3 py-2">{row.address || "-"}</td>
+                      <td className="px-3 py-2 max-w-[180px] break-words">{row.name}</td>
+                      <td className="px-3 py-2 max-w-[140px] break-words">{row.manager_name || "-"}</td>
+                      <td className="px-3 py-2 max-w-[160px] break-words">{row.phone || "-"}</td>
+                      <td className="px-3 py-2 max-w-[260px] break-words">{row.address || "-"}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{row.sort_order}</td>
                       <td className="px-3 py-2">
                         <span
@@ -292,7 +292,7 @@ export default function HarangOutboundClientsPage() {
                         </span>
                       </td>
                       <td className="px-3 py-2">
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <button
                             type="button"
                             onClick={() => startEdit(row)}

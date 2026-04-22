@@ -291,8 +291,8 @@ export default function HarangInboundCreatePage() {
               + 라인 추가
             </button>
           </div>
-          <div className="overflow-x-hidden">
-            <table className="w-full table-fixed text-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[980px] table-fixed text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-slate-600">
                   <th className="px-2 py-2 text-left">분류</th>
@@ -470,7 +470,7 @@ export default function HarangInboundCreatePage() {
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="px-5 py-2.5 rounded-lg bg-cyan-500 text-space-900 font-medium text-sm disabled:opacity-60"
+            className="px-5 py-2.5 rounded-lg bg-cyan-500 text-white font-medium text-sm disabled:opacity-60"
           >
             {saving ? "저장 중..." : "입고 저장"}
           </button>
