@@ -46,7 +46,8 @@ const DRAFT_STORAGE_KEY = "harang-production-input-draft-v1";
 function isParbakeDoughLine(line: DraftLine): boolean {
   if (line.material_category !== "raw_material") return false;
   if (PARBAKE_RAW_MATERIAL_CODES.has(line.material_code)) return true;
-  return PARBAKE_MATERIAL_NAMES.has(line.material_name.trim());
+  if (PARBAKE_MATERIAL_NAMES.has(line.material_name.trim())) return true;
+  return line.material_name.replace(/\s/g, "").includes("파베이크도우");
 }
 
 function LegacyHarangProductionInputNewPage() {
@@ -920,7 +921,11 @@ export default function HarangProductionInputNewPage() {
     router.replace("/harang/production-input");
   };
 
-  const rawLines = useMemo(() => lines.filter((l) => l.material_category === "raw_material"), [lines]);
+  const parbakeLines = useMemo(() => lines.filter(isParbakeDoughLine), [lines]);
+  const rawOnlyLines = useMemo(
+    () => lines.filter((l) => l.material_category === "raw_material" && !isParbakeDoughLine(l)),
+    [lines],
+  );
   const packagingLines = useMemo(() => lines.filter((l) => l.material_category === "packaging_material"), [lines]);
 
   return (
@@ -1042,10 +1047,16 @@ export default function HarangProductionInputNewPage() {
           {lines.length === 0 ? (
             <p className="py-8 text-center text-sm text-slate-500">작업지시 라인 선택 후 생산수량을 입력하세요.</p>
           ) : (
-            <div className="space-y-5">
-              {[{ title: "원재료", rows: rawLines }, { title: "부자재", rows: packagingLines }].map((section) => (
+            <div className="space-y-5 -mx-4 px-4 sm:mx-0 sm:px-0">
+              {(
+                [
+                  { title: "파베이크", rows: parbakeLines, headerClass: "bg-cyan-50 border-b border-cyan-200" },
+                  { title: "원재료", rows: rawOnlyLines, headerClass: "bg-slate-100 border-b border-slate-200" },
+                  { title: "부자재", rows: packagingLines, headerClass: "bg-slate-100 border-b border-slate-200" },
+                ] as const
+              ).map((section) => (
                 <div key={section.title} className="rounded-lg border border-slate-200 overflow-hidden">
-                  <div className="px-3 py-2 bg-slate-100 border-b border-slate-200">
+                  <div className={`px-3 py-2 ${section.headerClass}`}>
                     <h3 className="text-sm font-semibold text-slate-800">{section.title}</h3>
                   </div>
                   <div className="overflow-x-auto">
