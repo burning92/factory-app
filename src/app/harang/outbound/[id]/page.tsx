@@ -180,7 +180,7 @@ export default function HarangOutboundDetailPage() {
       for (const row of printBaseRows) {
         const existing = prev[row.key];
         next[row.key] = {
-          pallet: existing?.pallet ?? fmtDecimal(row.qty / 480),
+          pallet: existing?.pallet ?? String(Math.ceil(row.qty / 480)),
           box: existing?.box ?? fmtDecimal(row.qty / 20),
           note: existing?.note ?? "",
         };
@@ -257,15 +257,23 @@ export default function HarangOutboundDetailPage() {
         </div>
 
         <section className="no-print rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
-          <h3 className="text-sm font-semibold text-slate-800">출력 설정 (3번 양식)</h3>
+          <h3 className="text-sm font-semibold text-slate-800">출력 설정</h3>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[940px] text-xs">
+            <table className="w-full min-w-[940px] table-fixed text-xs">
+              <colgroup>
+                <col style={{ width: "20%" }} />
+                <col style={{ width: "13%" }} />
+                <col style={{ width: "10%" }} />
+                <col style={{ width: "17%" }} />
+                <col style={{ width: "13%" }} />
+                <col style={{ width: "27%" }} />
+              </colgroup>
               <thead>
                 <tr className="border-b border-slate-200 text-slate-600">
                   <th className="px-2 py-2 text-left">상품명</th>
                   <th className="px-2 py-2 text-left">소비기한</th>
                   <th className="px-2 py-2 text-right">수량</th>
-                  <th className="px-2 py-2 text-right">파렛트</th>
+                  <th className="px-2 py-2 text-right">파렛트 (480 EA / 24 BOX)</th>
                   <th className="px-2 py-2 text-right">20입 박스</th>
                   <th className="px-2 py-2 text-left">비고</th>
                 </tr>
@@ -285,7 +293,7 @@ export default function HarangOutboundDetailPage() {
                             [row.key]: { ...(prev[row.key] ?? { pallet: "", box: "", note: "" }), pallet: e.target.value },
                           }))
                         }
-                        className="w-24 rounded border border-slate-300 px-2 py-1 text-right text-xs"
+                        className="w-full rounded border border-slate-300 px-2 py-1 text-right text-xs"
                       />
                     </td>
                     <td className="px-2 py-1.5">
@@ -297,7 +305,7 @@ export default function HarangOutboundDetailPage() {
                             [row.key]: { ...(prev[row.key] ?? { pallet: "", box: "", note: "" }), box: e.target.value },
                           }))
                         }
-                        className="w-24 rounded border border-slate-300 px-2 py-1 text-right text-xs"
+                        className="w-full rounded border border-slate-300 px-2 py-1 text-right text-xs"
                       />
                     </td>
                     <td className="px-2 py-1.5">
@@ -413,9 +421,9 @@ export default function HarangOutboundDetailPage() {
                   </colgroup>
                   <tbody>
                     <tr>
-                      <td className="border border-black px-2 py-1 text-center font-semibold">담당</td>
-                      <td className="border border-black px-2 py-1 text-center font-semibold">현장</td>
-                      <td className="border border-black px-2 py-1 text-center font-semibold">배송기사</td>
+                      <td className="border border-black px-2 py-1.5 text-center font-semibold">담당</td>
+                      <td className="border border-black px-2 py-1.5 text-center font-semibold">현장</td>
+                      <td className="border border-black px-2 py-1.5 text-center font-semibold">배송기사</td>
                     </tr>
                     <tr>
                       <td className="border border-black px-2 py-6 text-center align-middle">{header.supplier_manager_name || ""}</td>
@@ -437,19 +445,28 @@ export default function HarangOutboundDetailPage() {
 
             <div className="mt-3 border border-black">
               <table className="w-full border-collapse text-sm">
+                <colgroup>
+                  <col style={{ width: "34px" }} />
+                  <col style={{ width: "120px" }} />
+                  <col />
+                  <col style={{ width: "88px" }} />
+                  <col style={{ width: "130px" }} />
+                  <col style={{ width: "82px" }} />
+                  <col style={{ width: "160px" }} />
+                </colgroup>
                 <tbody>
                   <tr>
                     <td rowSpan={2} className="w-10 border border-black px-1 text-center font-semibold">공급자</td>
-                    <td className="border border-black px-2 py-1">상호(법인명)</td>
-                    <td className="border border-black px-2 py-1 font-semibold">{header.supplier_name || "-"}</td>
-                    <td className="border border-black px-2 py-1">담당자</td>
-                    <td className="border border-black px-2 py-1">{header.supplier_manager_name || "-"}</td>
-                    <td className="border border-black px-2 py-1">연락처</td>
-                    <td className="border border-black px-2 py-1">{header.supplier_phone || "-"}</td>
+                    <td className="border border-black bg-slate-100 px-2 py-1.5 font-semibold">상호(법인명)</td>
+                    <td className="border border-black px-2 py-1.5 font-semibold">{header.supplier_name || "-"}</td>
+                    <td className="border border-black bg-slate-100 px-2 py-1.5 font-semibold">담당자</td>
+                    <td className="border border-black px-2 py-1.5">{header.supplier_manager_name || "-"}</td>
+                    <td className="border border-black bg-slate-100 px-2 py-1.5 font-semibold">연락처</td>
+                    <td className="border border-black px-2 py-1.5">{header.supplier_phone || "-"}</td>
                   </tr>
                   <tr>
-                    <td className="border border-black px-2 py-1">사업장소재지</td>
-                    <td className="border border-black px-2 py-1" colSpan={5}>{header.supplier_address || "-"}</td>
+                    <td className="border border-black bg-slate-100 px-2 py-1.5 font-semibold">사업장소재지</td>
+                    <td className="border border-black px-2 py-1.5" colSpan={5}>{header.supplier_address || "-"}</td>
                   </tr>
                 </tbody>
               </table>
@@ -457,19 +474,28 @@ export default function HarangOutboundDetailPage() {
 
             <div className="mt-2 border border-black">
               <table className="w-full border-collapse text-sm">
+                <colgroup>
+                  <col style={{ width: "34px" }} />
+                  <col style={{ width: "120px" }} />
+                  <col />
+                  <col style={{ width: "88px" }} />
+                  <col style={{ width: "130px" }} />
+                  <col style={{ width: "82px" }} />
+                  <col style={{ width: "160px" }} />
+                </colgroup>
                 <tbody>
                   <tr>
                     <td rowSpan={2} className="w-10 border border-black px-1 text-center font-semibold">공급받는자</td>
-                    <td className="border border-black px-2 py-1">상호(법인명)</td>
-                    <td className="border border-black px-2 py-1 font-semibold">{header.client_name || "-"}</td>
-                    <td className="border border-black px-2 py-1">담당자</td>
-                    <td className="border border-black px-2 py-1">{header.client_manager_name || "-"}</td>
-                    <td className="border border-black px-2 py-1">연락처</td>
-                    <td className="border border-black px-2 py-1">{header.client_phone || "-"}</td>
+                    <td className="border border-black bg-slate-100 px-2 py-1.5 font-semibold">상호(법인명)</td>
+                    <td className="border border-black px-2 py-1.5 font-semibold">{header.client_name || "-"}</td>
+                    <td className="border border-black bg-slate-100 px-2 py-1.5 font-semibold">담당자</td>
+                    <td className="border border-black px-2 py-1.5">{header.client_manager_name || "-"}</td>
+                    <td className="border border-black bg-slate-100 px-2 py-1.5 font-semibold">연락처</td>
+                    <td className="border border-black px-2 py-1.5">{header.client_phone || "-"}</td>
                   </tr>
                   <tr>
-                    <td className="border border-black px-2 py-1">사업장소재지</td>
-                    <td className="border border-black px-2 py-1" colSpan={5}>{header.client_address || "-"}</td>
+                    <td className="border border-black bg-slate-100 px-2 py-1.5 font-semibold">사업장소재지</td>
+                    <td className="border border-black px-2 py-1.5" colSpan={5}>{header.client_address || "-"}</td>
                   </tr>
                 </tbody>
               </table>
@@ -479,34 +505,34 @@ export default function HarangOutboundDetailPage() {
               <table className="w-full border-collapse text-sm">
                 <thead>
                   <tr>
-                    <th className="border border-black px-2 py-1 w-10">No</th>
-                    <th className="border border-black px-2 py-1">상품명</th>
-                    <th className="border border-black px-2 py-1 w-20">파렛트</th>
-                    <th className="border border-black px-2 py-1 w-20">수량</th>
-                    <th className="border border-black px-2 py-1 w-24">소비기한</th>
-                    <th className="border border-black px-2 py-1 w-24">20입 박스</th>
-                    <th className="border border-black px-2 py-1 w-24">비고</th>
+                    <th className="border border-black px-2 py-1.5 w-10">No</th>
+                    <th className="border border-black px-2 py-1.5">상품명</th>
+                    <th className="border border-black px-2 py-1.5 w-20">파렛트</th>
+                    <th className="border border-black px-2 py-1.5 w-20">수량</th>
+                    <th className="border border-black px-2 py-1.5 w-24">소비기한</th>
+                    <th className="border border-black px-2 py-1.5 w-24">20입 박스</th>
+                    <th className="border border-black px-2 py-1.5 w-24">비고</th>
                   </tr>
                 </thead>
                 <tbody>
                   {printBaseRows.map((row, idx) => (
                     <tr key={`print:${row.key}`}>
-                      <td className="border border-black px-2 py-1 text-center">{idx + 1}</td>
-                      <td className="border border-black px-2 py-1">{row.product}</td>
-                      <td className="border border-black px-2 py-1 text-right tabular-nums">{printRowsEdit[row.key]?.pallet || "0"}</td>
-                      <td className="border border-black px-2 py-1 text-right tabular-nums">{fmtNum(row.qty)}</td>
-                      <td className="border border-black px-2 py-1 text-center">{row.lot}</td>
-                      <td className="border border-black px-2 py-1 text-right tabular-nums">{printRowsEdit[row.key]?.box || "0"}</td>
-                      <td className="border border-black px-2 py-1">{printRowsEdit[row.key]?.note || ""}</td>
+                      <td className="border border-black px-2 py-1.5 text-center">{idx + 1}</td>
+                      <td className="border border-black px-2 py-1.5">{row.product}</td>
+                      <td className="border border-black px-2 py-1.5 text-right tabular-nums">{printRowsEdit[row.key]?.pallet || "0"}</td>
+                      <td className="border border-black px-2 py-1.5 text-right tabular-nums">{fmtNum(row.qty)}</td>
+                      <td className="border border-black px-2 py-1.5 text-center">{row.lot}</td>
+                      <td className="border border-black px-2 py-1.5 text-right tabular-nums">{printRowsEdit[row.key]?.box || "0"}</td>
+                      <td className="border border-black px-2 py-1.5">{printRowsEdit[row.key]?.note || ""}</td>
                     </tr>
                   ))}
                   <tr>
-                    <td className="border border-black px-2 py-1 text-center font-semibold bg-yellow-200" colSpan={2}>합계</td>
-                    <td className="border border-black px-2 py-1 text-right tabular-nums font-semibold bg-yellow-200">{fmtDecimal(printTotals.pallet)}</td>
-                    <td className="border border-black px-2 py-1 text-right tabular-nums font-semibold bg-yellow-200">{fmtNum(printTotals.qty)}</td>
-                    <td className="border border-black px-2 py-1 bg-yellow-200"></td>
-                    <td className="border border-black px-2 py-1 text-right tabular-nums font-semibold bg-yellow-200">{fmtDecimal(printTotals.box)}</td>
-                    <td className="border border-black px-2 py-1 bg-yellow-200"></td>
+                    <td className="border border-black px-2 py-1.5 text-center font-semibold bg-yellow-200" colSpan={2}>합계</td>
+                    <td className="border border-black px-2 py-1.5 text-right tabular-nums font-semibold bg-yellow-200">{fmtDecimal(printTotals.pallet)}</td>
+                    <td className="border border-black px-2 py-1.5 text-right tabular-nums font-semibold bg-yellow-200">{fmtNum(printTotals.qty)}</td>
+                    <td className="border border-black px-2 py-1.5 bg-yellow-200"></td>
+                    <td className="border border-black px-2 py-1.5 text-right tabular-nums font-semibold bg-yellow-200">{fmtDecimal(printTotals.box)}</td>
+                    <td className="border border-black px-2 py-1.5 bg-yellow-200"></td>
                   </tr>
                 </tbody>
               </table>
