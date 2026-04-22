@@ -128,6 +128,21 @@ export default function HarangOutboundClientsPage() {
     await loadRows();
   };
 
+  const onDelete = async (row: OutboundClient) => {
+    const ok = confirm(`${row.name} 거래처를 삭제할까요?`);
+    if (!ok) return;
+    const { error } = await supabase.from("harang_outbound_clients").delete().eq("id", row.id);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    if (editingId === row.id) {
+      setEditingId(null);
+      setDraft(EMPTY_DRAFT);
+    }
+    await loadRows();
+  };
+
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8">
       <div className="max-w-6xl mx-auto space-y-5">
@@ -291,6 +306,13 @@ export default function HarangOutboundClientsPage() {
                             className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
                           >
                             {row.is_active ? "비활성" : "활성"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void onDelete(row)}
+                            className="rounded border border-red-300 bg-white px-2 py-1 text-xs text-red-700"
+                          >
+                            삭제
                           </button>
                         </div>
                       </td>
