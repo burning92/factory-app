@@ -272,7 +272,7 @@ export default function LotPickerModal({
         aria-label="닫기"
         onClick={onClose}
       />
-      <div className="relative z-[301] w-full max-w-5xl max-h-[90dvh] overflow-hidden rounded-t-2xl sm:rounded-2xl border border-slate-200 bg-white shadow-xl flex flex-col">
+      <div className="relative z-[301] flex w-full max-w-5xl max-h-[90dvh] flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white text-slate-900 shadow-xl sm:rounded-2xl">
         <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-slate-900 truncate">{materialName}</p>
@@ -291,11 +291,13 @@ export default function LotPickerModal({
         </div>
 
         {bomRequiredQty != null && Number.isFinite(bomRequiredQty) && bomRequiredQty >= 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-cyan-100 bg-cyan-50/90 px-4 py-2">
-            <span className="text-xs font-semibold text-cyan-950">이번 생산 BOM 필요량</span>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-cyan-200/90 bg-cyan-50 px-4 py-2.5 text-slate-900">
+            <span className="text-xs font-semibold tracking-tight text-slate-800">이번 생산 BOM 필요량</span>
             <span className="text-sm font-bold tabular-nums text-cyan-900">
               {bomRequiredQty.toLocaleString("ko-KR", { maximumFractionDigits: 3 })}
-              {bomUnitDisplay ? <span className="ml-1 font-semibold text-cyan-800">{bomUnitDisplay}</span> : null}
+              {bomUnitDisplay ? (
+                <span className="ml-1 font-semibold text-slate-700">{bomUnitDisplay}</span>
+              ) : null}
             </span>
           </div>
         )}
