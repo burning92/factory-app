@@ -265,25 +265,26 @@ export default function LotPickerModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center p-1 sm:p-4">
+    <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center p-1.5 sm:p-6">
       <button
         type="button"
-        className="absolute inset-0 bg-black/40"
+        className="absolute inset-0 bg-black/45"
         aria-label="닫기"
         onClick={onClose}
       />
-      <div className="relative z-[301] flex w-full max-w-[min(100vw-0.5rem,80rem)] max-h-[min(96dvh,1000px)] flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white text-slate-900 shadow-xl sm:max-h-[95dvh] sm:rounded-2xl">
-        <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-slate-900 truncate">{materialName}</p>
-            <p className="text-xs text-slate-500">
+      {/** 데스크톱: 세미 이카운트 느낌 — 중앙·max-w-4xl(896px). 구 80rem/1280px 대비 축소. 넓은 표는 본문만 가로 스크롤. */}
+      <div className="relative z-[301] flex w-full max-w-full sm:max-w-4xl max-h-[min(92dvh,860px)] flex-col overflow-hidden rounded-t-xl border border-slate-300/90 bg-white text-slate-900 shadow-2xl shadow-slate-900/15 sm:max-h-[min(82dvh,780px)] sm:rounded-lg">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-blue-950/20 bg-gradient-to-b from-blue-900 to-blue-950 px-3 py-2.5 sm:px-4 sm:py-2.5">
+          <div className="min-w-0 pr-1">
+            <p className="text-sm font-semibold text-white truncate leading-snug">{materialName}</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-blue-100/95">
               LOT별로 박스·수량·잔량을 입력합니다. 1박스 중량이 등록된 원재료는 박스 입력 시 수량(g)이 자동 계산됩니다.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"
+            className="shrink-0 rounded-md p-1.5 text-white/90 hover:bg-white/10"
             aria-label="닫기"
           >
             <X className="w-5 h-5" />
@@ -291,9 +292,9 @@ export default function LotPickerModal({
         </div>
 
         {bomRequiredQty != null && Number.isFinite(bomRequiredQty) && bomRequiredQty >= 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-cyan-200/90 bg-cyan-50 px-4 py-2.5 text-slate-900">
-            <span className="text-xs font-semibold tracking-tight text-slate-800">이번 생산 BOM 필요량</span>
-            <span className="text-sm font-bold tabular-nums text-cyan-900">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-100 px-3 py-2 sm:px-4 text-slate-900">
+            <span className="text-xs font-semibold tracking-tight text-slate-700">이번 생산 BOM 필요량</span>
+            <span className="text-sm font-bold tabular-nums text-blue-900">
               {bomRequiredQty.toLocaleString("ko-KR", { maximumFractionDigits: 3 })}
               {bomUnitDisplay ? (
                 <span className="ml-1 font-semibold text-slate-700">{bomUnitDisplay}</span>
@@ -428,11 +429,11 @@ export default function LotPickerModal({
           )}
         </div>
 
-        <div className="border-t border-slate-200 px-4 py-3 flex flex-wrap items-center justify-end gap-2">
+        <div className="shrink-0 border-t border-slate-200 bg-slate-50/80 px-3 py-2.5 sm:px-4 flex flex-wrap items-center justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
-            className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm bg-white hover:bg-slate-50"
+            className="px-3 py-1.5 rounded border border-slate-300 text-slate-800 text-sm bg-white hover:bg-slate-100"
           >
             닫기
           </button>
@@ -440,7 +441,7 @@ export default function LotPickerModal({
             type="button"
             onClick={handleApply}
             disabled={loading || lots.length === 0}
-            className="px-4 py-2 rounded-lg bg-cyan-600 text-white text-sm font-medium hover:bg-cyan-700 disabled:opacity-50"
+            className="px-4 py-1.5 rounded text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
           >
             적용
           </button>
