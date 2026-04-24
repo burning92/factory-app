@@ -61,6 +61,11 @@ interface OutboundStandardPreviewRow {
   quantityType: "g_only" | "ea_only" | "box_ea";
 }
 
+interface PrintSection<T> {
+  key: "dough" | "finished";
+  rows: T[];
+}
+
 function splitProductName(value: string): { baseName: string; option: string } {
   const raw = String(value ?? "").trim();
   const idx = raw.indexOf("-");
@@ -749,6 +754,38 @@ export default function OutboundPage() {
     return map;
   }, [standardPreviewRows]);
 
+  const printBaseSections = useMemo<PrintSection<OutboundRow>[]>(() => {
+    const doughRows = rows?.filter((r) => r.basis === "도우") ?? [];
+    const finishedRows = rows?.filter((r) => r.basis !== "도우") ?? [];
+    const sections: PrintSection<OutboundRow>[] = [];
+    if (doughRows.length > 0) {
+      sections.push({ key: "dough", rows: doughRows });
+    }
+    if (finishedRows.length > 0) {
+      sections.push({ key: "finished", rows: finishedRows });
+    }
+    return sections;
+  }, [rows]);
+
+  const printRefSections = useMemo<
+    PrintSection<{ base: OutboundRow; standard: OutboundStandardPreviewRow | undefined }>[]
+  >(() => {
+    const source = (rows ?? []).map((base) => ({
+      base,
+      standard: standardPreviewByMaterial.get(base.materialName),
+    }));
+    const doughRows = source.filter((x) => (x.standard?.basis ?? x.base.basis) === "도우");
+    const finishedRows = source.filter((x) => (x.standard?.basis ?? x.base.basis) !== "도우");
+    const sections: PrintSection<{ base: OutboundRow; standard: OutboundStandardPreviewRow | undefined }>[] = [];
+    if (doughRows.length > 0) {
+      sections.push({ key: "dough", rows: doughRows });
+    }
+    if (finishedRows.length > 0) {
+      sections.push({ key: "finished", rows: finishedRows });
+    }
+    return sections;
+  }, [rows, standardPreviewByMaterial]);
+
   const getDefaultExpiry = (materialName: string) =>
     (lastUsedDates ?? {})[String(materialName ?? "")] || todayStr();
 
@@ -1231,23 +1268,28 @@ export default function OutboundPage() {
                           </td>
                         </tr>
                       ) : (
-                        rows.map((row) => (
-                          <tr key={`print-base-${row.materialName}`}>
-                            <td className="border border-slate-400 break-words align-top">{row.materialName}</td>
-                            <td className="border border-slate-400 text-right tabular-nums">
-                              {row.bomGPerEa.toLocaleString()}
-                            </td>
-                            <td className="border border-slate-400 text-right tabular-nums">
-                              {printBoxCell(row.quantityType, row.boxQty)}
-                            </td>
-                            <td className="border border-slate-400 text-right tabular-nums">
-                              {printBagCell(row.quantityType, row.bagQty)}
-                            </td>
-                            <td className="border border-slate-400 text-right tabular-nums">
-                              {row.totalG.toLocaleString()}
-                            </td>
-                          </tr>
-                        ))
+                        printBaseSections.flatMap((section) =>
+                          section.rows.map((row) => (
+                            <tr
+                              key={`print-base-${section.key}-${row.materialName}`}
+                              className={section.key === "dough" ? "outbound-print-dough-row" : ""}
+                            >
+                              <td className="border border-slate-400 break-words align-top">{row.materialName}</td>
+                              <td className="border border-slate-400 text-right tabular-nums">
+                                {row.bomGPerEa.toLocaleString()}
+                              </td>
+                              <td className="border border-slate-400 text-right tabular-nums">
+                                {printBoxCell(row.quantityType, row.boxQty)}
+                              </td>
+                              <td className="border border-slate-400 text-right tabular-nums">
+                                {printBagCell(row.quantityType, row.bagQty)}
+                              </td>
+                              <td className="border border-slate-400 text-right tabular-nums">
+                                {row.totalG.toLocaleString()}
+                              </td>
+                            </tr>
+                          ))
+                        )
                       )}
                     </tbody>
                   </table>
@@ -1274,11 +1316,13 @@ export default function OutboundPage() {
                           </td>
                         </tr>
                       ) : (
-                        rows.map((row) => {
-                          const standard = standardPreviewByMaterial.get(row.materialName);
-                          return (
-                            <tr key={`print-ref-${row.materialName}`}>
-                              <td className="border border-slate-400 break-words align-top">{row.materialName}</td>
+                        printRefSections.flatMap((section) =>
+                          section.rows.map(({ base, standard }) => (
+                            <tr
+                              key={`print-ref-${section.key}-${base.materialName}`}
+                              className={section.key === "dough" ? "outbound-print-dough-row" : ""}
+                            >
+                              <td className="border border-slate-400 break-words align-top">{base.materialName}</td>
                               <td className="border border-slate-400 text-right tabular-nums">
                                 {standard ? standard.standardGPerEa.toLocaleString() : "-"}
                               </td>
@@ -1292,8 +1336,8 @@ export default function OutboundPage() {
                                 {standard ? standard.totalG.toLocaleString() : "-"}
                               </td>
                             </tr>
-                          );
-                        })
+                          ))
+                        )
                       )}
                     </tbody>
                   </table>
@@ -1510,6 +1554,9 @@ export default function OutboundPage() {
             padding-bottom: 5px;
             border-bottom: 1px solid #999999;
             color: #111111 !important;
+          }
+          .outbound-print-dough-row td {
+            background: #f4f8ff !important;
           }
         }
       `}</style>
