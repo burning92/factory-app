@@ -44,6 +44,7 @@ function getErrorMessage(err: unknown): string {
 interface OutboundRow {
   materialName: string;
   basis: string;
+  bomGPerEa: number;
   totalG: number;
   boxQty: number;
   bagQty: number;
@@ -96,6 +97,7 @@ function calcOutbound(
       result.push({
         materialName: row.materialName,
         basis: row.basis,
+        bomGPerEa: row.bomGPerEa,
         totalG,
         boxQty: 0,
         bagQty: 0,
@@ -107,6 +109,7 @@ function calcOutbound(
       result.push({
         materialName: row.materialName,
         basis: row.basis,
+        bomGPerEa: row.bomGPerEa,
         totalG,
         boxQty: 0,
         bagQty: eaWeight > 0 ? Math.ceil(totalG / eaWeight) : 0,
@@ -124,6 +127,7 @@ function calcOutbound(
     result.push({
       materialName: row.materialName,
       basis: row.basis,
+      bomGPerEa: row.bomGPerEa,
       totalG,
       boxQty,
       bagQty,
@@ -179,10 +183,14 @@ function formatStandardRequiredQty(row: OutboundStandardPreviewRow | null | unde
   return `${row.boxQty.toLocaleString()}박스 ${row.bagQty.toLocaleString()}개`;
 }
 
-function formatWeightInfoG(weight: number | null | undefined): string {
-  const n = Number(weight ?? 0);
-  if (!Number.isFinite(n) || n <= 0) return "-";
-  return `${n.toLocaleString("ko-KR")}g`;
+/** 인쇄 표: g 전용이면 박스/낱개는 - */
+function printBoxCell(q: "g_only" | "ea_only" | "box_ea", boxQty: number): string {
+  return q === "box_ea" ? String(boxQty) : "-";
+}
+
+function printBagCell(q: "g_only" | "ea_only" | "box_ea", bagQty: number): string {
+  if (q === "g_only") return "-";
+  return String(bagQty);
 }
 
 /** 실제 총 출고량(g) = (출고 박스 * 박스용량) + (출고 낱개 * 낱개용량) + 출고 잔량(g) */
@@ -870,10 +878,15 @@ export default function OutboundPage() {
     }
   };
 
+  const handlePrintPage = useCallback(() => {
+    if (typeof window === "undefined") return;
+    window.print();
+  }, []);
+
   return (
     <main className="py-10 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-2xl sm:text-3xl font-bold text-slate-100 mb-6">
+      <div className="max-w-7xl mx-auto">
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-100 mb-6 no-print">
           출고 입력
         </h1>
 
@@ -889,7 +902,7 @@ export default function OutboundPage() {
           </p>
         )}
 
-        <div className="bg-space-800/80 rounded-2xl border border-slate-700 shadow-glow p-6 mb-8">
+        <div className="bg-space-800/80 rounded-2xl border border-slate-700 shadow-glow p-6 mb-8 no-print">
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1">작성자</label>
@@ -986,7 +999,7 @@ export default function OutboundPage() {
 
         {rows !== null && (
           <>
-            <>
+            <div className="no-print">
               <div className="md:hidden space-y-3">
                 {rows.length === 0 ? (
                   <div className="rounded-xl border border-slate-700 bg-space-800/80 px-4 py-6 text-center text-slate-500 text-sm">
@@ -1037,19 +1050,30 @@ export default function OutboundPage() {
                         </p>
                         {standardPreviewByMaterial.get(row.materialName) && (() => {
                           const s = standardPreviewByMaterial.get(row.materialName)!;
-                          const mat = materials.find((m) => m.materialName === row.materialName);
                           return (
                             <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2">
-                              <p className="text-[11px] text-amber-300 font-medium">출고기준 참고 (저장 미반영)</p>
+                              <p className="text-[11px] text-amber-300 font-medium">참고 (저장 미반영)</p>
                               <p className="text-xs text-slate-300 mt-0.5">
-                                {s.standardGPerEa}g/ea · 기준 {s.basis} · 필요 {s.totalG.toLocaleString()}g
+                                기준 {s.basis}
                               </p>
-                              <p className="text-[11px] text-slate-400 mt-0.5">
-                                1박스 중량: {formatWeightInfoG(mat?.boxWeightG)} · 1낱개 중량: {formatWeightInfoG(mat?.unitWeightG)}
-                              </p>
-                              <p className="text-[11px] text-slate-400 mt-0.5">
-                                환산: {s.quantityType === "g_only" ? "g 전용" : s.quantityType === "ea_only" ? `${s.bagQty.toLocaleString()}개` : `${s.boxQty.toLocaleString()}박스 ${s.bagQty.toLocaleString()}개`}
-                              </p>
+                              <div className="mt-2 grid grid-cols-3 gap-2">
+                                <div className="rounded-md bg-space-900/70 border border-amber-500/30 px-2 py-1.5">
+                                  <p className="text-[10px] text-amber-200/80">총 필요량(g)</p>
+                                  <p className="text-xs text-amber-200 tabular-nums mt-0.5">{s.totalG.toLocaleString()}</p>
+                                </div>
+                                <div className="rounded-md bg-space-900/70 border border-amber-500/30 px-2 py-1.5">
+                                  <p className="text-[10px] text-amber-200/80">필요 박스</p>
+                                  <p className="text-xs text-amber-200 tabular-nums mt-0.5">
+                                    {s.quantityType === "box_ea" ? s.boxQty.toLocaleString() : "-"}
+                                  </p>
+                                </div>
+                                <div className="rounded-md bg-space-900/70 border border-amber-500/30 px-2 py-1.5">
+                                  <p className="text-[10px] text-amber-200/80">필요 낱개</p>
+                                  <p className="text-xs text-amber-200 tabular-nums mt-0.5">
+                                    {s.quantityType === "g_only" ? "-" : s.bagQty.toLocaleString()}
+                                  </p>
+                                </div>
+                              </div>
                             </div>
                           );
                         })()}
@@ -1068,19 +1092,19 @@ export default function OutboundPage() {
 
               <div className="hidden md:block bg-space-800/80 rounded-2xl border border-slate-700 overflow-hidden shadow-glow">
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[800px]">
+                  <table className="w-full table-fixed">
                     <thead>
                       <tr className="bg-space-700/80 border-b border-slate-600">
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-slate-200">원료명</th>
-                        <th className="px-4 py-3 text-center text-sm font-semibold text-slate-200">계산기준</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-slate-200">총 필요량(g)</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-slate-200">필요 박스</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-slate-200">필요 낱개</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-slate-200">출고 박스</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-slate-200">출고 낱개</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-slate-200">출고 잔량(g)</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-slate-200">실제 총 출고량(g)</th>
-                        <th className="px-4 py-3 text-center text-sm font-semibold text-slate-200">실제 출고 상태</th>
+                        <th className="w-[16%] px-2 py-3 text-left text-sm font-semibold text-slate-200">원료명</th>
+                        <th className="w-[10%] px-2 py-3 text-center text-sm font-semibold text-slate-200">계산기준</th>
+                        <th className="w-[11%] px-2 py-3 text-right text-sm font-semibold text-slate-200">총 필요량(g)</th>
+                        <th className="w-[8%] px-2 py-3 text-right text-sm font-semibold text-slate-200">필요 박스</th>
+                        <th className="w-[8%] px-2 py-3 text-right text-sm font-semibold text-slate-200">필요 낱개</th>
+                        <th className="w-[8%] px-2 py-3 text-right text-sm font-semibold text-slate-200">출고 박스</th>
+                        <th className="w-[8%] px-2 py-3 text-right text-sm font-semibold text-slate-200">출고 낱개</th>
+                        <th className="w-[9%] px-2 py-3 text-right text-sm font-semibold text-slate-200">출고 잔량(g)</th>
+                        <th className="w-[11%] px-2 py-3 text-right text-sm font-semibold text-slate-200">총 출고량(g)</th>
+                        <th className="w-[11%] px-2 py-3 text-center text-sm font-semibold text-slate-200">출고 상태</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1092,24 +1116,55 @@ export default function OutboundPage() {
                         rows.map((row) => {
                           const pending = pendingOutbound[row.materialName];
                           const mat = materials.find((m) => m.materialName === row.materialName);
+                          const standard = standardPreviewByMaterial.get(row.materialName);
                           const { totalBox, totalBag, totalG } = sumPendingBoxBagG(pending?.entries ?? []);
                           const actualOutboundG = calcActualOutboundG(pending?.entries ?? [], mat);
                           return (
                             <tr key={row.materialName} className="border-b border-slate-700 hover:bg-space-700/40">
-                              <td className="px-4 py-3 font-medium text-slate-100">{row.materialName}</td>
-                              <td className="px-4 py-3 text-center text-slate-300">{row.basis}</td>
-                              <td className="px-4 py-3 text-right tabular-nums text-slate-300">{row.totalG.toLocaleString()}</td>
-                              <td className="px-4 py-3 text-right tabular-nums text-slate-300">{row.quantityType === "box_ea" ? row.boxQty : "-"}</td>
-                              <td className="px-4 py-3 text-right tabular-nums text-slate-300">{row.quantityType === "g_only" ? "-" : row.bagQty}</td>
-                              <td className="px-4 py-3 text-right tabular-nums text-cyan-300/90">{row.quantityType === "box_ea" ? (pending ? totalBox : "-") : "-"}</td>
-                              <td className="px-4 py-3 text-right tabular-nums text-cyan-300/90">{row.quantityType === "g_only" ? "-" : (pending ? totalBag : "-")}</td>
-                              <td className="px-4 py-3 text-right tabular-nums text-cyan-300/90">{pending ? totalG.toLocaleString() : "-"}</td>
-                              <td className="px-4 py-3 text-right tabular-nums font-medium text-cyan-400">{pending ? actualOutboundG.toLocaleString() : "-"}</td>
-                              <td className="px-4 py-3 text-center">
+                              <td className="px-2 py-2 text-sm font-medium text-slate-100 break-keep">{row.materialName}</td>
+                              <td className="px-2 py-2 text-center">
+                                <div className="leading-tight">
+                                  <p className="text-sm text-slate-300 whitespace-nowrap">{row.basis}</p>
+                                  {standard && <p className="mt-1 text-xs text-amber-300 whitespace-nowrap">참고</p>}
+                                </div>
+                              </td>
+                              <td className="px-2 py-2 text-right tabular-nums">
+                                <div className="leading-tight">
+                                  <p className="text-sm text-slate-300 whitespace-nowrap">{row.totalG.toLocaleString()}</p>
+                                  {standard && (
+                                    <p className="mt-1 text-xs text-amber-300 whitespace-nowrap">{standard.totalG.toLocaleString()}</p>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-2 py-2 text-right tabular-nums">
+                                <div className="leading-tight">
+                                  <p className="text-sm text-slate-300 whitespace-nowrap">{row.quantityType === "box_ea" ? row.boxQty : "-"}</p>
+                                  {standard && (
+                                    <p className="mt-1 text-xs text-amber-300 whitespace-nowrap">
+                                      {standard.quantityType === "g_only" || standard.quantityType === "ea_only" ? "-" : standard.boxQty.toLocaleString()}
+                                    </p>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-2 py-2 text-right tabular-nums">
+                                <div className="leading-tight">
+                                  <p className="text-sm text-slate-300 whitespace-nowrap">{row.quantityType === "g_only" ? "-" : row.bagQty}</p>
+                                  {standard && (
+                                    <p className="mt-1 text-xs text-amber-300 whitespace-nowrap">
+                                      {standard.quantityType === "g_only" ? "-" : standard.bagQty.toLocaleString()}
+                                    </p>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-2 py-2 text-right text-sm tabular-nums text-cyan-300/90">{row.quantityType === "box_ea" ? (pending ? totalBox : "-") : "-"}</td>
+                              <td className="px-2 py-2 text-right text-sm tabular-nums text-cyan-300/90">{row.quantityType === "g_only" ? "-" : (pending ? totalBag : "-")}</td>
+                              <td className="px-2 py-2 text-right text-sm tabular-nums text-cyan-300/90">{pending ? totalG.toLocaleString() : "-"}</td>
+                              <td className="px-2 py-2 text-right text-sm tabular-nums font-medium text-cyan-400">{pending ? actualOutboundG.toLocaleString() : "-"}</td>
+                              <td className="px-2 py-2 text-center">
                                 <button
                                   type="button"
                                   onClick={() => openOutboundModal(row)}
-                                  className={pending ? "inline-flex items-center justify-center px-4 py-2 rounded-lg bg-emerald-500/80 text-space-900 text-sm font-medium shadow-glow hover:bg-emerald-400 transition-colors" : "inline-flex items-center justify-center px-4 py-2 rounded-lg bg-cyan-500 text-space-900 text-sm font-medium shadow-glow hover:bg-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 transition-colors"}
+                                  className={pending ? "inline-flex h-9 min-w-[72px] items-center justify-center px-2 py-1.5 rounded-lg bg-emerald-500/80 text-space-900 text-xs font-medium shadow-glow hover:bg-emerald-400 transition-colors" : "inline-flex h-9 min-w-[72px] items-center justify-center px-2 py-1.5 rounded-lg bg-cyan-500 text-space-900 text-xs font-medium shadow-glow hover:bg-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 transition-colors"}
                                 >
                                   {pending ? "✅ 입력 완료 (수정)" : "출고 입력"}
                                 </button>
@@ -1122,45 +1177,147 @@ export default function OutboundPage() {
                   </table>
                 </div>
               </div>
-            </>
+            </div>
 
-            {standardPreviewRows.length > 0 && (
-              <div className="mt-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
-                <div className="flex items-center justify-between gap-2 mb-3">
-                  <h3 className="text-sm font-semibold text-amber-200">출고기준 참고 계산</h3>
-                  <span className="text-[11px] text-amber-300/90">저장 미반영</span>
+            <div className="print-only outbound-print-sheet">
+              <h2 className="outbound-print-title font-bold mb-4">출고 계산표</h2>
+              <div className="outbound-print-header mb-4 pb-3">
+                <div className="outbound-print-header-col">
+                  <p>
+                    <span className="font-semibold">생산일자</span>
+                    <span className="ml-2">{productionDate}</span>
+                  </p>
+                  <p>
+                    <span className="font-semibold">제품명</span>
+                    <span className="ml-2 break-words">{productName || "-"}</span>
+                  </p>
+                  <p>
+                    <span className="font-semibold">작성자</span>
+                    <span className="ml-2">{preparerName || "-"}</span>
+                  </p>
                 </div>
-                <div className="space-y-2">
-                  {standardPreviewRows.map((s) => {
-                    const mat = materials.find((m) => m.materialName === s.materialName);
-                    return (
-                    <div key={`${s.materialName}-${s.basis}`} className="rounded-lg border border-slate-700 bg-space-900/60 px-3 py-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-medium text-slate-100">{s.materialName}</p>
-                        <p className="text-xs text-slate-400">{s.basis}</p>
-                      </div>
-                      <p className="text-xs text-slate-300 mt-1">
-                        {s.standardGPerEa}g/ea × 수량 = {s.totalG.toLocaleString()}g
-                      </p>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        1박스 중량: {formatWeightInfoG(mat?.boxWeightG)} · 1낱개 중량: {formatWeightInfoG(mat?.unitWeightG)}
-                      </p>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        환산: {s.quantityType === "g_only" ? "g 전용" : s.quantityType === "ea_only" ? `${s.bagQty.toLocaleString()}개` : `${s.boxQty.toLocaleString()}박스 ${s.bagQty.toLocaleString()}개`}
-                      </p>
-                    </div>
-                  )})}
+                <div className="outbound-print-header-col text-right">
+                  <p>
+                    <span className="font-semibold">계산 도우수량</span>
+                    <span className="ml-2 tabular-nums">
+                      {isParbakeUse ? "-" : (parseInt(doughQty, 10) || 0).toLocaleString()}
+                    </span>
+                  </p>
+                  <p>
+                    <span className="font-semibold">완제품 예상수량</span>
+                    <span className="ml-2 tabular-nums">{(parseInt(finishedQty, 10) || 0).toLocaleString()}</span>
+                  </p>
                 </div>
               </div>
-            )}
+              <div className="outbound-print-cards">
+                <div className="outbound-print-card">
+                  <p className="outbound-print-card-title">기본 (BOM)</p>
+                  <div className="outbound-print-card-body">
+                  <table className="w-full border-collapse print-subtable outbound-print-table">
+                    <thead>
+                      <tr>
+                        <th className="border border-slate-400 text-left">원료명</th>
+                        <th className="border border-slate-400 text-right">BOM</th>
+                        <th className="border border-slate-400 text-right">필요박스</th>
+                        <th className="border border-slate-400 text-right">필요낱개</th>
+                        <th className="border border-slate-400 text-right">총중량</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="border border-slate-400 text-center outbound-print-table-empty">
+                            계산 결과가 없습니다.
+                          </td>
+                        </tr>
+                      ) : (
+                        rows.map((row) => (
+                          <tr key={`print-base-${row.materialName}`}>
+                            <td className="border border-slate-400 break-words align-top">{row.materialName}</td>
+                            <td className="border border-slate-400 text-right tabular-nums">
+                              {row.bomGPerEa.toLocaleString()}
+                            </td>
+                            <td className="border border-slate-400 text-right tabular-nums">
+                              {printBoxCell(row.quantityType, row.boxQty)}
+                            </td>
+                            <td className="border border-slate-400 text-right tabular-nums">
+                              {printBagCell(row.quantityType, row.bagQty)}
+                            </td>
+                            <td className="border border-slate-400 text-right tabular-nums">
+                              {row.totalG.toLocaleString()}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                  </div>
+                </div>
+                <div className="outbound-print-card">
+                  <p className="outbound-print-card-title">참고 (출고기준)</p>
+                  <div className="outbound-print-card-body">
+                  <table className="w-full border-collapse print-subtable outbound-print-table">
+                    <thead>
+                      <tr>
+                        <th className="border border-slate-400 text-left">원료명</th>
+                        <th className="border border-slate-400 text-right">BOM</th>
+                        <th className="border border-slate-400 text-right">필요박스</th>
+                        <th className="border border-slate-400 text-right">필요낱개</th>
+                        <th className="border border-slate-400 text-right">총중량</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="border border-slate-400 text-center outbound-print-table-empty">
+                            계산 결과가 없습니다.
+                          </td>
+                        </tr>
+                      ) : (
+                        rows.map((row) => {
+                          const standard = standardPreviewByMaterial.get(row.materialName);
+                          return (
+                            <tr key={`print-ref-${row.materialName}`}>
+                              <td className="border border-slate-400 break-words align-top">{row.materialName}</td>
+                              <td className="border border-slate-400 text-right tabular-nums">
+                                {standard ? standard.standardGPerEa.toLocaleString() : "-"}
+                              </td>
+                              <td className="border border-slate-400 text-right tabular-nums">
+                                {standard ? printBoxCell(standard.quantityType, standard.boxQty) : "-"}
+                              </td>
+                              <td className="border border-slate-400 text-right tabular-nums">
+                                {standard ? printBagCell(standard.quantityType, standard.bagQty) : "-"}
+                              </td>
+                              <td className="border border-slate-400 text-right tabular-nums">
+                                {standard ? standard.totalG.toLocaleString() : "-"}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                  </div>
+                </div>
+              </div>
+              <p className="outbound-print-footnote mt-2">기본·참고 각각: 개당 BOM, 필요 박스/낱개, 총중량(g)입니다.</p>
+            </div>
 
-            <div className="mt-6">
+            <div className="mt-6 no-print">
               {saving === "logs" && (
                 <p className="mb-2 text-cyan-400 flex items-center gap-2">
                   <span className="inline-block w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
                   저장 중...
                 </p>
               )}
+              <button
+                type="button"
+                onClick={handlePrintPage}
+                disabled={rows.length === 0}
+                className="mb-3 w-full py-3 rounded-xl border border-slate-500 text-slate-200 text-sm font-semibold hover:border-cyan-400 hover:text-cyan-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                현재 화면 출력
+              </button>
               <button
                 type="button"
                 onClick={handleFinalSave}
@@ -1190,6 +1347,172 @@ export default function OutboundPage() {
           />
         )}
       </div>
+      <style jsx global>{`
+        .print-only {
+          display: none;
+        }
+        @media print {
+          @page {
+            size: A4 landscape;
+            margin: 5mm 6mm;
+          }
+          .no-print {
+            display: none !important;
+          }
+          .print-only {
+            display: block !important;
+          }
+          body {
+            background: #ffffff !important;
+            color: #111111 !important;
+          }
+          main {
+            background: #ffffff !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+            max-width: none !important;
+          }
+          main .max-w-7xl {
+            max-width: none !important;
+            width: 100% !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+          }
+          .outbound-print-sheet,
+          .outbound-print-sheet * {
+            color: #111111 !important;
+            text-shadow: none !important;
+            box-shadow: none !important;
+          }
+          .outbound-print-sheet table {
+            background: #ffffff !important;
+          }
+          .outbound-print-sheet th,
+          .outbound-print-sheet td {
+            border-color: #666666 !important;
+            background: #ffffff !important;
+          }
+          .outbound-print-sheet {
+            color: #111111 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            font-size: 13pt;
+            line-height: 1.45;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .outbound-print-title {
+            font-size: 22pt !important;
+            line-height: 1.2;
+            margin: 0 0 10px 0 !important;
+            letter-spacing: -0.02em;
+          }
+          .outbound-print-header p {
+            margin: 0.15em 0;
+          }
+          .outbound-print-table th,
+          .outbound-print-table td {
+            font-size: 12pt !important;
+            line-height: 1.35 !important;
+            padding: 6px 7px !important;
+          }
+          .outbound-print-table thead th {
+            font-size: 12.5pt !important;
+            font-weight: 700 !important;
+            padding: 7px 7px !important;
+          }
+          .outbound-print-table-empty {
+            font-size: 12pt !important;
+            padding: 14px 8px !important;
+          }
+          .outbound-print-footnote {
+            font-size: 10.5pt !important;
+            color: #333333 !important;
+            line-height: 1.4;
+            margin-top: 8px !important;
+          }
+          .outbound-print-header {
+            display: flex;
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1.5rem;
+            border-bottom: 1px solid #333333;
+            font-size: 12.5pt !important;
+            margin-bottom: 10px !important;
+            padding-bottom: 8px !important;
+          }
+          .outbound-print-header-col {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            min-width: 0;
+            flex: 1;
+          }
+          .outbound-print-cards {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 12px;
+            width: 100%;
+            align-items: stretch;
+          }
+          .outbound-print-card {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            width: 100%;
+            height: 100%;
+            border: 1.5px solid #333333;
+            border-radius: 6px;
+            padding: 10px 10px 12px;
+            background: #ffffff !important;
+            box-sizing: border-box;
+          }
+          .outbound-print-card-body {
+            flex: 1 1 auto;
+            min-height: 0;
+            min-width: 0;
+            width: 100%;
+            display: block;
+          }
+          .outbound-print-card .print-subtable {
+            width: 100%;
+            table-layout: fixed;
+          }
+          .outbound-print-card .print-subtable th:nth-child(1),
+          .outbound-print-card .print-subtable td:nth-child(1) {
+            width: 32%;
+          }
+          .outbound-print-card .print-subtable th:nth-child(2),
+          .outbound-print-card .print-subtable td:nth-child(2) {
+            width: 14%;
+          }
+          .outbound-print-card .print-subtable th:nth-child(3),
+          .outbound-print-card .print-subtable td:nth-child(3) {
+            width: 12%;
+          }
+          .outbound-print-card .print-subtable th:nth-child(4),
+          .outbound-print-card .print-subtable td:nth-child(4) {
+            width: 12%;
+          }
+          .outbound-print-card .print-subtable th:nth-child(5),
+          .outbound-print-card .print-subtable td:nth-child(5) {
+            width: 30%;
+          }
+          .outbound-print-card-title {
+            font-size: 13pt !important;
+            font-weight: 700;
+            margin: 0 0 8px 0;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #999999;
+            color: #111111 !important;
+          }
+        }
+      `}</style>
     </main>
   );
 }
