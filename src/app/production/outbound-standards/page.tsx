@@ -350,6 +350,7 @@ export default function OutboundStandardsPage() {
             standardsByProduct.map(([productName, list]) => {
               const open = expanded[productName] ?? false;
               const sorted = [...list].sort((a, b) => a.materialName.localeCompare(b.materialName, "ko"));
+              const materialCount = new Set(sorted.map((row) => row.materialName)).size;
               return (
                 <div key={productName} className="rounded-2xl overflow-hidden border border-cyan-500/20 bg-space-800/80">
                   <button
@@ -358,7 +359,10 @@ export default function OutboundStandardsPage() {
                     className={`w-full px-4 py-3 flex items-center justify-between ${open ? "border-b border-slate-700" : ""}`}
                     aria-expanded={open}
                   >
-                    <span className="font-semibold text-slate-100 text-left">{productName}</span>
+                    <span className="font-semibold text-slate-100 text-left">
+                      {productName}
+                      <span className="ml-2 text-xs font-medium text-slate-300 whitespace-nowrap">원료 {materialCount}종</span>
+                    </span>
                     {open ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
                   </button>
                   {open && (

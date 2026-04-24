@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import { useMasterStore, type DoughBom } from "@/store/useMasterStore";
 import type { Material, BomRow, PlanningSubmaterialRow, PlanningSubmaterialItem } from "@/lib/mockData";
 import { supabase } from "@/lib/supabase";
+import { createSafeId } from "@/lib/createSafeId";
 
 function PencilIcon({ className }: { className?: string }) {
   return (
@@ -405,6 +406,10 @@ export default function AdminPage() {
     qtyGPerEa: "",
     active: true,
   });
+  /** 등록 시 동일 제품에 부자재 여러 줄 입력 */
+  const [planningSubmaterialCreateLines, setPlanningSubmaterialCreateLines] = useState<
+    { id: string; materialName: string; qtyGPerEa: string }[]
+  >([{ id: createSafeId(), materialName: "", qtyGPerEa: "" }]);
   const [editingPlanningSubmaterialId, setEditingPlanningSubmaterialId] = useState<string | null>(null);
 
   const [doughBomForm, setDoughBomForm] = useState({
@@ -615,36 +620,90 @@ export default function AdminPage() {
 
   const clearPlanningSubmaterialForm = () => {
     setPlanningSubmaterialForm({ productNameSnapshot: "", materialName: "", qtyGPerEa: "", active: true });
+    setPlanningSubmaterialCreateLines([{ id: createSafeId(), materialName: "", qtyGPerEa: "" }]);
     setEditingPlanningSubmaterialId(null);
+  };
+
+  const addPlanningSubmaterialCreateLine = () => {
+    setPlanningSubmaterialCreateLines((prev) => [...prev, { id: createSafeId(), materialName: "", qtyGPerEa: "" }]);
+  };
+
+  const removePlanningSubmaterialCreateLine = (id: string) => {
+    setPlanningSubmaterialCreateLines((prev) => {
+      const next = prev.filter((r) => r.id !== id);
+      return next.length > 0 ? next : [{ id: createSafeId(), materialName: "", qtyGPerEa: "" }];
+    });
+  };
+
+  const updatePlanningSubmaterialCreateLine = (id: string, patch: Partial<{ materialName: string; qtyGPerEa: string }>) => {
+    setPlanningSubmaterialCreateLines((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   };
 
   const handleSubmitPlanningSubmaterial = async (e: React.FormEvent) => {
     e.preventDefault();
     const productNameSnapshot = planningSubmaterialForm.productNameSnapshot.trim();
-    const materialName = planningSubmaterialForm.materialName.trim();
-    const qty = parseFloat(planningSubmaterialForm.qtyGPerEa);
-    if (!productNameSnapshot || !materialName || !Number.isFinite(qty) || qty < 0) {
-      alert("제품 스냅샷·부자재·소요(낱개)를 올바르게 입력해 주세요.");
+    if (!productNameSnapshot) {
+      alert("제품 스냅샷(제품명 - 기준)을 입력해 주세요.");
       return;
     }
     try {
       if (editingPlanningSubmaterialId) {
+        const materialName = planningSubmaterialForm.materialName.trim();
+        const qty = parseFloat(planningSubmaterialForm.qtyGPerEa);
+        if (!materialName || !Number.isFinite(qty) || qty < 0) {
+          alert("부자재·소요(낱개)를 올바르게 입력해 주세요.");
+          return;
+        }
         await updatePlanningSubmaterialRow(editingPlanningSubmaterialId, {
           productNameSnapshot,
           materialName,
           qtyGPerEa: qty,
           active: planningSubmaterialForm.active,
         });
-      } else {
-        await addPlanningSubmaterialRows([
-          {
-            productNameSnapshot,
-            materialName,
-            qtyGPerEa: qty,
-            active: planningSubmaterialForm.active,
-          },
-        ]);
+        clearPlanningSubmaterialForm();
+        return;
       }
+
+      const parsed = planningSubmaterialCreateLines
+        .map((line) => {
+          const materialName = line.materialName.trim();
+          const qty = parseFloat(line.qtyGPerEa);
+          if (!materialName || !Number.isFinite(qty) || qty < 0) return null;
+          return { productNameSnapshot, materialName, qtyGPerEa: qty, active: planningSubmaterialForm.active };
+        })
+        .filter((x): x is NonNullable<typeof x> => x != null);
+
+      if (parsed.length === 0) {
+        alert("등록할 부자재를 1개 이상 선택하고, 소요(낱개)를 입력해 주세요.");
+        return;
+      }
+
+      const seen = new Set<string>();
+      for (const p of parsed) {
+        if (seen.has(p.materialName)) {
+          alert(`같은 부자재가 여러 줄에 중복되었습니다: ${p.materialName}`);
+          return;
+        }
+        seen.add(p.materialName);
+      }
+
+      const existingForProduct = planningSubmaterials.filter((r) => r.productNameSnapshot === productNameSnapshot);
+      const existingNames = new Set(existingForProduct.map((r) => r.materialName));
+      for (const p of parsed) {
+        if (existingNames.has(p.materialName)) {
+          alert(`이미 등록된 부자재입니다.\n\n제품: ${productNameSnapshot}\n부자재: ${p.materialName}\n\n목록에서 수정·삭제한 뒤 다시 등록하세요.`);
+          return;
+        }
+      }
+
+      await addPlanningSubmaterialRows(
+        parsed.map((p) => ({
+          productNameSnapshot: p.productNameSnapshot,
+          materialName: p.materialName,
+          qtyGPerEa: p.qtyGPerEa,
+          active: p.active,
+        }))
+      );
       clearPlanningSubmaterialForm();
     } catch {
       alert("플래닝 부자재 저장에 실패했습니다.");
@@ -1445,6 +1504,7 @@ export default function AdminPage() {
                   const sortedRows = [...rows].sort((a, b) =>
                     (a.materialName ?? "").localeCompare(b.materialName ?? "", "ko")
                   );
+                  const materialCount = new Set(sortedRows.map((row) => row.materialName)).size;
                   return (
                     <section key={productName} className="rounded-2xl overflow-hidden border border-cyan-500/20 bg-space-800/80 shadow-glow">
                       <button
@@ -1453,7 +1513,10 @@ export default function AdminPage() {
                         className={`w-full bg-gradient-to-r from-space-700 via-space-700 to-cyan-900/30 border-cyan-500/30 px-4 py-3 flex items-center justify-between gap-2 flex-wrap shadow-glow text-left hover:from-space-600 hover:to-cyan-900/40 transition-colors rounded-t-2xl ${isExpanded ? "border-b" : "rounded-b-2xl"}`}
                         aria-expanded={isExpanded}
                       >
-                        <span className="font-bold text-base text-slate-100">{productName}</span>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-bold text-base text-slate-100 truncate">{productName}</span>
+                          <span className="text-xs text-slate-300 whitespace-nowrap">원료 {materialCount}종</span>
+                        </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <button
                             type="button"
@@ -1521,9 +1584,9 @@ export default function AdminPage() {
               <h2 className="text-lg font-semibold text-slate-100 mb-1">
                 {editingPlanningSubmaterialId ? "플래닝 부자재 수정" : "플래닝 부자재 등록"}
               </h2>
-              <p className="text-slate-400 text-sm mb-4">이 섹션은 생산플래닝 원료/발주 계산에서만 사용됩니다.</p>
-              <form onSubmit={handleSubmitPlanningSubmaterial} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="sm:col-span-2">
+              <p className="text-slate-400 text-sm mb-4">이 섹션은 생산플래닝 원료/발주 계산에서만 사용됩니다. 등록 시 같은 제품에 대해 부자재를 여러 줄 한 번에 넣을 수 있습니다.</p>
+              <form onSubmit={handleSubmitPlanningSubmaterial} className="space-y-4">
+                <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">제품 스냅샷(제품명 - 기준)</label>
                   <input
                     type="text"
@@ -1539,35 +1602,99 @@ export default function AdminPage() {
                     ))}
                   </datalist>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">부자재명</label>
-                  <select
-                    value={planningSubmaterialForm.materialName}
-                    onChange={(e) => setPlanningSubmaterialForm((p) => ({ ...p, materialName: e.target.value }))}
-                    className="w-full px-4 py-3 bg-space-900 border border-slate-600 rounded-lg text-slate-100 focus:ring-2 focus:ring-cyan-500/50"
-                  >
-                    <option value="">부자재 선택</option>
-                    {submaterialNameOptions.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
-                      </option>
+                {editingPlanningSubmaterialId ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">부자재명</label>
+                      <select
+                        value={planningSubmaterialForm.materialName}
+                        onChange={(e) => setPlanningSubmaterialForm((p) => ({ ...p, materialName: e.target.value }))}
+                        className="w-full px-4 py-3 bg-space-900 border border-slate-600 rounded-lg text-slate-100 focus:ring-2 focus:ring-cyan-500/50"
+                      >
+                        <option value="">부자재 선택</option>
+                        {submaterialNameOptions.map((name) => (
+                          <option key={name} value={name}>
+                            {name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">소요 (낱개 / 제품 1EA)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        inputMode="decimal"
+                        step="0.01"
+                        value={planningSubmaterialForm.qtyGPerEa}
+                        onChange={(e) => setPlanningSubmaterialForm((p) => ({ ...p, qtyGPerEa: e.target.value }))}
+                        className="w-full px-4 py-3 bg-space-900 border border-slate-600 rounded-lg text-slate-100 focus:ring-2 focus:ring-cyan-500/50 tabular-nums"
+                      />
+                      <p className="text-[11px] text-slate-500 mt-1">예: 피자 1개에 박스 1개면 1. (필름 등 g 단위가 필요하면 숫자만 그대로 넣으면 됩니다.)</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <p className="text-sm font-medium text-slate-200">부자재별 소요 (여러 개 추가 가능)</p>
+                      <button
+                        type="button"
+                        onClick={addPlanningSubmaterialCreateLine}
+                        className="px-3 py-1.5 text-sm rounded-lg border border-dashed border-slate-500 text-slate-300 hover:border-cyan-500/60 hover:text-cyan-300 w-fit"
+                      >
+                        + 부자재 줄 추가
+                      </button>
+                    </div>
+                    {planningSubmaterialCreateLines.map((line, idx) => (
+                      <div
+                        key={line.id}
+                        className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 p-3 rounded-xl border border-slate-600 bg-space-900/50"
+                      >
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">부자재명 {idx > 0 ? `#${idx + 1}` : ""}</label>
+                          <select
+                            value={line.materialName}
+                            onChange={(e) => updatePlanningSubmaterialCreateLine(line.id, { materialName: e.target.value })}
+                            className="w-full px-3 py-2.5 bg-space-900 border border-slate-600 rounded-lg text-slate-100 text-sm focus:ring-2 focus:ring-cyan-500/50"
+                          >
+                            <option value="">부자재 선택</option>
+                            {submaterialNameOptions.map((name) => (
+                              <option key={name} value={name}>
+                                {name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">소요 (낱개 / 제품 1EA)</label>
+                          <input
+                            type="number"
+                            min={0}
+                            inputMode="decimal"
+                            step="0.01"
+                            value={line.qtyGPerEa}
+                            onChange={(e) => updatePlanningSubmaterialCreateLine(line.id, { qtyGPerEa: e.target.value })}
+                            className="w-full px-3 py-2.5 bg-space-900 border border-slate-600 rounded-lg text-slate-100 text-sm tabular-nums focus:ring-2 focus:ring-cyan-500/50"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div className="flex sm:flex-col sm:items-end sm:justify-end">
+                          <button
+                            type="button"
+                            onClick={() => removePlanningSubmaterialCreateLine(line.id)}
+                            disabled={planningSubmaterialCreateLines.length <= 1}
+                            className="px-2 py-1.5 text-xs text-slate-400 hover:text-red-400 disabled:opacity-30 disabled:hover:text-slate-400"
+                            title="이 줄 제거"
+                          >
+                            삭제
+                          </button>
+                        </div>
+                      </div>
                     ))}
-                  </select>
-                </div>
+                    <p className="text-[11px] text-slate-500">빈 줄(부자재 미선택 또는 수량 없음)은 제출 시 무시됩니다. 같은 제품·같은 부자재는 목록에 이미 있으면 중복 등록할 수 없습니다.</p>
+                  </div>
+                )}
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">소요 (낱개 / 제품 1EA)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    inputMode="decimal"
-                    step="0.01"
-                    value={planningSubmaterialForm.qtyGPerEa}
-                    onChange={(e) => setPlanningSubmaterialForm((p) => ({ ...p, qtyGPerEa: e.target.value }))}
-                    className="w-full px-4 py-3 bg-space-900 border border-slate-600 rounded-lg text-slate-100 focus:ring-2 focus:ring-cyan-500/50 tabular-nums"
-                  />
-                  <p className="text-[11px] text-slate-500 mt-1">예: 피자 1개에 박스 1개면 1. (필름 등 g 단위가 필요하면 숫자만 그대로 넣으면 됩니다.)</p>
-                </div>
-                <div className="sm:col-span-2">
                   <label className="inline-flex items-center gap-2 text-sm text-slate-300">
                     <input
                       type="checkbox"
@@ -1577,7 +1704,7 @@ export default function AdminPage() {
                     활성(계산 반영)
                   </label>
                 </div>
-                <div className="sm:col-span-2 flex gap-2">
+                <div className="flex gap-2">
                   {editingPlanningSubmaterialId ? (
                     <button
                       type="button"
@@ -1592,7 +1719,7 @@ export default function AdminPage() {
                     disabled={isSaving}
                     className="px-5 py-2.5 rounded-lg bg-cyan-500 text-space-900 font-medium hover:bg-cyan-400 disabled:opacity-50"
                   >
-                    {editingPlanningSubmaterialId ? "수정 저장" : "등록"}
+                    {editingPlanningSubmaterialId ? "수정 저장" : "한 번에 등록"}
                   </button>
                 </div>
               </form>
