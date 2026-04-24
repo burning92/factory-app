@@ -61,11 +61,6 @@ interface OutboundStandardPreviewRow {
   quantityType: "g_only" | "ea_only" | "box_ea";
 }
 
-interface PrintSection<T> {
-  key: "dough" | "finished";
-  rows: T[];
-}
-
 function splitProductName(value: string): { baseName: string; option: string } {
   const raw = String(value ?? "").trim();
   const idx = raw.indexOf("-");
@@ -254,6 +249,15 @@ function parseLotNoToIso(lotNo: string): string {
   const m = t.match(/^(\d{4})[\.\-](\d{1,2})[\.\-](\d{1,2})$/);
   if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
   return "";
+}
+
+function formatKoreanTimestamp(date: Date): string {
+  const y = date.getFullYear();
+  const m = date.getMonth() + 1;
+  const d = date.getDate();
+  const hh = date.getHours();
+  const mm = date.getMinutes();
+  return `${y}년 ${m}월 ${d}일 ${hh}시 ${mm}분`;
 }
 
 function normalizeStoredExpiryToIso(s: string): string {
@@ -603,6 +607,7 @@ export default function OutboundPage() {
   const [rows, setRows] = useState<OutboundRow[] | null>(null);
   const [pendingOutbound, setPendingOutbound] = useState<Record<string, PendingOutbound>>({});
   const [modal, setModal] = useState<{ row: OutboundRow } | null>(null);
+  const [printTimestamp, setPrintTimestamp] = useState("");
 
   useEffect(() => {
     fetchMaterials();
@@ -754,37 +759,29 @@ export default function OutboundPage() {
     return map;
   }, [standardPreviewRows]);
 
-  const printBaseSections = useMemo<PrintSection<OutboundRow>[]>(() => {
-    const doughRows = rows?.filter((r) => r.basis === "도우") ?? [];
-    const finishedRows = rows?.filter((r) => r.basis !== "도우") ?? [];
-    const sections: PrintSection<OutboundRow>[] = [];
-    if (doughRows.length > 0) {
-      sections.push({ key: "dough", rows: doughRows });
-    }
-    if (finishedRows.length > 0) {
-      sections.push({ key: "finished", rows: finishedRows });
-    }
-    return sections;
-  }, [rows]);
+  const printRowsWithStandard = useMemo(
+    () =>
+      (rows ?? [])
+        .map((base, index) => ({
+          base,
+          standard: standardPreviewByMaterial.get(base.materialName),
+          index,
+        }))
+        .sort((a, b) => {
+          const aIsDough = a.base.basis === "도우";
+          const bIsDough = b.base.basis === "도우";
+          if (aIsDough === bIsDough) return a.index - b.index;
+          return aIsDough ? 1 : -1; // 도우 기준은 맨 아래로
+        }),
+    [rows, standardPreviewByMaterial]
+  );
 
-  const printRefSections = useMemo<
-    PrintSection<{ base: OutboundRow; standard: OutboundStandardPreviewRow | undefined }>[]
-  >(() => {
-    const source = (rows ?? []).map((base) => ({
-      base,
-      standard: standardPreviewByMaterial.get(base.materialName),
-    }));
-    const doughRows = source.filter((x) => (x.standard?.basis ?? x.base.basis) === "도우");
-    const finishedRows = source.filter((x) => (x.standard?.basis ?? x.base.basis) !== "도우");
-    const sections: PrintSection<{ base: OutboundRow; standard: OutboundStandardPreviewRow | undefined }>[] = [];
-    if (doughRows.length > 0) {
-      sections.push({ key: "dough", rows: doughRows });
-    }
-    if (finishedRows.length > 0) {
-      sections.push({ key: "finished", rows: finishedRows });
-    }
-    return sections;
-  }, [rows, standardPreviewByMaterial]);
+  const printRowHeightPx = useMemo(() => {
+    const count = rows?.length ?? 0;
+    if (count >= 9) return 42;
+    if (count >= 6) return 52;
+    return 62;
+  }, [rows]);
 
   const getDefaultExpiry = (materialName: string) =>
     (lastUsedDates ?? {})[String(materialName ?? "")] || todayStr();
@@ -917,7 +914,10 @@ export default function OutboundPage() {
 
   const handlePrintPage = useCallback(() => {
     if (typeof window === "undefined") return;
-    window.print();
+    setPrintTimestamp(formatKoreanTimestamp(new Date()));
+    window.requestAnimationFrame(() => {
+      window.print();
+    });
   }, []);
 
   return (
@@ -1216,7 +1216,10 @@ export default function OutboundPage() {
               </div>
             </div>
 
-            <div className="print-only outbound-print-sheet">
+            <div
+              className="print-only outbound-print-sheet"
+              style={{ ["--outbound-print-row-h" as string]: `${printRowHeightPx}px` }}
+            >
               <h2 className="outbound-print-title font-bold mb-4">출고 계산표</h2>
               <div className="outbound-print-header mb-4 pb-3">
                 <div className="outbound-print-header-col">
@@ -1244,6 +1247,9 @@ export default function OutboundPage() {
                     <span className="font-semibold">완제품 예상수량</span>
                     <span className="ml-2 tabular-nums">{(parseInt(finishedQty, 10) || 0).toLocaleString()}</span>
                   </p>
+                  <p className="outbound-print-stamp">
+                    출력일자 : {printTimestamp || "-"}
+                  </p>
                 </div>
               </div>
               <div className="outbound-print-cards">
@@ -1255,8 +1261,8 @@ export default function OutboundPage() {
                       <tr>
                         <th className="border border-slate-400 text-left">원료명</th>
                         <th className="border border-slate-400 text-right">BOM</th>
-                        <th className="border border-slate-400 text-right">필요박스</th>
-                        <th className="border border-slate-400 text-right">필요낱개</th>
+                        <th className="border border-slate-400 text-right">박스</th>
+                        <th className="border border-slate-400 text-right">낱개</th>
                         <th className="border border-slate-400 text-right">총중량</th>
                       </tr>
                     </thead>
@@ -1268,28 +1274,26 @@ export default function OutboundPage() {
                           </td>
                         </tr>
                       ) : (
-                        printBaseSections.flatMap((section) =>
-                          section.rows.map((row) => (
+                        printRowsWithStandard.map(({ base }) => (
                             <tr
-                              key={`print-base-${section.key}-${row.materialName}`}
-                              className={section.key === "dough" ? "outbound-print-dough-row" : ""}
+                              key={`print-base-${base.materialName}`}
+                              className={base.basis === "도우" ? "outbound-print-dough-row" : ""}
                             >
-                              <td className="border border-slate-400 break-words align-top">{row.materialName}</td>
+                              <td className="border border-slate-400 break-words align-top">{base.materialName}</td>
                               <td className="border border-slate-400 text-right tabular-nums">
-                                {row.bomGPerEa.toLocaleString()}
+                                {base.bomGPerEa.toLocaleString()}
                               </td>
                               <td className="border border-slate-400 text-right tabular-nums">
-                                {printBoxCell(row.quantityType, row.boxQty)}
+                                {printBoxCell(base.quantityType, base.boxQty)}
                               </td>
                               <td className="border border-slate-400 text-right tabular-nums">
-                                {printBagCell(row.quantityType, row.bagQty)}
+                                {printBagCell(base.quantityType, base.bagQty)}
                               </td>
                               <td className="border border-slate-400 text-right tabular-nums">
-                                {row.totalG.toLocaleString()}
+                                {base.totalG.toLocaleString()}
                               </td>
                             </tr>
                           ))
-                        )
                       )}
                     </tbody>
                   </table>
@@ -1298,38 +1302,43 @@ export default function OutboundPage() {
                 <div className="outbound-print-card">
                   <p className="outbound-print-card-title">참고 (출고기준)</p>
                   <div className="outbound-print-card-body">
-                  <table className="w-full border-collapse print-subtable outbound-print-table">
+                  <table className="w-full border-collapse print-subtable outbound-print-table outbound-print-table-ref">
                     <thead>
                       <tr>
-                        <th className="border border-slate-400 text-left">원료명</th>
                         <th className="border border-slate-400 text-right">BOM</th>
-                        <th className="border border-slate-400 text-right">필요박스</th>
-                        <th className="border border-slate-400 text-right">필요낱개</th>
+                        <th className="border border-slate-400 text-right">박스</th>
+                        <th className="border border-slate-400 text-right">낱개</th>
                         <th className="border border-slate-400 text-right">총중량</th>
                       </tr>
                     </thead>
                     <tbody>
                       {rows.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="border border-slate-400 text-center outbound-print-table-empty">
+                          <td colSpan={4} className="border border-slate-400 text-center outbound-print-table-empty">
                             계산 결과가 없습니다.
                           </td>
                         </tr>
                       ) : (
-                        printRefSections.flatMap((section) =>
-                          section.rows.map(({ base, standard }) => (
+                        printRowsWithStandard.map(({ base, standard }) => (
                             <tr
-                              key={`print-ref-${section.key}-${base.materialName}`}
-                              className={section.key === "dough" ? "outbound-print-dough-row" : ""}
+                              key={`print-ref-${base.materialName}`}
+                              className={base.basis === "도우" ? "outbound-print-dough-row" : ""}
                             >
-                              <td className="border border-slate-400 break-words align-top">{base.materialName}</td>
                               <td className="border border-slate-400 text-right tabular-nums">
                                 {standard ? standard.standardGPerEa.toLocaleString() : "-"}
                               </td>
-                              <td className="border border-slate-400 text-right tabular-nums">
+                              <td
+                                className={`border border-slate-400 text-right tabular-nums ${
+                                  standard ? "outbound-print-ref-emphasis" : ""
+                                }`}
+                              >
                                 {standard ? printBoxCell(standard.quantityType, standard.boxQty) : "-"}
                               </td>
-                              <td className="border border-slate-400 text-right tabular-nums">
+                              <td
+                                className={`border border-slate-400 text-right tabular-nums ${
+                                  standard ? "outbound-print-ref-emphasis" : ""
+                                }`}
+                              >
                                 {standard ? printBagCell(standard.quantityType, standard.bagQty) : "-"}
                               </td>
                               <td className="border border-slate-400 text-right tabular-nums">
@@ -1337,7 +1346,42 @@ export default function OutboundPage() {
                               </td>
                             </tr>
                           ))
-                        )
+                      )}
+                    </tbody>
+                  </table>
+                  </div>
+                </div>
+                <div className="outbound-print-card">
+                  <p className="outbound-print-card-title">반출증</p>
+                  <div className="outbound-print-card-body">
+                  <table className="w-full border-collapse print-subtable outbound-print-table outbound-print-table-manual">
+                    <colgroup>
+                      <col style={{ width: "50%" }} />
+                      <col style={{ width: "50%" }} />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th className="border border-slate-400 text-left">수량</th>
+                        <th className="border border-slate-400 text-left">소비기한</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.length === 0 ? (
+                        <tr>
+                          <td colSpan={2} className="border border-slate-400 text-center outbound-print-table-empty">
+                            계산 결과가 없습니다.
+                          </td>
+                        </tr>
+                      ) : (
+                        printRowsWithStandard.map(({ base }) => (
+                          <tr
+                            key={`print-manual-${base.materialName}`}
+                            className={base.basis === "도우" ? "outbound-print-dough-row" : ""}
+                          >
+                            <td className="border border-slate-400 outbound-print-write-cell" />
+                            <td className="border border-slate-400 outbound-print-write-cell" />
+                          </tr>
+                        ))
                       )}
                     </tbody>
                   </table>
@@ -1437,47 +1481,50 @@ export default function OutboundPage() {
           }
           .outbound-print-sheet th,
           .outbound-print-sheet td {
-            border-color: #666666 !important;
+            border-color: #a5a5a5 !important;
             background: #ffffff !important;
           }
           .outbound-print-sheet {
             color: #111111 !important;
             width: 100% !important;
             max-width: 100% !important;
-            font-size: 13pt;
-            line-height: 1.45;
+            font-size: 10pt;
+            line-height: 1.25;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
           .outbound-print-title {
-            font-size: 22pt !important;
+            font-size: 15pt !important;
             line-height: 1.2;
-            margin: 0 0 10px 0 !important;
+            margin: 0 0 6px 0 !important;
             letter-spacing: -0.02em;
           }
           .outbound-print-header p {
-            margin: 0.15em 0;
+            margin: 0.06em 0;
           }
           .outbound-print-table th,
           .outbound-print-table td {
-            font-size: 12pt !important;
-            line-height: 1.35 !important;
-            padding: 6px 7px !important;
+            font-size: 10.5pt !important;
+            line-height: 1.15 !important;
+            padding: 3px 4px !important;
           }
           .outbound-print-table thead th {
-            font-size: 12.5pt !important;
+            font-size: 10pt !important;
             font-weight: 700 !important;
-            padding: 7px 7px !important;
+            padding: 3px 4px !important;
+            height: 30px;
+            text-align: center !important;
+            vertical-align: middle !important;
           }
           .outbound-print-table-empty {
-            font-size: 12pt !important;
-            padding: 14px 8px !important;
+            font-size: 10pt !important;
+            padding: 10px 6px !important;
           }
           .outbound-print-footnote {
-            font-size: 10.5pt !important;
+            font-size: 8.2pt !important;
             color: #333333 !important;
             line-height: 1.4;
-            margin-top: 8px !important;
+            margin-top: 4px !important;
           }
           .outbound-print-header {
             display: flex;
@@ -1486,9 +1533,9 @@ export default function OutboundPage() {
             align-items: flex-start;
             gap: 1.5rem;
             border-bottom: 1px solid #333333;
-            font-size: 12.5pt !important;
-            margin-bottom: 10px !important;
-            padding-bottom: 8px !important;
+            font-size: 9.6pt !important;
+            margin-bottom: 7px !important;
+            padding-bottom: 5px !important;
           }
           .outbound-print-header-col {
             display: flex;
@@ -1497,10 +1544,15 @@ export default function OutboundPage() {
             min-width: 0;
             flex: 1;
           }
+          .outbound-print-stamp {
+            margin-top: 0.5rem !important;
+            font-size: 8.8pt !important;
+            color: #333333 !important;
+          }
           .outbound-print-cards {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-            gap: 12px;
+            grid-template-columns: minmax(0, 0.95fr) minmax(0, 0.95fr) minmax(0, 1.1fr);
+            gap: 10px;
             width: 100%;
             align-items: stretch;
           }
@@ -1512,9 +1564,11 @@ export default function OutboundPage() {
             height: 100%;
             border: 1.5px solid #333333;
             border-radius: 6px;
-            padding: 10px 10px 12px;
+            padding: 6px 6px 7px;
             background: #ffffff !important;
             box-sizing: border-box;
+            page-break-inside: auto;
+            break-inside: auto;
           }
           .outbound-print-card-body {
             flex: 1 1 auto;
@@ -1548,15 +1602,78 @@ export default function OutboundPage() {
             width: 30%;
           }
           .outbound-print-card-title {
-            font-size: 13pt !important;
+            font-size: 10pt !important;
             font-weight: 700;
-            margin: 0 0 8px 0;
-            padding-bottom: 5px;
+            margin: 0 0 4px 0;
+            padding-bottom: 3px;
             border-bottom: 1px solid #999999;
             color: #111111 !important;
           }
+          .outbound-print-table tbody tr {
+            height: var(--outbound-print-row-h, 42px);
+          }
+          .outbound-print-table tbody tr:nth-child(even) td {
+            background: #fbfcfe !important;
+          }
+          .outbound-print-table tbody td {
+            font-weight: 400 !important;
+          }
           .outbound-print-dough-row td {
             background: #f4f8ff !important;
+          }
+          .outbound-print-table-manual th:nth-child(1),
+          .outbound-print-table-manual td:nth-child(1) {
+            width: 50%;
+          }
+          .outbound-print-table-manual th:nth-child(2),
+          .outbound-print-table-manual td:nth-child(2) {
+            width: 50%;
+          }
+          .outbound-print-table-ref th:nth-child(1),
+          .outbound-print-table-ref td:nth-child(1) {
+            width: 20%;
+          }
+          .outbound-print-table-ref th:nth-child(2),
+          .outbound-print-table-ref td:nth-child(2) {
+            width: 16%;
+          }
+          .outbound-print-table-ref th:nth-child(3),
+          .outbound-print-table-ref td:nth-child(3) {
+            width: 16%;
+          }
+          .outbound-print-table-ref th:nth-child(4),
+          .outbound-print-table-ref td:nth-child(4) {
+            width: 48%;
+          }
+          .outbound-print-table-ref tbody td:nth-child(1),
+          .outbound-print-table-ref tbody td:nth-child(4) {
+            color: #2a2a2a !important;
+          }
+          .outbound-print-table-ref tbody td:nth-child(2),
+          .outbound-print-table-ref tbody td:nth-child(3) {
+            font-size: 12.8pt !important;
+            font-weight: 700 !important;
+            text-align: center !important;
+            color: #111111 !important;
+          }
+          .outbound-print-table-ref tbody td.outbound-print-ref-emphasis {
+            background: #f1f5f9 !important;
+          }
+          .outbound-print-table-ref tbody tr:nth-child(even) td.outbound-print-ref-emphasis {
+            background: #edf2f7 !important;
+          }
+          .outbound-print-table:not(.outbound-print-table-ref):not(.outbound-print-table-manual) tbody td:not(:first-child) {
+            color: #3f3f3f !important;
+          }
+          .outbound-print-write-cell {
+            height: var(--outbound-print-row-h, 42px);
+          }
+          .outbound-print-table-manual th,
+          .outbound-print-table-manual td {
+            border-color: #d4d4d4 !important;
+          }
+          .outbound-print-table-manual tbody tr:nth-child(even) td {
+            background: #fdfefe !important;
           }
         }
       `}</style>
