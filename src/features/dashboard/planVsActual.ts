@@ -42,20 +42,51 @@ function filterRowsPreferPlanningBoard<T extends { plan_date?: string | null; so
   });
 }
 
+function dateOnly(value: string | null | undefined): string {
+  return String(value ?? "").slice(0, 10);
+}
+
+function mergePlanRowsByDatePreference<
+  TP extends { plan_date?: string | null; qty?: unknown; source_sheet_name?: string | null },
+  TL extends { plan_date?: string | null; qty?: unknown; source_sheet_name?: string | null }
+>(processedRows: TP[], legacyRowsRaw: TL[]): { merged: Array<TP | TL>; planningDates: Set<string> } {
+  const planningDates = new Set(
+    legacyRowsRaw
+      .filter((r) => String(r.source_sheet_name ?? "") === "planning_board")
+      .map((r) => dateOnly(r.plan_date))
+      .filter(Boolean)
+  );
+  const legacyFiltered = filterRowsPreferPlanningBoard(legacyRowsRaw);
+  const processedFiltered = processedRows.filter((r) => !planningDates.has(dateOnly(r.plan_date)));
+  return { merged: [...legacyFiltered, ...processedFiltered], planningDates };
+}
+
 /** production_plan_rows 계획 합계 (날짜별 planning_board 우선) */
 export async function sumPlanQtyInRange(
   supabase: SupabaseClient,
   start: string,
   end: string
 ): Promise<number> {
-  const { data, error } = await supabase
-    .from("production_plan_rows")
-    .select("plan_date, qty, source_sheet_name")
-    .gte("plan_date", start)
-    .lte("plan_date", end);
-  if (error || !data) return 0;
-  const filtered = filterRowsPreferPlanningBoard(data as Array<{ plan_date?: string; qty?: unknown; source_sheet_name?: string }>);
-  return filtered.reduce((s, row) => s + (Number((row as { qty: unknown }).qty) || 0), 0);
+  const [{ data: legacyData, error: legacyError }, { data: processedData, error: processedError }] = await Promise.all([
+    supabase
+      .from("production_plan_rows")
+      .select("plan_date, qty, source_sheet_name")
+      .gte("plan_date", start)
+      .lte("plan_date", end),
+    supabase
+      .from("production_plan_processed_rows")
+      .select("plan_date, qty")
+      .gte("plan_date", start)
+      .lte("plan_date", end),
+  ]);
+
+  const legacyRows = legacyError || !legacyData ? [] : legacyData;
+  const processedRows = processedError || !processedData ? [] : processedData;
+  const { merged } = mergePlanRowsByDatePreference(
+    processedRows as Array<{ plan_date?: string; qty?: unknown; source_sheet_name?: string }>,
+    legacyRows as Array<{ plan_date?: string; qty?: unknown; source_sheet_name?: string }>
+  );
+  return merged.reduce((s, row) => s + (Number((row as { qty: unknown }).qty) || 0), 0);
 }
 
 /** 생산계획가공 시트 동기화 행 합계 */
@@ -93,12 +124,9 @@ export async function loadPlanActualMonthSummary(
   dayTotals: { date: string; totalFinishedQty: number }[]
 ): Promise<PlanActualMonthSummary> {
   const { start, end } = ymdBounds(year, month);
-  const [legacyPlan, processed] = await Promise.all([
-    sumPlanQtyInRange(supabase, start, end),
-    sumProcessedPlanQtyInRange(supabase, start, end),
-  ]);
+  const [legacyPlan, processed] = await Promise.all([sumPlanQtyInRange(supabase, start, end), sumProcessedPlanQtyInRange(supabase, start, end)]);
   const planFromProcessedSheet = processed.rowCount > 0;
-  const planTotal = planFromProcessedSheet ? processed.sum : legacyPlan;
+  const planTotal = legacyPlan;
   const actualTotal = sumActualFinishedForMonth(dayTotals, year, month);
   return {
     year,
@@ -126,9 +154,26 @@ export type PlanActualByProductResult = {
 function normName(s: string): string {
   const raw = s.normalize("NFKC").trim().toLowerCase();
   return raw
-    .replace(/\s*-\s*(일반|라지|미니|mini|large)\s*$/i, "")
+    .replace(/\s*-\s*(일반|파베이크사용|라지|미니|mini|large)\s*$/i, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/**
+ * 계획 대비 실적 상세표 전용 표시 키:
+ * - "<제품명> - 일반/파베이크사용" => "<제품명>"
+ * - "선인 파베이크_베샤멜/토마토" => "판매용 파베이크 베샤멜/토마토"
+ */
+function reportDisplayName(nameRaw: string): string {
+  const name = stripInvisibleChars(nameRaw).normalize("NFKC").trim();
+  const n = name.toLowerCase().replace(/\s+/g, " ");
+  if (n.includes("선인 파베이크_베샤멜") || n.includes("판매용 파베이크 베샤멜")) {
+    return "판매용 파베이크 베샤멜";
+  }
+  if (n.includes("선인 파베이크_토마토") || n.includes("판매용 파베이크 토마토")) {
+    return "판매용 파베이크 토마토";
+  }
+  return name.replace(/\s*-\s*(일반|파베이크사용)\s*$/i, "").trim();
 }
 
 /** 시트/복사 붙여넣기에서 들어오는 보이지 않는 문자 제거 */
@@ -244,7 +289,7 @@ export async function loadPlanActualByProductForMonth(
   const [processedPlanRes, legacyPlanRes, closedSnapshotRes, bomRes, materialRes, ecountRes] = await Promise.all([
     supabase
       .from("production_plan_processed_rows")
-      .select("product_name, qty")
+      .select("plan_date, product_name, qty")
       .gte("plan_date", start)
       .lte("plan_date", end),
     supabase
@@ -270,15 +315,18 @@ export async function loadPlanActualByProductForMonth(
       .gte("movement_date", start)
       .lte("movement_date", end),
   ]);
-  const planFromProcessedSheet = (processedPlanRes.data?.length ?? 0) > 0;
   const legacyPlanRowsRaw = (legacyPlanRes.data ?? []) as Array<{
     plan_date?: string | null;
     product_name?: string | null;
     qty?: unknown;
     source_sheet_name?: string | null;
   }>;
-  const legacyPlanRows = filterRowsPreferPlanningBoard(legacyPlanRowsRaw);
-  const planRows = planFromProcessedSheet ? processedPlanRes.data ?? [] : legacyPlanRows;
+  const mergedPlanRows = mergePlanRowsByDatePreference(
+    (processedPlanRes.data ?? []) as Array<{ plan_date?: string | null; product_name?: string | null; qty?: unknown; source_sheet_name?: string | null }>,
+    legacyPlanRowsRaw
+  );
+  const planRows = mergedPlanRows.merged;
+  const planFromProcessedSheet = (processedPlanRes.data?.length ?? 0) > 0 && mergedPlanRows.planningDates.size === 0;
   const secondClosedDates = new Set(
     (closedSnapshotRes.data ?? [])
       .map((r) => String((r as { production_date?: string }).production_date ?? "").slice(0, 10))
@@ -294,12 +342,13 @@ export async function loadPlanActualByProductForMonth(
   for (const row of planRows) {
     const r = row as { product_name: string | null; qty: unknown };
     const rawName = stripInvisibleChars((r.product_name ?? "").trim());
-    const name = canonicalizeEcountProductName(rawName);
-    if (!name) continue;
+    const canonicalName = canonicalizeEcountProductName(rawName);
+    if (!canonicalName) continue;
+    const name = reportDisplayName(canonicalName);
     const qtyRaw = Number(r.qty) || 0;
     if (qtyRaw <= 0) continue;
     const key = normName(name);
-    const rowMult = planQtyMultiplierForPlanRow(rawName, name);
+    const rowMult = planQtyMultiplierForPlanRow(rawName, canonicalName);
     const prev = planByNorm.get(key);
     if (prev) {
       const display = preferTwoPackPlanDisplay(prev.display, name);
@@ -316,7 +365,7 @@ export async function loadPlanActualByProductForMonth(
         display: name,
         qtyRaw: qtyRaw,
         sampleRaw: rawName,
-        sampleCanon: name,
+        sampleCanon: canonicalName,
         planMultMax: rowMult,
       });
     }
@@ -362,9 +411,10 @@ export async function loadPlanActualByProductForMonth(
     /** 동일 스냅샷에 같은 완제품 행이 중복되면 normName 합산 시 실적이 2배로 잡힘 → 완전 동일 행은 1회만 */
     const seenOutputSig = new Set<string>();
     for (const p of computed.productSummaries) {
-      const name = canonicalizeEcountProductName(
+      const canonicalName = canonicalizeEcountProductName(
         String(p.baseProductName ?? p.productName ?? p.displayProductLabel ?? "").trim()
       );
+      const name = reportDisplayName(canonicalName);
       const qty = Number(p.finishedQty) || 0;
       if (!name || qty <= 0) continue;
       const dedupeSig = [
@@ -391,7 +441,7 @@ export async function loadPlanActualByProductForMonth(
     /** 완제품(productOutputs) 외에 secondClosure의 우주인·판매 파베만 별도 저장 → 실적 누락 방지 */
     const mergeParbakeClosureActual = (qty: number, rawNameForCanonical: string) => {
       if (qty <= 0 || !closureDate) return;
-      const name = canonicalizeEcountProductName(rawNameForCanonical.trim());
+      const name = reportDisplayName(canonicalizeEcountProductName(rawNameForCanonical.trim()));
       if (!name) return;
       const key = normName(name);
       const prev = actualByNorm.get(key);
@@ -437,7 +487,7 @@ export async function loadPlanActualByProductForMonth(
     if (!rawName || qtyRaw <= 0) continue;
     const mapped = mapEcountImportLine(rawName);
     if (!mapped.canonicalName) continue;
-    const name = mapped.canonicalName;
+    const name = reportDisplayName(mapped.canonicalName);
     const qty = qtyRaw * mapped.multiplier;
     const key = normName(name);
     const prev = actualByNorm.get(key);
