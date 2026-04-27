@@ -185,9 +185,7 @@ export default function PurchasingClient() {
     return {
       urgent: rows.filter((r) => r.status === "urgent").length,
       in7d: rows.filter((r) => r.shortage_g > 0 && r.shortage_start_date && r.shortage_start_date >= today && r.shortage_start_date <= day7).length,
-      in14d: rows.filter((r) => r.shortage_g > 0 && r.shortage_start_date && r.shortage_start_date >= today && r.shortage_start_date <= day14).length,
-      recommendCount: rows.filter((r) => r.recommended_order_g > 0).length,
-      recommendTotalG: rows.reduce((sum, r) => sum + r.recommended_order_g, 0),
+      missingPrimary: rows.filter((r) => !r.has_primary_vendor).length,
     };
   }, [rows, summary]);
 
@@ -221,7 +219,7 @@ export default function PurchasingClient() {
         </div>
       </div>
 
-      <section className="grid grid-cols-2 lg:grid-cols-5 gap-2">
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="rounded-xl border border-rose-300/40 bg-rose-900/20 p-3">
           <p className="text-xs text-rose-200">즉시발주 품목</p>
           <p className="text-xl font-semibold text-white mt-1">{kpis.urgent}</p>
@@ -230,17 +228,9 @@ export default function PurchasingClient() {
           <p className="text-xs text-amber-200">7일 내 부족 품목</p>
           <p className="text-xl font-semibold text-white mt-1">{kpis.in7d}</p>
         </div>
-        <div className="rounded-xl border border-yellow-300/40 bg-yellow-900/20 p-3">
-          <p className="text-xs text-yellow-200">14일 내 부족 품목</p>
-          <p className="text-xl font-semibold text-white mt-1">{kpis.in14d}</p>
-        </div>
-        <div className="rounded-xl border border-cyan-300/40 bg-cyan-900/20 p-3">
-          <p className="text-xs text-cyan-200">권장 발주 품목</p>
-          <p className="text-xl font-semibold text-white mt-1">{kpis.recommendCount}</p>
-        </div>
-        <div className="rounded-xl border border-blue-300/40 bg-blue-900/20 p-3">
-          <p className="text-xs text-blue-200">총 권장 발주량(g)</p>
-          <p className="text-xl font-semibold text-white mt-1">{fmtNum(kpis.recommendTotalG)}</p>
+        <div className="rounded-xl border border-violet-300/40 bg-violet-900/20 p-3">
+          <p className="text-xs text-violet-200">기본 공급처 미설정 품목</p>
+          <p className="text-xl font-semibold text-white mt-1">{kpis.missingPrimary}</p>
         </div>
       </section>
 
@@ -331,7 +321,7 @@ export default function PurchasingClient() {
       {loading ? <div className="text-sm text-slate-300">불러오는 중...</div> : null}
       {missingPrimaryRows.length > 0 ? (
         <div className="rounded-xl border border-amber-400/40 bg-amber-500/10 p-3 text-sm text-amber-200">
-          기본 공급처 미설정 품목이 {missingPrimaryRows.length}건 있습니다. 기본표에서는 제외되며, 상단 `기본 공급처 미설정만 보기`로 확인할 수 있습니다.
+          미설정 품목은 기본 공급처 등록 작업 대상입니다. 기본표에서는 제외되며, 상단 `기본 공급처 미설정만 보기`에서 등록 대상을 확인하세요.
         </div>
       ) : null}
 
