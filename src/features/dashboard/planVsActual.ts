@@ -47,19 +47,15 @@ export async function sumPlanQtyInRange(
   supabase: SupabaseClient,
   start: string,
   end: string
-): Promise<{ sum: number; hasPlanningBoardRows: boolean }> {
+): Promise<number> {
   const { data, error } = await supabase
     .from("production_plan_rows")
     .select("plan_date, qty, source_sheet_name")
     .gte("plan_date", start)
     .lte("plan_date", end);
-  if (error || !data) return { sum: 0, hasPlanningBoardRows: false };
-  const hasPlanningBoardRows = data.some(
-    (row) => String((row as { source_sheet_name?: string | null }).source_sheet_name ?? "") === "planning_board"
-  );
+  if (error || !data) return 0;
   const filtered = filterRowsPreferPlanningBoard(data as Array<{ plan_date?: string; qty?: unknown; source_sheet_name?: string }>);
-  const sum = filtered.reduce((s, row) => s + (Number((row as { qty: unknown }).qty) || 0), 0);
-  return { sum, hasPlanningBoardRows };
+  return filtered.reduce((s, row) => s + (Number((row as { qty: unknown }).qty) || 0), 0);
 }
 
 /** 생산계획가공 시트 동기화 행 합계 */
@@ -101,9 +97,8 @@ export async function loadPlanActualMonthSummary(
     sumPlanQtyInRange(supabase, start, end),
     sumProcessedPlanQtyInRange(supabase, start, end),
   ]);
-  // 운영자가 플래닝 보드에서 수정한 데이터가 있으면 processed 시트보다 우선한다.
-  const planFromProcessedSheet = !legacyPlan.hasPlanningBoardRows && processed.rowCount > 0;
-  const planTotal = planFromProcessedSheet ? processed.sum : legacyPlan.sum;
+  const planFromProcessedSheet = processed.rowCount > 0;
+  const planTotal = planFromProcessedSheet ? processed.sum : legacyPlan;
   const actualTotal = sumActualFinishedForMonth(dayTotals, year, month);
   return {
     year,
@@ -275,16 +270,13 @@ export async function loadPlanActualByProductForMonth(
       .gte("movement_date", start)
       .lte("movement_date", end),
   ]);
+  const planFromProcessedSheet = (processedPlanRes.data?.length ?? 0) > 0;
   const legacyPlanRowsRaw = (legacyPlanRes.data ?? []) as Array<{
     plan_date?: string | null;
     product_name?: string | null;
     qty?: unknown;
     source_sheet_name?: string | null;
   }>;
-  const hasPlanningBoardRows = legacyPlanRowsRaw.some(
-    (row) => String(row.source_sheet_name ?? "") === "planning_board"
-  );
-  const planFromProcessedSheet = !hasPlanningBoardRows && (processedPlanRes.data?.length ?? 0) > 0;
   const legacyPlanRows = filterRowsPreferPlanningBoard(legacyPlanRowsRaw);
   const planRows = planFromProcessedSheet ? processedPlanRes.data ?? [] : legacyPlanRows;
   const secondClosedDates = new Set(
