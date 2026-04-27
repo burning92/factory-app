@@ -277,6 +277,7 @@ interface MasterState {
   /** 해당 log의 출고_라인 맨 뒤에 새 라인 추가 (당일 출고 0). DB·로컬 상태 동시 갱신 */
   appendOutboundLine: (logId: string, newLine: OutboundLine) => Promise<void>;
   updateProductionRunMeta: (생산일자: string, 제품명: string, patch: { 작성자2?: string; 반죽량?: number; 반죽폐기량?: number }) => Promise<void>;
+  updateProductionRunDate: (생산일자: string, 제품명: string, 새생산일자: string) => Promise<void>;
   /** 2차 최종 정산: 완제품생산량·파베이크 사용·보관용·판매용 입력 후 소스 재정산 */
   settleProductionRun: (
     생산일자: string,
@@ -1780,6 +1781,66 @@ export const useMasterStore = create<MasterState>((set, get) => ({
       set({
         saving: "",
         error: err instanceof Error ? err.message : "생산 run 메타 저장에 실패했습니다.",
+      });
+      throw err;
+    }
+  },
+
+  updateProductionRunDate: async (생산일자, 제품명, 새생산일자) => {
+    const fromDate = String(생산일자 ?? "").slice(0, 10);
+    const toDate = String(새생산일자 ?? "").slice(0, 10);
+    if (!fromDate || !toDate || fromDate === toDate) return;
+    set({ saving: "logs", error: null });
+    try {
+      const state = get();
+      const targetLogs = state.productionLogs.filter(
+        (l) => l.생산일자 === fromDate && l.제품명 === 제품명
+      );
+      if (targetLogs.length === 0) {
+        set({ saving: "" });
+        return;
+      }
+      const ids = targetLogs.map((l) => l.id);
+      const { error: logsUpdateError } = await supabase
+        .from("production_logs")
+        .update({ production_date: toDate })
+        .in("id", ids);
+      if (logsUpdateError) throw logsUpdateError;
+
+      const usageRow = state.usageCalculations.find(
+        (u) => u.production_date === fromDate && u.product_name === 제품명
+      );
+      if (usageRow) {
+        const duplicatedUsage = state.usageCalculations.some(
+          (u) => u.production_date === toDate && u.product_name === 제품명
+        );
+        if (duplicatedUsage) {
+          throw new Error("변경 대상 날짜에 동일 제품 사용량 데이터가 이미 있습니다. 사용량 데이터를 먼저 정리해 주세요.");
+        }
+        const { error: usageUpdateError } = await supabase
+          .from("usage_calculations")
+          .update({ production_date: toDate })
+          .eq("id", usageRow.id);
+        if (usageUpdateError) throw usageUpdateError;
+      }
+
+      set((prev) => ({
+        productionLogs: prev.productionLogs.map((log) =>
+          log.생산일자 === fromDate && log.제품명 === 제품명
+            ? { ...log, 생산일자: toDate }
+            : log
+        ),
+        usageCalculations: prev.usageCalculations.map((u) =>
+          u.production_date === fromDate && u.product_name === 제품명
+            ? { ...u, production_date: toDate }
+            : u
+        ),
+        saving: "",
+      }));
+    } catch (err) {
+      set({
+        saving: "",
+        error: err instanceof Error ? err.message : "출고 날짜 변경에 실패했습니다.",
       });
       throw err;
     }

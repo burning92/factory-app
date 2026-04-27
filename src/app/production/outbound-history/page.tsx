@@ -346,6 +346,7 @@ function DetailView({
   onDeleteLine,
   onAddMaterialOutbound,
   onDeleteRun,
+  onUpdateRunDate,
   생산일자,
   제품명,
   saving,
@@ -361,6 +362,7 @@ function DetailView({
   onDeleteLine: (logId: string, lineIndex: number) => Promise<void>;
   onAddMaterialOutbound: (payload: { materialName: string; expiry: string; boxQty: number; bagQty: number; gQty: number }) => Promise<void>;
   onDeleteRun: (생산일자: string, 제품명: string) => Promise<void>;
+  onUpdateRunDate: (생산일자: string, 제품명: string, 새생산일자: string) => Promise<void>;
   생산일자: string;
   제품명: string;
   saving: boolean;
@@ -371,6 +373,11 @@ function DetailView({
   showFirstCloseReminder: boolean;
 }) {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editDate, setEditDate] = useState(생산일자);
+
+  useEffect(() => {
+    setEditDate(생산일자);
+  }, [생산일자]);
 
   const getMaterial = useCallback(
     (원료명: string) => materials.find((m) => m.materialName === 원료명),
@@ -420,6 +427,29 @@ function DetailView({
             ))
         )}
         <div className="pt-1">
+          <div className="mb-3 flex flex-wrap items-end gap-2 rounded-lg border border-slate-700 bg-space-900/50 px-3 py-2">
+            <div className="min-w-[180px]">
+              <p className="mb-1 text-xs text-slate-400">출고일자 수정</p>
+              <DateWheelPicker
+                value={editDate}
+                onChange={setEditDate}
+                className="w-full px-2 py-1.5 rounded-lg bg-space-800 border border-slate-600 text-slate-200 text-sm"
+                placeholder="날짜 선택"
+              />
+            </div>
+            <button
+              type="button"
+              disabled={saving || !editDate || editDate === 생산일자}
+              onClick={async () => {
+                if (!editDate || editDate === 생산일자) return;
+                if (!confirm(`출고일자를 ${생산일자} -> ${editDate}로 변경하시겠습니까?`)) return;
+                await onUpdateRunDate(생산일자, 제품명, editDate);
+              }}
+              className="inline-flex items-center px-3 py-1.5 rounded-lg bg-cyan-500 text-space-900 text-sm font-medium disabled:opacity-50"
+            >
+              날짜 저장
+            </button>
+          </div>
           <button
             type="button"
             onClick={() => setShowAddModal(true)}
@@ -462,6 +492,7 @@ export default function OutboundHistoryPage() {
     bomList,
     productionLogsLoading,
     updateProductionLogOutbound,
+    updateProductionRunDate,
     deleteProductionLogOutboundLine,
     deleteProductionLogsByGroup,
     appendOutboundLine,
@@ -606,6 +637,20 @@ export default function OutboundHistoryPage() {
     [appendOutboundLine, addProductionLog]
   );
 
+  const handleUpdateRunDate = useCallback(
+    async (생산일자: string, 제품명: string, 새생산일자: string) => {
+      try {
+        await updateProductionRunDate(생산일자, 제품명, 새생산일자);
+        setExpandedKey(`${새생산일자}-${제품명}`);
+        setEditing(null, null);
+        setToast({ message: "출고 날짜가 변경되었습니다.", type: "success" });
+      } catch {
+        setToast({ message: "출고 날짜 변경에 실패했습니다.", type: "error" });
+      }
+    },
+    [updateProductionRunDate, setEditing]
+  );
+
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 3000);
@@ -748,6 +793,7 @@ export default function OutboundHistoryPage() {
                         onDeleteLine={handleDeleteLine}
                         onAddMaterialOutbound={(payload) => handleAddMaterialOutbound(group, payload)}
                         onDeleteRun={handleDeleteRun}
+                        onUpdateRunDate={handleUpdateRunDate}
                         생산일자={group.생산일자}
                         제품명={group.제품명}
                         saving={saving !== ""}
@@ -828,6 +874,7 @@ export default function OutboundHistoryPage() {
                                 onDeleteLine={handleDeleteLine}
                                 onAddMaterialOutbound={(payload) => handleAddMaterialOutbound(group, payload)}
                                 onDeleteRun={handleDeleteRun}
+                                onUpdateRunDate={handleUpdateRunDate}
                                 생산일자={group.생산일자}
                                 제품명={group.제품명}
                                 saving={saving !== ""}
