@@ -19,6 +19,17 @@ type VendorItemBody = {
   note?: string | null;
 };
 
+const DOUGH_RAW_MATERIAL_SEEDS = [
+  "밀가루",
+  "냉동드라이이스트",
+  "국산 꽃 소금",
+  "하얀설탕",
+  "제빵개량제",
+  "포마스오일",
+  "카놀라유",
+  "세몰리나",
+] as const;
+
 async function clearOtherPrimaryVendors(params: {
   admin: ReturnType<typeof createAdminClient>;
   materialType: MaterialType;
@@ -77,6 +88,12 @@ export async function GET(req: NextRequest) {
     material_name: String(r.material_name ?? ""),
     material_code: r.inventory_item_code != null ? String(r.inventory_item_code) : null,
   }));
+  const seedRawOptions = DOUGH_RAW_MATERIAL_SEEDS.map((name) => ({
+    material_type: "raw_material" as const,
+    source_id: `seed:${name}`,
+    material_name: name,
+    material_code: null,
+  }));
   const optionsSub = ((subRows ?? []) as Record<string, unknown>[]).map((r) => ({
     material_type: "submaterial" as const,
     source_id: String(r.id ?? ""),
@@ -103,7 +120,14 @@ export async function GET(req: NextRequest) {
         }`
     )
   );
-  const baseOptions = [...optionsRaw, ...optionsSub].filter((opt) => opt.material_type === materialType);
+  const mergedRaw = [...optionsRaw, ...seedRawOptions];
+  const dedupRawMap = new Map<string, (typeof mergedRaw)[number]>();
+  for (const opt of mergedRaw) {
+    const key = opt.material_name.trim();
+    if (!key) continue;
+    if (!dedupRawMap.has(key)) dedupRawMap.set(key, opt);
+  }
+  const baseOptions = [...Array.from(dedupRawMap.values()), ...optionsSub].filter((opt) => opt.material_type === materialType);
   const filteredOptions = baseOptions.filter((opt) => {
     if (q && !opt.material_name.toLowerCase().includes(q) && !(opt.material_code ?? "").toLowerCase().includes(q)) return false;
     if (onlyUnregistered && vendorId) {

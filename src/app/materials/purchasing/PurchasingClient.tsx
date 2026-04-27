@@ -11,6 +11,7 @@ import type { PurchasingPeriodKey, PurchasingStatus, PurchasingSummaryData, Purc
 
 type ApiResponse = { ok?: boolean; data?: PurchasingSummaryData; error?: string; message?: string };
 type PurchasingViewTab = "overall" | "immediate" | "vendor_grouped" | "shortage_forecast";
+type TableViewMode = "simple" | "detailed";
 
 const PERIOD_OPTIONS: Array<{ key: PurchasingPeriodKey; label: string }> = [
   { key: "d7", label: "D+7" },
@@ -51,8 +52,11 @@ export default function PurchasingClient() {
   const canView = profile?.role === "admin" || profile?.role === "manager" || profile?.role === "headquarters";
 
   const [period, setPeriod] = useState<PurchasingPeriodKey>("month_next");
-  const [viewTab, setViewTab] = useState<PurchasingViewTab>("overall");
+  const [viewTab, setViewTab] = useState<PurchasingViewTab>("immediate");
+  const [tableViewMode, setTableViewMode] = useState<TableViewMode>("simple");
   const [includeStockOnlyRows, setIncludeStockOnlyRows] = useState(false);
+  const [showMissingPrimaryOnly, setShowMissingPrimaryOnly] = useState(false);
+  const [expandEvidence, setExpandEvidence] = useState(false);
   const [statusFilter, setStatusFilter] = useState<"all" | PurchasingStatus>("all");
   const [vendorFilter, setVendorFilter] = useState<string>("all");
   const [policyFilter, setPolicyFilter] = useState<"all" | "normal" | "on_demand">("all");
@@ -138,17 +142,20 @@ export default function PurchasingClient() {
       if (viewTab === "overall") return row.required_selected_g > 0;
       return hasActionSignal(row);
     });
+    const primaryFiltered = showMissingPrimaryOnly
+      ? baseFiltered.filter((row) => !row.has_primary_vendor)
+      : baseFiltered.filter((row) => row.has_primary_vendor);
     if (viewTab === "immediate") {
-      return baseFiltered.filter((row) => row.status === "urgent" || row.status === "warning");
+      return primaryFiltered.filter((row) => row.status === "urgent" || row.status === "warning");
     }
     if (viewTab === "shortage_forecast") {
-      return baseFiltered
+      return primaryFiltered
         .filter((row) => !!row.shortage_start_date)
         .slice()
         .sort((a, b) => (a.shortage_start_date ?? "").localeCompare(b.shortage_start_date ?? ""));
     }
     if (viewTab === "vendor_grouped") {
-      return baseFiltered
+      return primaryFiltered
         .slice()
         .sort(
           (a, b) =>
@@ -157,8 +164,12 @@ export default function PurchasingClient() {
             b.recommended_order_g - a.recommended_order_g
         );
     }
-    return baseFiltered;
-  }, [filteredRows, includeStockOnlyRows, viewTab]);
+    return primaryFiltered;
+  }, [filteredRows, includeStockOnlyRows, showMissingPrimaryOnly, viewTab]);
+
+  const missingPrimaryRows = useMemo(() => {
+    return filteredRows.filter((row) => !row.has_primary_vendor);
+  }, [filteredRows]);
 
   const kpis = useMemo(() => {
     const today = summary?.today_iso ?? "";
@@ -235,6 +246,22 @@ export default function PurchasingClient() {
 
       <section className="rounded-xl border border-slate-700 bg-slate-900/60 p-3 grid gap-2 md:grid-cols-5">
         <div className="md:col-span-5 flex flex-wrap gap-2">
+          <div className="inline-flex rounded-md border border-slate-600 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setTableViewMode("simple")}
+              className={`px-3 py-1.5 text-xs font-medium ${tableViewMode === "simple" ? "bg-cyan-500/20 text-cyan-200" : "bg-slate-800 text-slate-300"}`}
+            >
+              간단 보기
+            </button>
+            <button
+              type="button"
+              onClick={() => setTableViewMode("detailed")}
+              className={`px-3 py-1.5 text-xs font-medium ${tableViewMode === "detailed" ? "bg-cyan-500/20 text-cyan-200" : "bg-slate-800 text-slate-300"}`}
+            >
+              상세 보기
+            </button>
+          </div>
           {VIEW_TAB_OPTIONS.map((tab) => (
             <button
               key={tab.key}
@@ -257,6 +284,15 @@ export default function PurchasingClient() {
               className="h-3.5 w-3.5"
             />
             재고만 있는 품목 포함
+          </label>
+          <label className="inline-flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-200">
+            <input
+              type="checkbox"
+              checked={showMissingPrimaryOnly}
+              onChange={(e) => setShowMissingPrimaryOnly(e.target.checked)}
+              className="h-3.5 w-3.5"
+            />
+            기본 공급처 미설정만 보기
           </label>
         </div>
         <select value={period} onChange={(e) => setPeriod(e.target.value as PurchasingPeriodKey)} className="bg-slate-800 border border-slate-600 rounded px-2 py-2 text-sm text-slate-100">
@@ -293,30 +329,39 @@ export default function PurchasingClient() {
         <div className="rounded-xl border border-rose-300/30 bg-rose-900/20 p-3 text-sm text-rose-200">{error}</div>
       ) : null}
       {loading ? <div className="text-sm text-slate-300">불러오는 중...</div> : null}
+      {missingPrimaryRows.length > 0 ? (
+        <div className="rounded-xl border border-amber-400/40 bg-amber-500/10 p-3 text-sm text-amber-200">
+          기본 공급처 미설정 품목이 {missingPrimaryRows.length}건 있습니다. 기본표에서는 제외되며, 상단 `기본 공급처 미설정만 보기`로 확인할 수 있습니다.
+        </div>
+      ) : null}
 
       <section className="grid gap-3 2xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="rounded-xl border border-slate-700 bg-slate-900/60 overflow-hidden">
           <div className="overflow-x-auto pb-1">
-            <table className="w-full text-sm min-w-[1500px]">
+            <table className={`w-full text-sm ${tableViewMode === "simple" ? "min-w-[980px]" : "min-w-[1500px]"}`}>
               <thead className="bg-slate-800/80 text-slate-200">
                 <tr>
-                  {[
-                    "상태",
-                    "원료명",
-                    "공급처",
-                    "현재고(g)",
-                    "안전재고(g)",
-                    "발주정책",
-                    "7일 소요",
-                    "14일 소요",
-                    "선택기간 총소요",
-                    "부족량(g)",
-                    "부족 시작일",
-                    "리드타임",
-                    "발주 필요일",
-                    "권장 발주량(g)",
-                    "권장 발주량(단위)",
-                  ].map((h) => (
+                  {(tableViewMode === "simple"
+                    ? ["상태", "원료명", "공급처", "현재고(g)", "부족량(g)", "발주 필요일", "권장 발주수량", "발주규격"]
+                    : [
+                        "상태",
+                        "원료명",
+                        "공급처",
+                        "현재고(g)",
+                        "안전재고(g)",
+                        "발주정책",
+                        "7일 소요",
+                        "14일 소요",
+                        "선택기간 총소요",
+                        "부족량(g)",
+                        "부족 시작일",
+                        "리드타임",
+                        "발주 필요일",
+                        "권장 발주량(g)",
+                        "권장 발주수량",
+                        "발주규격",
+                      ]
+                  ).map((h) => (
                     <th key={h} className="px-2 py-2 text-left font-medium whitespace-nowrap">
                       {h}
                     </th>
@@ -332,23 +377,41 @@ export default function PurchasingClient() {
                       selectedRow?.material_name === row.material_name ? "bg-slate-800/70" : ""
                     }`}
                   >
-                    <td className="px-2 py-2 whitespace-nowrap">
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[row.status]}`}>{STATUS_LABEL[row.status]}</span>
-                    </td>
-                    <td className="px-2 py-2 text-slate-100 whitespace-nowrap">{row.material_name}</td>
-                    <td className={`px-2 py-2 whitespace-nowrap ${row.has_primary_vendor ? "" : "text-amber-300"}`}>{row.vendor_name}</td>
-                    <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{fmtNum(row.stock_g)}</td>
-                    <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{fmtNum(row.safety_stock_g)}</td>
-                    <td className="px-2 py-2 whitespace-nowrap">{row.order_policy === "on_demand" ? "필요시발주" : "일반재고"}</td>
-                    <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{fmtNum(row.required_7d_g)}</td>
-                    <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{fmtNum(row.required_14d_g)}</td>
-                    <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{fmtNum(row.required_selected_g)}</td>
-                    <td className="px-2 py-2 text-right tabular-nums text-rose-300 whitespace-nowrap">{fmtNum(row.shortage_g)}</td>
-                    <td className="px-2 py-2 whitespace-nowrap">{row.shortage_start_date ?? "-"}</td>
-                    <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{row.lead_time_days}일</td>
-                    <td className="px-2 py-2 whitespace-nowrap">{row.order_due_date ?? "-"}</td>
-                    <td className="px-2 py-2 text-right tabular-nums font-semibold text-cyan-300 whitespace-nowrap">{fmtNum(row.recommended_order_g)}</td>
-                    <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{row.recommended_order_units != null ? fmtNum(row.recommended_order_units) : "-"}</td>
+                    {tableViewMode === "simple" ? (
+                      <>
+                        <td className="px-2 py-2 whitespace-nowrap">
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[row.status]}`}>{STATUS_LABEL[row.status]}</span>
+                        </td>
+                        <td className="px-2 py-2 text-slate-100 whitespace-nowrap">{row.material_name}</td>
+                        <td className={`px-2 py-2 whitespace-nowrap ${row.has_primary_vendor ? "" : "text-amber-300"}`}>{row.vendor_name}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{fmtNum(row.stock_g)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums text-rose-300 whitespace-nowrap">{fmtNum(row.shortage_g)}</td>
+                        <td className="px-2 py-2 whitespace-nowrap">{row.order_due_date ?? "-"}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{row.recommended_order_units != null ? fmtNum(row.recommended_order_units) : "-"}</td>
+                        <td className="px-2 py-2 whitespace-nowrap">{row.order_spec_label ?? "-"}</td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-2 py-2 whitespace-nowrap">
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[row.status]}`}>{STATUS_LABEL[row.status]}</span>
+                        </td>
+                        <td className="px-2 py-2 text-slate-100 whitespace-nowrap">{row.material_name}</td>
+                        <td className={`px-2 py-2 whitespace-nowrap ${row.has_primary_vendor ? "" : "text-amber-300"}`}>{row.vendor_name}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{fmtNum(row.stock_g)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{fmtNum(row.safety_stock_g)}</td>
+                        <td className="px-2 py-2 whitespace-nowrap">{row.order_policy === "on_demand" ? "필요시발주" : "일반재고"}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{fmtNum(row.required_7d_g)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{fmtNum(row.required_14d_g)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{fmtNum(row.required_selected_g)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums text-rose-300 whitespace-nowrap">{fmtNum(row.shortage_g)}</td>
+                        <td className="px-2 py-2 whitespace-nowrap">{row.shortage_start_date ?? "-"}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{row.lead_time_days}일</td>
+                        <td className="px-2 py-2 whitespace-nowrap">{row.order_due_date ?? "-"}</td>
+                        <td className="px-2 py-2 text-right tabular-nums font-semibold text-cyan-300 whitespace-nowrap">{fmtNum(row.recommended_order_g)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{row.recommended_order_units != null ? fmtNum(row.recommended_order_units) : "-"}</td>
+                        <td className="px-2 py-2 whitespace-nowrap">{row.order_spec_label ?? "-"}</td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -368,62 +431,49 @@ export default function PurchasingClient() {
                 <p className="text-slate-400 text-xs">원료</p>
                 <p className="text-slate-100 font-semibold">{selectedRow.material_name}</p>
               </div>
+              <div className="rounded border border-slate-700 p-2 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-400">상태</span>
+                  <span className="text-slate-100">{STATUS_LABEL[selectedRow.status]}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-400">공급처</span>
+                  <span className="text-slate-100">{selectedRow.vendor_name}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-400">발주 필요일</span>
+                  <span className="text-slate-100">{selectedRow.order_due_date ?? "-"}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-400">권장 발주수량</span>
+                  <span className="text-cyan-300">{selectedRow.recommended_order_units != null ? fmtNum(selectedRow.recommended_order_units) : "-"} {selectedRow.order_unit_name ?? ""}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-400">발주규격</span>
+                  <span className="text-slate-100">{selectedRow.order_spec_label ?? "-"}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-400">현재고 / 부족량</span>
+                  <span className="text-slate-100">{fmtNum(selectedRow.stock_g)} / {fmtNum(selectedRow.shortage_g)} g</span>
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded border border-slate-700 p-2">
-                  <p className="text-xs text-slate-400">상태</p>
-                  <p className="text-slate-100 mt-1">{STATUS_LABEL[selectedRow.status]}</p>
+                  <p className="text-xs text-slate-400">부족 시작일</p>
+                  <p className="text-slate-100 mt-1">{selectedRow.shortage_start_date ?? "-"}</p>
                 </div>
                 <div className="rounded border border-slate-700 p-2">
-                  <p className="text-xs text-slate-400">공급처/리드타임</p>
-                  <p className="text-slate-100 mt-1">{selectedRow.vendor_name} / {selectedRow.lead_time_days}일</p>
-                </div>
-              </div>
-              {!selectedRow.has_primary_vendor ? (
-                <div className="rounded border border-amber-400/40 bg-amber-500/10 p-2 text-xs text-amber-200">
-                  기본 공급처가 없어 발주조건(리드타임/정책/안전재고/환산단위)을 적용하지 못했습니다.
-                </div>
-              ) : null}
-              <div className="rounded border border-slate-700 p-2">
-                <p className="text-xs text-slate-400 mb-1">부족 시작일 계산 근거</p>
-                <p className="text-slate-200">
-                  {selectedRow.shortage_start_date
-                    ? `${selectedRow.shortage_start_date} 시점 누적소요 + ${
-                        selectedRow.order_policy === "normal" ? "안전재고" : "0"
-                      }가 현재고를 초과`
-                    : "선택기간 내 부족 없음"}
-                </p>
-              </div>
-              <div className="rounded border border-slate-700 p-2">
-                <p className="text-xs text-slate-400 mb-2">날짜별/누적 소요</p>
-                <div className="max-h-40 overflow-auto space-y-1">
-                  {selectedRow.date_points.length === 0 ? (
-                    <p className="text-slate-500">데이터 없음</p>
-                  ) : (
-                    selectedRow.date_points.map((p) => (
-                      <div key={p.date} className="flex items-center justify-between text-xs">
-                        <span className="text-slate-300">{p.date}</span>
-                        <span className="text-slate-200">
-                          일 {fmtNum(p.required_g)}g / 누적 {fmtNum(p.cumulative_required_g)}g
-                        </span>
-                      </div>
-                    ))
-                  )}
+                  <p className="text-xs text-slate-400">리드타임</p>
+                  <p className="text-slate-100 mt-1">{selectedRow.lead_time_days}일</p>
                 </div>
               </div>
               <div className="rounded border border-slate-700 p-2">
-                <p className="text-xs text-slate-400 mb-2">소요 유발 제품 (TOP)</p>
-                <div className="max-h-40 overflow-auto space-y-1">
-                  {selectedRow.product_drivers.length === 0 ? (
-                    <p className="text-slate-500">데이터 없음</p>
-                  ) : (
-                    selectedRow.product_drivers.map((d) => (
-                      <div key={d.product_name_snapshot} className="flex items-center justify-between text-xs">
-                        <span className="text-slate-300">{d.product_name_snapshot}</span>
-                        <span className="text-cyan-300">{fmtNum(d.required_g)}g</span>
-                      </div>
-                    ))
-                  )}
-                </div>
+                <p className="text-xs text-slate-400">안전재고 / 정책</p>
+                <p className="text-slate-200 mt-1">{fmtNum(selectedRow.safety_stock_g)} g / {selectedRow.order_policy === "on_demand" ? "필요시발주" : "일반재고"}</p>
+              </div>
+              <div className="rounded border border-slate-700 p-2">
+                <p className="text-xs text-slate-400">메모</p>
+                <p className="text-slate-200 mt-1">{selectedRow.has_primary_vendor ? "-" : "기본 공급처 미설정"}</p>
               </div>
               <div className="rounded border border-slate-700 p-2">
                 <p className="text-xs text-slate-400">발주 단위 환산</p>
@@ -436,6 +486,49 @@ export default function PurchasingClient() {
                       })`
                     : "환산 단위 미설정 (g 단위 발주)"}
                 </p>
+              </div>
+              <div className="rounded border border-slate-700 p-2">
+                <button
+                  type="button"
+                  onClick={() => setExpandEvidence((v) => !v)}
+                  className="text-xs text-slate-300 hover:text-white"
+                >
+                  {expandEvidence ? "계산 근거 접기" : "계산 근거 펼치기"}
+                </button>
+                {expandEvidence ? (
+                  <div className="mt-2 space-y-3">
+                    <div>
+                      <p className="text-xs text-slate-400 mb-2">날짜별/누적 소요</p>
+                      <div className="max-h-40 overflow-auto space-y-1">
+                        {selectedRow.date_points.length === 0 ? (
+                          <p className="text-slate-500">데이터 없음</p>
+                        ) : (
+                          selectedRow.date_points.map((p) => (
+                            <div key={p.date} className="flex items-center justify-between text-xs">
+                              <span className="text-slate-300">{p.date}</span>
+                              <span className="text-slate-200">일 {fmtNum(p.required_g)}g / 누적 {fmtNum(p.cumulative_required_g)}g</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-400 mb-2">소요 유발 제품 (TOP)</p>
+                      <div className="max-h-40 overflow-auto space-y-1">
+                        {selectedRow.product_drivers.length === 0 ? (
+                          <p className="text-slate-500">데이터 없음</p>
+                        ) : (
+                          selectedRow.product_drivers.map((d) => (
+                            <div key={d.product_name_snapshot} className="flex items-center justify-between text-xs">
+                              <span className="text-slate-300">{d.product_name_snapshot}</span>
+                              <span className="text-cyan-300">{fmtNum(d.required_g)}g</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           )}
