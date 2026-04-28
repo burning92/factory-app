@@ -155,6 +155,52 @@ function countFullyEmptyLotsInDate(state: DateGroupState, materialsList: Materia
   return total;
 }
 
+function countPrevLoadedLotsInDate(state: DateGroupState): number {
+  let total = 0;
+  for (const card of state.materials) {
+    for (const row of card.lots) {
+      if (row.prevLoadedFromDate) total += 1;
+    }
+  }
+  return total;
+}
+
+type MaterialCardProgress = {
+  totalLots: number;
+  fullyEmptyLots: number;
+  incompleteLots: number;
+  prevLoadedLots: number;
+  incompleteLabels: string[];
+};
+
+function getMaterialCardProgress(card: MaterialCard, materialsList: MaterialLike[]): MaterialCardProgress {
+  const mat = materialsList.find((m) => m.materialName === card.materialName);
+  const isGOnly = mat ? mat.boxWeightG === 0 && mat.unitWeightG === 0 : false;
+  let fullyEmptyLots = 0;
+  let incompleteLots = 0;
+  let prevLoadedLots = 0;
+  const labels = new Set<string>();
+  for (const row of card.lots) {
+    const missing = collectMissingStockFieldKeys(row, isGOnly);
+    if (missing.length > 0) incompleteLots += 1;
+    if (isLotStockFullyEmpty(row, isGOnly)) fullyEmptyLots += 1;
+    if (row.prevLoadedFromDate) prevLoadedLots += 1;
+    if (missing.includes("prevDayUnitCount") || missing.includes("prevDayRemainderG")) {
+      labels.add("전날재고 미입력");
+    }
+    if (missing.includes("currentDayUnitCount") || missing.includes("currentDayRemainderG")) {
+      labels.add("당일재고 미입력");
+    }
+  }
+  return {
+    totalLots: card.lots.length,
+    fullyEmptyLots,
+    incompleteLots,
+    prevLoadedLots,
+    incompleteLabels: Array.from(labels),
+  };
+}
+
 /** 이전 날짜 중 같은 원료명+같은 소비기한(LOT)인 당일재고를 찾아 전날재고용 값 반환. 가장 최근 날짜 1건만. */
 function findPreviousDayStock(
   groupStateByDate: Record<string, DateGroupState>,
@@ -358,11 +404,76 @@ function getProductsFromLogs(logs: ProductionLog[]): ProductItem[] {
   return list;
 }
 
+function getRequiredBomMaterialNames(
+  products: { baseProductName?: string; productStandardName?: string }[],
+  bomList: BomRowRef[]
+): string[] {
+  return getAddableBomMaterialNames(products, bomList, new Set<string>());
+}
+
+function hasPositiveCarryover(row: LotRow): boolean {
+  const units = typeof row.currentDayUnitCount === "number" ? row.currentDayUnitCount : 0;
+  const grams = typeof row.currentDayRemainderG === "number" ? row.currentDayRemainderG : 0;
+  return units > 0 || grams > 0;
+}
+
+function getCarryoverLotsFromPreviousState(
+  groupStateByDate: Record<string, DateGroupState>,
+  currentDate: string,
+  materialName: string
+): LotRow[] {
+  const prevDates = Object.keys(groupStateByDate)
+    .filter((d) => d < currentDate)
+    .sort((a, b) => b.localeCompare(a));
+  const latestByExpiry = new Map<
+    string,
+    { row: LotRow; fromDate: string; positive: boolean }
+  >();
+  for (const d of prevDates) {
+    const state = groupStateByDate[d];
+    if (!state?.materials?.length) continue;
+    const card = state.materials.find(
+      (c) => (c.materialName ?? "").trim() === materialName.trim()
+    );
+    if (!card) continue;
+    for (const row of card.lots) {
+      const expiry = (row.expiryDate ?? "").trim();
+      // LOT별 최신 상태 우선: 최신 날짜에서 처음 본 상태를 확정하고 더 과거는 무시.
+      if (latestByExpiry.has(expiry)) continue;
+      latestByExpiry.set(expiry, {
+        row,
+        fromDate: d,
+        positive: hasPositiveCarryover(row),
+      });
+    }
+  }
+
+  const candidates: LotRow[] = [];
+  for (const { row, fromDate, positive } of Array.from(latestByExpiry.values())) {
+    if (!positive) continue;
+    // TODO: 2층 유지/1층 이관 상태값이 추가되면 여기서 후보 필터를 적용.
+    candidates.push({
+      lotRowId: generateId(),
+      sourceType: "manual",
+      expiryDate: row.expiryDate ?? "",
+      outboundQty: 0,
+      prevDayUnitCount: row.currentDayUnitCount ?? "",
+      prevDayRemainderG: row.currentDayRemainderG ?? "",
+      currentDayUnitCount: "",
+      currentDayRemainderG: "",
+      prevLoadedFromDate: fromDate,
+    });
+  }
+  return candidates;
+}
+
 /** 해당 날짜 로그에서 원료별 카드 + LOT 행 초기값 생성. 같은 원료명+같은 소비기한(expiryDate)은 출고량 합산하여 한 줄로. */
 function buildInitialMaterials(
   date: string,
   logs: ProductionLog[],
-  materials: MaterialLike[]
+  materials: MaterialLike[],
+  requiredMaterialNames: string[] = [],
+  groupStateByDate: Record<string, DateGroupState> = {}
 ): MaterialCard[] {
   // 1) 원료별로 (materialName, expiryDate) 키로 그룹핑하여 출고량 합산
   const byMaterialAndExpiry = new Map<string, { outboundQty: number; prevG: number | ""; currentG: number | ""; sourceRowIds: string[] }>();
@@ -422,11 +533,50 @@ function buildInitialMaterials(
     list.push(row);
     byMaterial.set(materialName, list);
   }
-  return Array.from(byMaterial.entries()).map(([materialName, lots]) => ({
+  const cards = Array.from(byMaterial.entries()).map(([materialName, lots]) => ({
     materialCardId: generateId(),
     materialName,
     lots,
   }));
+
+  const byName = new Map(cards.map((card) => [card.materialName.trim(), card] as const));
+  for (const requiredName of requiredMaterialNames) {
+    const materialName = (requiredName ?? "").trim();
+    if (!materialName) continue;
+    if (!byName.has(materialName)) {
+      byName.set(materialName, {
+        materialCardId: generateId(),
+        materialName,
+        lots: [],
+      });
+    }
+  }
+
+  for (const [materialName, card] of Array.from(byName.entries())) {
+    const existingExpiry = new Set(card.lots.map((row) => (row.expiryDate ?? "").trim()));
+    const carryoverRows = getCarryoverLotsFromPreviousState(groupStateByDate, date, materialName).filter(
+      (row: LotRow) => !existingExpiry.has((row.expiryDate ?? "").trim())
+    );
+    if (carryoverRows.length > 0) {
+      card.lots = [...card.lots, ...carryoverRows];
+    }
+    if (card.lots.length === 0) {
+      card.lots = [
+        {
+          lotRowId: generateId(),
+          sourceType: "manual",
+          expiryDate: "",
+          outboundQty: 0,
+          prevDayUnitCount: "",
+          prevDayRemainderG: "",
+          currentDayUnitCount: "",
+          currentDayRemainderG: "",
+        },
+      ];
+    }
+  }
+
+  return Array.from(byName.values());
 }
 
 /**
@@ -439,9 +589,17 @@ function mergeOutboundFromLogsForDate(
   date: string,
   materials: MaterialCard[],
   logs: ProductionLog[],
-  materialsList: MaterialLike[]
+  materialsList: MaterialLike[],
+  requiredMaterialNames: string[] = [],
+  groupStateByDate: Record<string, DateGroupState> = {}
 ): MaterialCard[] {
-  const fresh = buildInitialMaterials(date, logs, materialsList);
+  const fresh = buildInitialMaterials(
+    date,
+    logs,
+    materialsList,
+    requiredMaterialNames,
+    groupStateByDate
+  );
   if (materials.length === 0) return fresh;
 
   const outboundByKey = new Map<string, number>();
@@ -555,9 +713,12 @@ function createInitialDateGroupState(
   date: string,
   logs: ProductionLog[],
   materials: MaterialLike[],
-  defaultAuthor?: string
+  defaultAuthor?: string,
+  bomRows: BomRowRef[] = [],
+  groupStateByDate: Record<string, DateGroupState> = {}
 ): DateGroupState {
   const products = getProductsFromLogs(logs);
+  const requiredBomMaterials = getRequiredBomMaterialNames(products, bomRows);
   const productOutputs: ProductOutput[] = products.map((p) => ({
     productOutputId: generateId(),
     productKey: p.productKey,
@@ -587,7 +748,7 @@ function createInitialDateGroupState(
     authorName: defaultAuthor ?? "",
     doughMixQty: "",
     doughWasteQty: "",
-    materials: buildInitialMaterials(date, logs, materials),
+    materials: buildInitialMaterials(date, logs, materials, requiredBomMaterials, groupStateByDate),
     products,
     secondClosure,
   };
@@ -632,13 +793,21 @@ function UsageCalculationPageContent() {
       })),
     [materials]
   );
-
   const dateGroups = useMemo(() => groupLogsByDate(productionLogs), [productionLogs]);
+  const requiredBomMaterialsByDate = useMemo((): Record<string, string[]> => {
+    const out: Record<string, string[]> = {};
+    for (const { date, logs } of dateGroups) {
+      out[date] = getRequiredBomMaterialNames(getProductsFromLogs(logs), bomList);
+    }
+    return out;
+  }, [dateGroups, bomList]);
   const searchParams = useSearchParams();
 
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
   const [expandedSecondDate, setExpandedSecondDate] = useState<string | null>(null);
   const [groupStateByDate, setGroupStateByDate] = useState<Record<string, DateGroupState>>({});
+  const [showIncompleteOnlyByDate, setShowIncompleteOnlyByDate] = useState<Record<string, boolean>>({});
+  const [expandedMaterialCardsByDate, setExpandedMaterialCardsByDate] = useState<Record<string, string[]>>({});
   const [toast, setToast] = useState<{ message: string } | null>(null);
   const [saving, setSaving] = useState<{ date: string; type: "first" | "second" } | null>(null);
   const [resettingDateClosing, setResettingDateClosing] = useState<string | null>(null);
@@ -648,6 +817,7 @@ function UsageCalculationPageContent() {
     typeof window !== "undefined" ? getLastAuthorNameFromStorage() : ""
   );
   const [defaultAuthorReady, setDefaultAuthorReady] = useState(false);
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   /** URL ?date= 복원: 해당 날짜 아코디언 자동 펼침 */
   useEffect(() => {
@@ -689,11 +859,26 @@ function UsageCalculationPageContent() {
           authorName: ((row.author_name ?? migrated.authorName ?? "").trim() || migrated.authorName) ?? "",
         };
       } else {
-        next[date] = createInitialDateGroupState(date, logs, materialsList, defaultAuthor);
+        next[date] = createInitialDateGroupState(
+          date,
+          logs,
+          materialsList,
+          defaultAuthor,
+          bomList,
+          next
+        );
       }
     }
     setGroupStateByDate(next);
-  }, [defaultAuthorReady, productionHistoryDateStatesLoading, dateGroups, materialsList, getProductionHistoryDateState, defaultAuthor]);
+  }, [
+    defaultAuthorReady,
+    productionHistoryDateStatesLoading,
+    dateGroups,
+    materialsList,
+    getProductionHistoryDateState,
+    defaultAuthor,
+    bomList,
+  ]);
 
   /** 날짜별 상태 변경 시 sessionStorage에 저장 */
   useEffect(() => {
@@ -717,14 +902,21 @@ function UsageCalculationPageContent() {
         const logs = productionLogs.filter((l) => (l.생산일자 ?? "").slice(0, 10) === date);
         const s = next[date];
         if (!s) continue;
-        const merged = mergeOutboundFromLogsForDate(date, s.materials, logs, materialsList);
+        const merged = mergeOutboundFromLogsForDate(
+          date,
+          s.materials,
+          logs,
+          materialsList,
+          requiredBomMaterialsByDate[date] ?? [],
+          prev
+        );
         if (outboundSnapshot(merged) === outboundSnapshot(s.materials)) continue;
         next[date] = { ...s, materials: merged };
         changed = true;
       }
       return changed ? next : prev;
     });
-  }, [productionLogs, materialsList, groupStateByDate]);
+  }, [productionLogs, materialsList, groupStateByDate, requiredBomMaterialsByDate]);
 
   /** 토스트 2.5초 후 자동 제거 */
   useEffect(() => {
@@ -752,17 +944,40 @@ function UsageCalculationPageContent() {
       basis: b.basis,
     }));
     for (const { date, logs } of dateGroups) {
+      const requiredMaterials = requiredBomMaterialsByDate[date] ?? [];
       const rawState =
         groupStateByDate[date] ??
-        createInitialDateGroupState(date, logs, materialsList, defaultAuthor);
+        createInitialDateGroupState(
+          date,
+          logs,
+          materialsList,
+          defaultAuthor,
+          bomRefs,
+          groupStateByDate
+        );
       const state: DateGroupState = {
         ...rawState,
-        materials: mergeOutboundFromLogsForDate(date, rawState.materials, logs, materialsList),
+        materials: mergeOutboundFromLogsForDate(
+          date,
+          rawState.materials,
+          logs,
+          materialsList,
+          requiredMaterials,
+          groupStateByDate
+        ),
       };
       out[date] = calculateUsageSummary(state, bomRefs, materialsMeta);
     }
     return out;
-  }, [dateGroups, groupStateByDate, materialsList, bomList, materialsMeta, defaultAuthor]);
+  }, [
+    dateGroups,
+    groupStateByDate,
+    materialsList,
+    bomList,
+    materialsMeta,
+    defaultAuthor,
+    requiredBomMaterialsByDate,
+  ]);
 
   const getOrInitGroupState = useCallback(
     (date: string): DateGroupState => {
@@ -817,9 +1032,16 @@ function UsageCalculationPageContent() {
         }
         return migrateSingleState(cached, defaultAuthor);
       }
-      return createInitialDateGroupState(date, logs, materialsList, defaultAuthor);
+      return createInitialDateGroupState(
+        date,
+        logs,
+        materialsList,
+        defaultAuthor,
+        bomList,
+        groupStateByDate
+      );
     },
-    [groupStateByDate, productionLogs, materialsList, defaultAuthor]
+    [groupStateByDate, productionLogs, materialsList, defaultAuthor, bomList]
   );
 
   const setGroupState = useCallback((date: string, state: DateGroupState) => {
@@ -833,11 +1055,42 @@ function UsageCalculationPageContent() {
         const logs = productionLogs.filter((l) => (l.생산일자 ?? "").slice(0, 10) === date);
         setGroupStateByDate((prev) => ({
           ...prev,
-          [date]: createInitialDateGroupState(date, logs, materialsList, defaultAuthor),
+          [date]: createInitialDateGroupState(
+            date,
+            logs,
+            materialsList,
+            defaultAuthor,
+            bomList,
+            prev
+          ),
         }));
       }
     },
-    [groupStateByDate, productionLogs, materialsList, defaultAuthor]
+    [groupStateByDate, productionLogs, materialsList, defaultAuthor, bomList]
+  );
+
+  const setIncompleteOnly = useCallback((date: string, value: boolean) => {
+    setShowIncompleteOnlyByDate((prev) => ({ ...prev, [date]: value }));
+  }, []);
+
+  const isIncompleteOnly = useCallback(
+    (date: string) => showIncompleteOnlyByDate[date] ?? true,
+    [showIncompleteOnlyByDate]
+  );
+
+  const toggleMaterialCard = useCallback((date: string, materialCardId: string) => {
+    setExpandedMaterialCardsByDate((prev) => {
+      const ids = prev[date] ?? [];
+      const next = ids.includes(materialCardId)
+        ? ids.filter((id) => id !== materialCardId)
+        : [...ids, materialCardId];
+      return { ...prev, [date]: next };
+    });
+  }, []);
+
+  const isMaterialCardExpanded = useCallback(
+    (date: string, materialCardId: string) => (expandedMaterialCardsByDate[date] ?? []).includes(materialCardId),
+    [expandedMaterialCardsByDate]
   );
 
   const updateDough = useCallback(
@@ -930,6 +1183,69 @@ function UsageCalculationPageContent() {
       });
     },
     [groupStateByDate, updateLotRow]
+  );
+
+  const loadPrevStockAll = useCallback(
+    (date: string) => {
+      const s = getOrInitGroupState(date);
+      let applied = 0;
+      let unmatched = 0;
+      const materials = s.materials.map((card) => ({
+        ...card,
+        lots: card.lots.map((row) => {
+          const shouldTry =
+            row.prevDayUnitCount === "" &&
+            row.prevDayRemainderG === "";
+          if (!shouldTry) return row;
+          const found = findPreviousDayStock(
+            groupStateByDate,
+            date,
+            card.materialName,
+            row.expiryDate ?? ""
+          );
+          if (!found) {
+            unmatched += 1;
+            return row;
+          }
+          applied += 1;
+          return {
+            ...row,
+            prevDayUnitCount: found.prevUnitCount,
+            prevDayRemainderG: found.prevRemainderG,
+            prevLoadedFromDate: found.fromDate,
+          };
+        }),
+      }));
+      setGroupState(date, { ...s, materials });
+      setToast({
+        message:
+          applied > 0
+            ? `전날재고 전체 불러오기: ${applied}건 반영${unmatched > 0 ? `, ${unmatched}건 미매칭` : ""}`
+            : "전날재고로 반영할 항목이 없습니다.",
+      });
+    },
+    [getOrInitGroupState, groupStateByDate, setGroupState]
+  );
+
+  const jumpToNextIncomplete = useCallback(
+    (date: string) => {
+      const s = getOrInitGroupState(date);
+      const target = s.materials.find((card) => getMaterialCardProgress(card, materialsList).incompleteLots > 0);
+      if (!target) {
+        setToast({ message: "미입력 원료가 없습니다." });
+        return;
+      }
+      setExpandedMaterialCardsByDate((prev) => {
+        const ids = prev[date] ?? [];
+        if (ids.includes(target.materialCardId)) return prev;
+        return { ...prev, [date]: [...ids, target.materialCardId] };
+      });
+      const key = `${date}:${target.materialCardId}`;
+      setTimeout(() => {
+        cardRefs.current[key]?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 20);
+    },
+    [getOrInitGroupState, materialsList]
   );
 
   const addMaterialCard = useCallback(
@@ -1155,7 +1471,14 @@ function UsageCalculationPageContent() {
         await deleteProductionHistoryDateState(date);
         setGroupStateByDate((prev) => ({
           ...prev,
-          [date]: createInitialDateGroupState(date, logs, materialsList, defaultAuthor),
+          [date]: createInitialDateGroupState(
+            date,
+            logs,
+            materialsList,
+            defaultAuthor,
+            bomList,
+            prev
+          ),
         }));
         setExpandedSecondDate((prev) => (prev === date ? null : prev));
         setToast({ message: "해당 날짜의 마감 저장값을 초기화했습니다." });
@@ -1171,6 +1494,7 @@ function UsageCalculationPageContent() {
       productionLogs,
       materialsList,
       defaultAuthor,
+      bomList,
       deleteProductionHistoryDateState,
     ]
   );
@@ -1233,7 +1557,7 @@ function UsageCalculationPageContent() {
                   </button>
 
                   {isExpanded && (
-                    <div className="border-t border-slate-700/80 p-4 sm:p-6 space-y-6 bg-space-900/40">
+                    <div className="border-t border-slate-700/80 p-4 sm:p-6 space-y-6 bg-space-900/40 pb-28 sm:pb-6">
                       {/* 마감 초기화 (manager/admin) — 생산일지는 생산일지 완료 목록에서만 엽니다 */}
                       <div className="flex flex-wrap items-center justify-end gap-3">
                         {canManageDateClosing && (
@@ -1315,6 +1639,48 @@ function UsageCalculationPageContent() {
 
                       {/* 원료 카드 */}
                       <div className="space-y-4">
+                        <div className="rounded-xl border border-slate-700 bg-space-800/90 p-3 space-y-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-sm font-semibold text-slate-300">원료별 출고·재고</h3>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                            <div className="rounded-lg border border-slate-700 bg-space-900/80 px-2.5 py-2">
+                              전체 원료 <span className="font-semibold text-slate-200">{state.materials.length}건</span>
+                            </div>
+                            <div className="rounded-lg border border-amber-700/50 bg-amber-950/30 px-2.5 py-2 text-amber-200">
+                              미입력 <span className="font-semibold">{countFullyEmptyLotsInDate(state, materialsList)}건</span>
+                            </div>
+                            <div className="rounded-lg border border-cyan-700/50 bg-cyan-950/20 px-2.5 py-2 text-cyan-200">
+                              전날재고 불러옴 <span className="font-semibold">{countPrevLoadedLotsInDate(state)}건</span>
+                            </div>
+                            <div className="rounded-lg border border-slate-700 bg-space-900/80 px-2.5 py-2">
+                              확인 필요 <span className="font-semibold text-slate-200">{state.materials.reduce((s, c) => s + getMaterialCardProgress(c, materialsList).incompleteLots, 0)}건</span>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setIncompleteOnly(date, true)}
+                              className={`rounded-lg px-3 py-1.5 text-xs font-medium border ${isIncompleteOnly(date) ? "border-cyan-500 bg-cyan-500/20 text-cyan-200" : "border-slate-600 text-slate-300"}`}
+                            >
+                              미입력만
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setIncompleteOnly(date, false)}
+                              className={`rounded-lg px-3 py-1.5 text-xs font-medium border ${!isIncompleteOnly(date) ? "border-cyan-500 bg-cyan-500/20 text-cyan-200" : "border-slate-600 text-slate-300"}`}
+                            >
+                              전체 보기
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => loadPrevStockAll(date)}
+                              className="rounded-lg px-3 py-1.5 text-xs font-medium border border-cyan-600/60 bg-cyan-950/30 text-cyan-200"
+                            >
+                              전날재고 전체 불러오기
+                            </button>
+                          </div>
+                        </div>
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="text-sm font-semibold text-slate-300">원료별 출고·재고</h3>
                           {(() => {
@@ -1357,25 +1723,79 @@ function UsageCalculationPageContent() {
                             );
                           })()}
                         </div>
-                        {state.materials.map((card) => (
-                          <MaterialCardBlock
-                            key={card.materialCardId}
-                            card={card}
-                            materialsList={materialsList}
-                            onUpdateLot={(lotRowId, patch) =>
-                              updateLotRow(date, card.materialCardId, lotRowId, patch)
-                            }
-                            onAddLot={() =>
-                              addManualLot(date, card.materialCardId, card.materialName)
-                            }
-                            onRemoveLot={(lotRowId) =>
-                              removeLotRow(date, card.materialCardId, lotRowId)
-                            }
-                            onLoadPrevStock={(lotRowId, materialName, expiryDate) =>
-                              loadPrevStock(date, card.materialCardId, lotRowId, materialName, expiryDate)
-                            }
-                          />
-                        ))}
+                        {state.materials
+                          .filter((card) => !isIncompleteOnly(date) || getMaterialCardProgress(card, materialsList).incompleteLots > 0)
+                          .map((card) => {
+                            const progress = getMaterialCardProgress(card, materialsList);
+                            const expanded = isMaterialCardExpanded(date, card.materialCardId);
+                            return (
+                              <div
+                                key={card.materialCardId}
+                                ref={(el) => {
+                                  cardRefs.current[`${date}:${card.materialCardId}`] = el;
+                                }}
+                                className="rounded-xl border border-slate-700 bg-space-800/80 shadow-glow"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => toggleMaterialCard(date, card.materialCardId)}
+                                  className="w-full p-3 text-left"
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-semibold text-slate-100 truncate">{card.materialName}</p>
+                                      <p className="text-xs text-slate-400 mt-1">
+                                        LOT {progress.totalLots} / 출고량 {card.lots.reduce((s, l) => s + l.outboundQty, 0).toLocaleString()}
+                                      </p>
+                                      <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                        {progress.fullyEmptyLots > 0 && (
+                                          <span className="text-[11px] px-2 py-0.5 rounded-full border border-amber-600/50 text-amber-200 bg-amber-950/40">
+                                            미입력 {progress.fullyEmptyLots}건
+                                          </span>
+                                        )}
+                                        {progress.prevLoadedLots > 0 && (
+                                          <span className="text-[11px] px-2 py-0.5 rounded-full border border-cyan-600/50 text-cyan-200 bg-cyan-950/30">
+                                            전날재고 불러옴
+                                          </span>
+                                        )}
+                                        {progress.incompleteLabels.map((label) => (
+                                          <span key={label} className="text-[11px] px-2 py-0.5 rounded-full border border-slate-600 text-slate-300">
+                                            {label}
+                                          </span>
+                                        ))}
+                                        {progress.incompleteLots === 0 && (
+                                          <span className="text-[11px] px-2 py-0.5 rounded-full border border-emerald-600/50 text-emerald-200 bg-emerald-950/30">
+                                            입력 완료
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <span className="text-slate-400 text-sm">{expanded ? "접기" : "펼치기"}</span>
+                                  </div>
+                                </button>
+                                {expanded && (
+                                  <div className="px-3 pb-3">
+                                    <MaterialCardBlock
+                                      card={card}
+                                      materialsList={materialsList}
+                                      onUpdateLot={(lotRowId, patch) =>
+                                        updateLotRow(date, card.materialCardId, lotRowId, patch)
+                                      }
+                                      onAddLot={() =>
+                                        addManualLot(date, card.materialCardId, card.materialName)
+                                      }
+                                      onRemoveLot={(lotRowId) =>
+                                        removeLotRow(date, card.materialCardId, lotRowId)
+                                      }
+                                      onLoadPrevStock={(lotRowId, materialName, expiryDate) =>
+                                        loadPrevStock(date, card.materialCardId, lotRowId, materialName, expiryDate)
+                                      }
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                       </div>
 
                       {/* 1차 마감 저장 */}
@@ -1640,6 +2060,25 @@ function UsageCalculationPageContent() {
                           </div>
                         </div>
                       )}
+                      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-slate-700 bg-space-900/95 backdrop-blur px-4 py-3">
+                        <div className="max-w-3xl mx-auto flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => jumpToNextIncomplete(date)}
+                            className="flex-1 rounded-lg border border-slate-600 px-3 py-2.5 text-sm text-slate-200"
+                          >
+                            다음 미입력
+                          </button>
+                          <button
+                            type="button"
+                            disabled={saving?.date === date && saving?.type === "first"}
+                            onClick={() => closeFirst(date)}
+                            className="flex-1 rounded-lg bg-cyan-500 px-3 py-2.5 text-sm font-semibold text-space-900 disabled:opacity-80"
+                          >
+                            {saving?.date === date && saving?.type === "first" ? "저장 중..." : "1차 마감 저장"}
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </li>
@@ -1683,13 +2122,13 @@ function MaterialCardBlock({
     `${inputCls} ${isEmpty ? "border-amber-500/55 bg-amber-950/25 ring-1 ring-amber-500/35 placeholder:text-amber-200/70" : ""}`;
   const numVal = (v: number | "") => (v === "" ? "" : v);
   return (
-    <div className="rounded-xl border border-slate-700 bg-space-800/80 p-4 shadow-glow">
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-        <h4 className="font-semibold text-slate-100 min-w-0">{card.materialName}</h4>
+    <div className="rounded-xl border border-slate-700 bg-space-900/70 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <h4 className="font-semibold text-slate-100 min-w-0 text-sm">{card.materialName}</h4>
         <button
           type="button"
           onClick={onAddLot}
-          className="text-sm font-medium text-cyan-400 hover:text-cyan-300 py-2 px-3 rounded-lg border border-slate-600 hover:border-cyan-500/50 shrink-0"
+          className="text-xs font-medium text-cyan-300 hover:text-cyan-200 py-1.5 px-2.5 rounded-lg border border-slate-600 hover:border-cyan-500/50 shrink-0"
         >
           + 추가
         </button>
@@ -1705,8 +2144,9 @@ function MaterialCardBlock({
                 미입력
               </span>
             )}
-            <div className="flex flex-wrap items-start gap-3">
-            <div className="w-full sm:w-[120px]">
+            <div className="space-y-3">
+            <div className="grid grid-cols-2 sm:grid-cols-[minmax(0,1fr)_110px_auto] items-start gap-2">
+            <div>
               <span className="text-xs text-slate-500 block mb-1">소비기한(LOT)</span>
               {row.sourceType === "from-log" ? (
                 <input
@@ -1724,13 +2164,25 @@ function MaterialCardBlock({
                 />
               )}
             </div>
-            <div className="w-[90px]">
+            <div>
               <span className="text-xs text-slate-500 block mb-1">출고량</span>
               <div className="rounded-lg border border-slate-600 px-3 py-2 text-sm bg-slate-800 text-slate-200">
                 {row.outboundQty.toLocaleString()}
               </div>
             </div>
-            <div className="space-y-4">
+            <div className="flex justify-end">
+              {row.sourceType === "manual" && (
+                <button
+                  type="button"
+                  onClick={() => onRemoveLot(row.lotRowId)}
+                  className="text-xs text-red-300 hover:text-red-200 hover:bg-red-500/10 py-1.5 px-2 rounded-lg"
+                >
+                  삭제
+                </button>
+              )}
+            </div>
+            </div>
+            <div className="space-y-2">
               <div className="rounded-lg border border-slate-600/80 bg-space-900/50 p-3">
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <p className="text-xs font-medium text-slate-400">전날재고</p>
@@ -1830,15 +2282,6 @@ function MaterialCardBlock({
                 </div>
               </div>
             </div>
-            {row.sourceType === "manual" && (
-              <button
-                type="button"
-                onClick={() => onRemoveLot(row.lotRowId)}
-                className="mt-5 sm:mt-0 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 py-2 px-3 rounded-lg"
-              >
-                삭제
-              </button>
-            )}
             </div>
           </li>
         ))}
