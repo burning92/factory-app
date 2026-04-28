@@ -22,6 +22,7 @@ const HISTORY_GROUP_STATE_KEY = "production-history:group-state";
 /** 1차 마감 전용 최근 작성자명 (출고 입력과 분리). Supabase 우선, localStorage는 보조 fallback */
 const FIRST_CLOSE_LAST_AUTHOR_KEY = "first-close-last-author-name";
 const FIRST_CLOSE_LAST_AUTHOR_STORAGE_KEY = "production:first-close-last-author-name";
+type CarryoverDisposition = "keep_2f" | "move_1f";
 
 function getLastAuthorNameFromStorage(): string {
   if (typeof window === "undefined") return "";
@@ -37,7 +38,7 @@ function setLastAuthorNameToStorage(name: string): void {
 /** sessionStorage에서 읽은 예전 상태: prevDayStockQty/currentDayStockQty → 낱개+잔량g 구조로 마이그레이션 */
 function migrateLotRow(row: Record<string, unknown>): LotRow {
   const hasOld = "prevDayStockQty" in row || "currentDayStockQty" in row;
-  const base = {
+  const base: LotRow = {
     lotRowId: String(row.lotRowId ?? ""),
     sourceType: (row.sourceType as "from-log" | "manual") ?? "manual",
     expiryDate: String(row.expiryDate ?? ""),
@@ -48,6 +49,8 @@ function migrateLotRow(row: Record<string, unknown>): LotRow {
     currentDayRemainderG: (row.currentDayRemainderG as number | "") ?? "",
     sourceRowIds: row.sourceRowIds as string[] | undefined,
     prevLoadedFromDate: typeof row.prevLoadedFromDate === "string" ? row.prevLoadedFromDate : undefined,
+    carryoverDisposition:
+      row.carryoverDisposition === "move_1f" ? "move_1f" : "keep_2f",
   };
   if (hasOld) {
     base.prevDayRemainderG = (row.prevDayStockQty as number | "") ?? "";
@@ -251,6 +254,8 @@ export type LotRow = {
   sourceRowIds?: string[];
   /** 전날재고 불러오기로 채운 날짜 (확인용 표시) */
   prevLoadedFromDate?: string;
+  /** 보관 상태: 다음날 자동 이월 후보 필터에 사용 */
+  carryoverDisposition?: CarryoverDisposition;
 };
 
 export type MaterialCard = {
@@ -417,6 +422,10 @@ function hasPositiveCarryover(row: LotRow): boolean {
   return units > 0 || grams > 0;
 }
 
+function isKeep2fDisposition(row: LotRow): boolean {
+  return (row.carryoverDisposition ?? "keep_2f") === "keep_2f";
+}
+
 function getCarryoverLotsFromPreviousState(
   groupStateByDate: Record<string, DateGroupState>,
   currentDate: string,
@@ -427,7 +436,7 @@ function getCarryoverLotsFromPreviousState(
     .sort((a, b) => b.localeCompare(a));
   const latestByExpiry = new Map<
     string,
-    { row: LotRow; fromDate: string; positive: boolean }
+    { row: LotRow; fromDate: string; positive: boolean; keep2f: boolean }
   >();
   for (const d of prevDates) {
     const state = groupStateByDate[d];
@@ -444,14 +453,15 @@ function getCarryoverLotsFromPreviousState(
         row,
         fromDate: d,
         positive: hasPositiveCarryover(row),
+        keep2f: isKeep2fDisposition(row),
       });
     }
   }
 
   const candidates: LotRow[] = [];
-  for (const { row, fromDate, positive } of Array.from(latestByExpiry.values())) {
+  for (const { row, fromDate, positive, keep2f } of Array.from(latestByExpiry.values())) {
     if (!positive) continue;
-    // TODO: 2층 유지/1층 이관 상태값이 추가되면 여기서 후보 필터를 적용.
+    if (!keep2f) continue;
     candidates.push({
       lotRowId: generateId(),
       sourceType: "manual",
@@ -462,6 +472,7 @@ function getCarryoverLotsFromPreviousState(
       currentDayUnitCount: "",
       currentDayRemainderG: "",
       prevLoadedFromDate: fromDate,
+      carryoverDisposition: "keep_2f",
     });
   }
   return candidates;
@@ -528,6 +539,7 @@ function buildInitialMaterials(
       currentDayUnitCount: "",
       currentDayRemainderG: agg.currentG,
       sourceRowIds: agg.sourceRowIds,
+      carryoverDisposition: "keep_2f",
     };
     const list = byMaterial.get(materialName) ?? [];
     list.push(row);
@@ -571,6 +583,7 @@ function buildInitialMaterials(
           prevDayRemainderG: "",
           currentDayUnitCount: "",
           currentDayRemainderG: "",
+          carryoverDisposition: "keep_2f",
         },
       ];
     }
@@ -666,6 +679,7 @@ function mergeOutboundFromLogsForDate(
         prevDayRemainderG: "",
         currentDayUnitCount: "",
         currentDayRemainderG: "",
+        carryoverDisposition: "keep_2f",
       });
       existingKeys.add(key);
     }
@@ -1114,7 +1128,7 @@ function UsageCalculationPageContent() {
       date: string,
       materialCardId: string,
       lotRowId: string,
-      patch: Partial<Pick<LotRow, "expiryDate" | "prevDayUnitCount" | "prevDayRemainderG" | "currentDayUnitCount" | "currentDayRemainderG" | "prevLoadedFromDate">>
+      patch: Partial<Pick<LotRow, "expiryDate" | "prevDayUnitCount" | "prevDayRemainderG" | "currentDayUnitCount" | "currentDayRemainderG" | "prevLoadedFromDate" | "carryoverDisposition">>
     ) => {
       const s = getOrInitGroupState(date);
       const materials = s.materials.map((card) => {
@@ -1143,6 +1157,7 @@ function UsageCalculationPageContent() {
         prevDayRemainderG: "",
         currentDayUnitCount: "",
         currentDayRemainderG: "",
+        carryoverDisposition: "keep_2f",
       };
       const materials = s.materials.map((card) => {
         if (card.materialCardId !== materialCardId) return card;
@@ -1264,6 +1279,7 @@ function UsageCalculationPageContent() {
             prevDayRemainderG: "",
             currentDayUnitCount: "",
             currentDayRemainderG: "",
+            carryoverDisposition: "keep_2f",
           },
         ],
       };
@@ -2109,7 +2125,7 @@ function MaterialCardBlock({
   materialsList: MaterialsListLike;
   onUpdateLot: (
     lotRowId: string,
-    patch: Partial<Pick<LotRow, "expiryDate" | "prevDayUnitCount" | "prevDayRemainderG" | "currentDayUnitCount" | "currentDayRemainderG" | "prevLoadedFromDate">>
+    patch: Partial<Pick<LotRow, "expiryDate" | "prevDayUnitCount" | "prevDayRemainderG" | "currentDayUnitCount" | "currentDayRemainderG" | "prevLoadedFromDate" | "carryoverDisposition">>
   ) => void;
   onAddLot: () => void;
   onRemoveLot: (lotRowId: string) => void;
@@ -2181,6 +2197,33 @@ function MaterialCardBlock({
                 </button>
               )}
             </div>
+            </div>
+            <div className="rounded-lg border border-slate-600/80 bg-space-900/50 p-3">
+              <p className="text-xs font-medium text-slate-400 mb-2">LOT 상태</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => onUpdateLot(row.lotRowId, { carryoverDisposition: "keep_2f" })}
+                  className={`rounded-lg py-2 text-xs font-medium border ${
+                    (row.carryoverDisposition ?? "keep_2f") === "keep_2f"
+                      ? "border-cyan-500 bg-cyan-500/20 text-cyan-200"
+                      : "border-slate-600 text-slate-300"
+                  }`}
+                >
+                  2층 유지
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onUpdateLot(row.lotRowId, { carryoverDisposition: "move_1f" })}
+                  className={`rounded-lg py-2 text-xs font-medium border ${
+                    row.carryoverDisposition === "move_1f"
+                      ? "border-amber-500 bg-amber-500/20 text-amber-200"
+                      : "border-slate-600 text-slate-300"
+                  }`}
+                >
+                  1층 이관
+                </button>
+              </div>
             </div>
             <div className="space-y-2">
               <div className="rounded-lg border border-slate-600/80 bg-space-900/50 p-3">
