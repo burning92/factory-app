@@ -4,7 +4,12 @@ import { Suspense, useMemo, useState, useCallback, useEffect, useRef } from "rea
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMasterStore, type ProductionLog, type OutboundLine } from "@/store/useMasterStore";
-import { calculateUsageSummary, getDateParbakeTypes, type ComputedResult } from "@/features/production/history/calculations";
+import {
+  calculateUsageSummary,
+  getDateParbakeTypes,
+  resolveMixedParbakeWasteByTypeCounts,
+  type ComputedResult,
+} from "@/features/production/history/calculations";
 import { parseProductLabel } from "@/features/production/history/productLabel";
 import { getBomRowsForProductAndStandard } from "@/features/production/history/bomAdapter";
 import type { BomRowRef } from "@/features/production/history/types";
@@ -1079,6 +1084,25 @@ function UsageCalculationPageContent() {
   const closeSecond = useCallback(
     async (date: string) => {
       const s = getOrInitGroupState(date);
+      const comp = computedByDate[date];
+      if (comp) {
+        const types = getDateParbakeTypes(comp.productSummaries);
+        if (types.length > 1) {
+          const mixed = resolveMixedParbakeWasteByTypeCounts(
+            s.secondClosure.parbakeWasteByType,
+            types,
+            comp.parbakeWasteQty
+          );
+          if (!mixed.resolved) {
+            setToast({
+              message:
+                mixed.warnings[0] ??
+                "혼합 베이스 파베이크 폐기량 상세를 확인한 뒤 다시 저장해 주세요.",
+            });
+            return;
+          }
+        }
+      }
       setSaving({ date, type: "second" });
       try {
         const existing = getProductionHistoryDateState(date);
@@ -1104,7 +1128,13 @@ function UsageCalculationPageContent() {
         setSaving(null);
       }
     },
-    [getOrInitGroupState, setGroupState, getProductionHistoryDateState, saveProductionHistoryDateState]
+    [
+      getOrInitGroupState,
+      setGroupState,
+      getProductionHistoryDateState,
+      saveProductionHistoryDateState,
+      computedByDate,
+    ]
   );
 
   const canManageDateClosing =

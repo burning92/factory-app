@@ -2,6 +2,7 @@ export {
   calculateUsageSummary,
   calculateLotUsages,
   inferParbakeMetaFromBom,
+  resolveMixedParbakeWasteByTypeCounts,
 } from "./calculations";
 export type {
   ComputedResult,

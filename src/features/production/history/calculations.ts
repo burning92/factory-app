@@ -17,6 +17,7 @@ import type {
   BaseWasteRow,
   BaseUsageRow,
   FifoLotRow,
+  ParbakeWasteByTypeInput,
 } from "./types";
 import { getDoughBaseRowsFromGeneralBom } from "./bomAdapter";
 
@@ -455,67 +456,89 @@ function calculateBaseWaste(
 }
 
 /**
- * 혼합 베이스 날: 총 파베이크 폐기량(개)을 타입별 생산수량 비중으로 자동 안분.
- * - 안분 기준: 각 베이스 타입에 속한 당일 생산수량(finishedQty) 합계 비율
- * - 정수 처리: 먼저 floor, 남는 개수는 소수부가 큰 타입부터 1개씩 배정. 합계 = totalParbakeWasteQty 보장.
+ * 혼합 베이스: 공란(미입력)과 숫자(0 포함)를 구분해 타입별 파베이크 폐기(개)를 확정한다.
+ * - 명시된 숫자는 그대로 사용(0 포함). 공란은 총량 대비 나머지로 보정할 수 있음
+ * - 공란이 1개면: 그 타입 = 총 파베이크 폐기량 − 다른 타입의 합
+ * - 모두 공란이거나 공란이 2개 이상이면 실패
+ * - 모두 숫자면 합계가 총량과 일치해야 함
  */
-function allocateParbakeWasteByRatio(
-  totalParbakeWasteQty: number,
+export function resolveMixedParbakeWasteByTypeCounts(
+  parbakeWasteByType: ParbakeWasteByTypeInput[] | undefined,
   dateParbakeTypes: string[],
-  productSummaries: ProductSummary[]
-): Map<string, number> {
-  const result = new Map<string, number>();
-  if (dateParbakeTypes.length === 0) return result;
+  totalParbakeWasteQty: number
+): { resolved: Map<string, number> | null; warnings: string[] } {
+  const warnings: string[] = [];
   const totalInt = Math.max(0, Math.floor(totalParbakeWasteQty));
-  if (totalInt === 0) {
-    for (const t of dateParbakeTypes) result.set(t, 0);
-    return result;
-  }
+  const rows = parbakeWasteByType ?? [];
 
-  const typeQty = new Map<string, number>();
-  let totalQty = 0;
-  for (const parbakeName of dateParbakeTypes) {
-    const sum = productSummaries
-      .filter(
-        (p) =>
-          p.participatesInParbakeTypeInference && p.inferredParbakeName === parbakeName
-      )
-      .reduce((s, p) => s + p.finishedQty, 0);
-    typeQty.set(parbakeName, sum);
-    totalQty += sum;
-  }
-
-  if (totalQty <= 0) {
-    const perType = Math.floor(totalInt / dateParbakeTypes.length);
-    let remainder = totalInt - perType * dateParbakeTypes.length;
-    for (const t of dateParbakeTypes) {
-      const add = remainder > 0 ? 1 : 0;
-      result.set(t, perType + add);
-      if (remainder > 0) remainder--;
+  const explicitFor = (parbakeName: string): number | null => {
+    const row = rows.find((t) => (t.parbakeName ?? "").trim() === parbakeName.trim());
+    if (!row) return null;
+    const w = row.wasteQty;
+    if (w === "" || w === undefined || w === null) return null;
+    if (typeof w === "number" && Number.isFinite(w)) {
+      return Math.max(0, Math.floor(w));
     }
-    return result;
+    return null;
+  };
+
+  const entries = dateParbakeTypes.map((name) => ({
+    name,
+    explicit: explicitFor(name),
+  }));
+
+  const emptyNames = entries.filter((e) => e.explicit === null).map((e) => e.name);
+  const filledSum = entries.reduce((s, e) => s + (e.explicit ?? 0), 0);
+
+  if (emptyNames.length === dateParbakeTypes.length) {
+    warnings.push(
+      "혼합 베이스: 파베이크 폐기량 상세에서 종류별 수량을 입력해 주세요. 한 종류만 숫자로 입력하면 나머지는 총 파베이크 폐기량에서 채워집니다."
+    );
+    return { resolved: null, warnings };
   }
 
-  const raw: { parbakeName: string; raw: number; floor: number; frac: number }[] = [];
-  let sumFloored = 0;
-  for (const parbakeName of dateParbakeTypes) {
-    const q = typeQty.get(parbakeName) ?? 0;
-    const ratio = q / totalQty;
-    const rawVal = totalInt * ratio;
-    const fl = Math.floor(rawVal);
-    raw.push({ parbakeName, raw: rawVal, floor: fl, frac: rawVal - fl });
-    sumFloored += fl;
+  if (emptyNames.length >= 2) {
+    warnings.push(
+      "혼합 베이스: 공란인 종류가 2종류 이상입니다. 종류별로 숫자를 입력하거나, 한 종류만 입력해 주세요."
+    );
+    return { resolved: null, warnings };
   }
-  const remainder = totalInt - sumFloored;
-  raw.sort((a, b) => b.frac - a.frac);
-  for (let i = 0; i < raw.length; i++) {
-    const add = i < remainder ? 1 : 0;
-    result.set(raw[i]!.parbakeName, raw[i]!.floor + add);
+
+  const out = new Map<string, number>();
+
+  if (emptyNames.length === 1) {
+    const onlyEmpty = emptyNames[0]!;
+    const sumOther = entries
+      .filter((e) => e.explicit !== null)
+      .reduce((s, e) => s + (e.explicit as number), 0);
+    const rest = totalInt - sumOther;
+    if (rest < 0) {
+      warnings.push(
+        `혼합 베이스: 입력한 폐기량 합계(${sumOther}개)가 총 파베이크 폐기량(${totalInt}개)을 초과합니다.`
+      );
+      return { resolved: null, warnings };
+    }
+    for (const e of entries) {
+      if (e.explicit !== null) out.set(e.name, e.explicit);
+    }
+    out.set(onlyEmpty, rest);
+    return { resolved: out, warnings };
   }
-  return result;
+
+  /** 모두 숫자로 채워짐 */
+  if (filledSum !== totalInt) {
+    warnings.push(
+      `혼합 베이스: 종류별 폐기량 합계(${filledSum}개)가 총 파베이크 폐기량(${totalInt}개)과 일치하지 않습니다.`
+    );
+    return { resolved: null, warnings };
+  }
+  for (const e of entries) {
+    out.set(e.name, e.explicit ?? 0);
+  }
+  return { resolved: out, warnings };
 }
 
-/** 총괄(P1) 베이스 폐기량 행 배열. 단일 종류면 1행(자동). 혼합이면 타입별 1행(자동 안분 또는 parbakeWasteByType override) */
+/** 총괄(P1) 베이스 폐기량 행 배열. 단일 종류면 1행(자동). 혼합이면 타입별 1행(parbakeWasteByType 규칙 반영) */
 function calculateBaseWasteRows(
   state: DateGroupInput,
   parbakeWasteQty: number,
@@ -544,23 +567,20 @@ function calculateBaseWasteRows(
     };
   }
 
-  // 혼합 베이스: 1) 사용자가 모든 타입에 대해 parbakeWasteByType 입력 시 → 그 값 사용. 2) 아니면 총량을 생산수량 비중으로 자동 안분.
-  const byType = state.secondClosure.parbakeWasteByType ?? [];
-  const typedMap = new Map<string, number>();
-  for (const t of byType) {
-    if (t.parbakeName?.trim() && typeof t.wasteQty === "number" && Number.isFinite(t.wasteQty)) {
-      typedMap.set(t.parbakeName.trim(), Math.max(0, Math.floor(t.wasteQty)));
+  // 혼합 베이스: 공란/0 구분 및 보정 규칙은 resolveMixedParbakeWasteByTypeCounts 참고
+  const mixed = resolveMixedParbakeWasteByTypeCounts(
+    state.secondClosure.parbakeWasteByType,
+    dateParbakeTypes,
+    parbakeWasteQty
+  );
+  warnings.push(...mixed.warnings);
+  if (!mixed.resolved) {
+    const rows: BaseWasteRow[] = [];
+    for (const parbakeName of dateParbakeTypes) {
+      rows.push({ resolved: false });
     }
+    return { rows, warnings };
   }
-  const hasFullOverride = dateParbakeTypes.every((name) => typedMap.has(name));
-  const parbakeWasteByTypeFinal =
-    hasFullOverride
-      ? typedMap
-      : allocateParbakeWasteByRatio(
-          Math.max(0, Math.floor(parbakeWasteQty)),
-          dateParbakeTypes,
-          productSummaries
-        );
 
   const rows: BaseWasteRow[] = [];
   for (const parbakeName of dateParbakeTypes) {
@@ -572,7 +592,7 @@ function calculateBaseWasteRows(
       rows.push({ resolved: false });
       continue;
     }
-    const wasteQty = parbakeWasteByTypeFinal.get(parbakeName) ?? 0;
+    const wasteQty = mixed.resolved.get(parbakeName) ?? 0;
     const baseWasteQty = Math.round(wasteQty * meta.weightedBaseSaucePerUnitQty);
     rows.push({
       resolved: true,
