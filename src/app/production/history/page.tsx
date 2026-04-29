@@ -518,7 +518,9 @@ function getCarryoverGroupMembers(materialName: string): string[] {
 }
 
 function makeSharedCandidateKey(sourceMaterialName: string, expiryDate: string, fromDate: string): string {
-  return `${normalizeName(sourceMaterialName)}|${normalizeName(expiryDate)}|${fromDate}`;
+  const groupKey = getCarryoverGroupKey(sourceMaterialName);
+  const scope = groupKey ?? normalizeName(sourceMaterialName);
+  return `${scope}|${normalizeName(expiryDate)}|${fromDate}`;
 }
 
 function getCarryoverLotsFromPreviousState(
@@ -589,7 +591,8 @@ function getSharedCarryoverCandidatesForCard(
     .filter((d) => d < currentDate)
     .sort((a, b) => b.localeCompare(a));
 
-  const latestByPair = new Map<string, { row: LotRow; fromDate: string; sourceMaterialName: string }>();
+  // 공용 후보는 "그룹 + LOT(소비기한)" 기준 최신 1건만 유지한다.
+  const latestByExpiry = new Map<string, { row: LotRow; fromDate: string; sourceMaterialName: string }>();
 
   for (const d of prevDates) {
     const state = groupStateByDate[d];
@@ -599,17 +602,18 @@ function getSharedCarryoverCandidatesForCard(
       if (!groupMembers.has(sourceMaterialName)) continue;
       for (const row of card.lots) {
         const expiry = normalizeName(row.expiryDate);
-        const pairKey = `${sourceMaterialName}|${expiry}`;
-        if (latestByPair.has(pairKey)) continue;
-        latestByPair.set(pairKey, { row, fromDate: d, sourceMaterialName });
+        if (!expiry) continue;
+        if (latestByExpiry.has(expiry)) continue;
+        latestByExpiry.set(expiry, { row, fromDate: d, sourceMaterialName });
       }
     }
   }
 
   const out: SharedCarryoverCandidate[] = [];
-  for (const { row, fromDate, sourceMaterialName } of Array.from(latestByPair.values())) {
+  for (const { row, fromDate, sourceMaterialName } of Array.from(latestByExpiry.values())) {
+    // 최신 상태가 살아있는 후보(명시 keep_2f + 잔량 양수)만 표시.
     if (!hasPositiveCarryover(row)) continue;
-    if (!isKeep2fDisposition(row)) continue;
+    if (!hasExplicitKeep2fDisposition(row)) continue;
     const expiry = normalizeName(row.expiryDate);
     if (currentExpiry.has(expiry)) continue;
     const key = makeSharedCandidateKey(sourceMaterialName, expiry, fromDate);
