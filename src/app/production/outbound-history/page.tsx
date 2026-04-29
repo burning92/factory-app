@@ -668,7 +668,7 @@ export default function OutboundHistoryPage() {
       {toast && (
         <div
           role="alert"
-          className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] px-5 py-3 rounded-xl shadow-lg text-sm font-medium ${
+          className={`app-toast ${
             toast.type === "success" ? "bg-emerald-500 text-white" : "bg-red-500 text-white"
           }`}
         >

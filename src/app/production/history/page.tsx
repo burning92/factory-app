@@ -1854,8 +1854,7 @@ function UsageCalculationPageContent() {
       {/* 토스트 */}
       {toast && (
         <div
-          className="fixed left-1/2 -translate-x-1/2 z-[70] max-w-[min(100vw-1rem,34rem)] rounded-lg bg-cyan-600 text-white px-3 py-2.5 text-sm font-medium shadow-lg whitespace-pre-line break-words leading-relaxed"
-          style={{ top: "calc(env(safe-area-inset-top) + 0.75rem)" }}
+          className="app-toast bg-cyan-600 text-white"
           role="alert"
         >
           {toast.message}
