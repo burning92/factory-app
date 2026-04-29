@@ -1678,52 +1678,6 @@ function UsageCalculationPageContent() {
   const closeSecond = useCallback(
     async (date: string) => {
       const s = getOrInitGroupState(date);
-      const unselected: {
-        materialName: string;
-        expiryDate: string;
-        materialCardId: string;
-        lotRowId: string;
-      }[] = [];
-      for (const card of s.materials) {
-        const mat = materialsList.find((m) => m.materialName === card.materialName);
-        const isGOnly = mat ? mat.boxWeightG === 0 && mat.unitWeightG === 0 : false;
-        for (const row of card.lots) {
-          if (isLotDispositionSelectionRequired(row, isGOnly) && !row.carryoverDisposition) {
-            unselected.push({
-              materialName: card.materialName,
-              expiryDate: row.expiryDate || "LOT 미입력",
-              materialCardId: card.materialCardId,
-              lotRowId: row.lotRowId,
-            });
-          }
-        }
-      }
-      if (unselected.length > 0) {
-        const preview = unselected
-          .slice(0, 3)
-          .map((x) => `${x.materialName}(${x.expiryDate})`)
-          .join(", ");
-        setToast({
-          message: `2차 마감 저장 불가 · LOT 상태 미선택 ${unselected.length}건: ${preview}${
-            unselected.length > 3 ? " 외" : ""
-          }`,
-        });
-        const first = unselected[0];
-        if (first) {
-          setExpandedMaterialCardsByDate((prev) => {
-            const ids = prev[date] ?? [];
-            if (ids.includes(first.materialCardId)) return prev;
-            return { ...prev, [date]: [...ids, first.materialCardId] };
-          });
-          setTimeout(() => {
-            lotRefs.current[`${date}:${first.materialCardId}:${first.lotRowId}`]?.scrollIntoView({
-              behavior: "smooth",
-              block: "center",
-            });
-          }, 40);
-        }
-        return;
-      }
       const comp = computedByDate[date];
       if (comp) {
         const types = getDateParbakeTypes(comp.productSummaries);
@@ -1773,7 +1727,6 @@ function UsageCalculationPageContent() {
       setGroupState,
       getProductionHistoryDateState,
       saveProductionHistoryDateState,
-      materialsList,
       computedByDate,
     ]
   );
@@ -2190,18 +2143,6 @@ function UsageCalculationPageContent() {
                         >
                           2차 마감
                         </button>
-                        {(() => {
-                          const statusMissing = state.materials.reduce((sum, c) => {
-                            const p = getMaterialCardProgress(c, materialsList);
-                            return sum + p.unselectedDispositionLots;
-                          }, 0);
-                          if (statusMissing <= 0) return null;
-                          return (
-                            <p className="mt-2 text-xs text-amber-200">
-                              LOT 상태 미선택 {statusMissing}건으로 2차 마감 저장이 제한됩니다.
-                            </p>
-                          );
-                        })()}
                       </div>
 
                       {/* 2차 마감 입력 영역 */}
