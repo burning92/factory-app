@@ -474,12 +474,13 @@ function hasExplicitKeep2fDisposition(row: LotRow): boolean {
 }
 
 function isLotDispositionSelectionRequired(row: LotRow, isGOnly: boolean): boolean {
-  if (row.outboundQty > 0) return true;
-  if (row.prevLoadedFromDate) return true;
-  if (row.carryoverSourceMaterialName || row.carryoverSourceDate) return true;
-  if (!isGOnly && (row.prevDayUnitCount !== "" || row.currentDayUnitCount !== "")) return true;
-  if (row.prevDayRemainderG !== "" || row.currentDayRemainderG !== "") return true;
-  return false;
+  // LOT 상태는 "당일재고가 실제로 남은 경우"에만 필수.
+  // 0은 전량 사용(상태 불필요), ""은 미입력(재고 미완료로 별도 관리)로 취급한다.
+  const currentUnits =
+    !isGOnly && typeof row.currentDayUnitCount === "number" ? row.currentDayUnitCount : 0;
+  const currentGrams =
+    typeof row.currentDayRemainderG === "number" ? row.currentDayRemainderG : 0;
+  return currentUnits > 0 || currentGrams > 0;
 }
 
 function normalizeName(name: string): string {
