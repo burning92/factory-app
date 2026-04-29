@@ -483,6 +483,12 @@ function isLotDispositionSelectionRequired(row: LotRow, isGOnly: boolean): boole
   return currentUnits > 0 || currentGrams > 0;
 }
 
+function isConsumeAllSelection(row: LotRow, isGOnly: boolean): boolean {
+  const units = !isGOnly && typeof row.currentDayUnitCount === "number" ? row.currentDayUnitCount : 0;
+  const grams = typeof row.currentDayRemainderG === "number" ? row.currentDayRemainderG : 0;
+  return units === 0 && grams === 0 && !row.carryoverDisposition;
+}
+
 function normalizeName(name: string): string {
   return (name ?? "").trim();
 }
@@ -2648,7 +2654,7 @@ function MaterialCardBlock({
             </div>
             <div className="rounded-lg border border-slate-600/80 bg-space-900/50 p-3">
               <p className="text-xs font-medium text-slate-400 mb-2">LOT 상태</p>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => onUpdateLot(row.lotRowId, { carryoverDisposition: "keep_2f" })}
@@ -2671,8 +2677,25 @@ function MaterialCardBlock({
                 >
                   1층 이관
                 </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onUpdateLot(row.lotRowId, {
+                      currentDayUnitCount: 0,
+                      currentDayRemainderG: 0,
+                      carryoverDisposition: undefined,
+                    })
+                  }
+                  className={`rounded-lg py-2 text-xs font-medium border ${
+                    isConsumeAllSelection(row, isGOnly)
+                      ? "border-emerald-500 bg-emerald-500/20 text-emerald-200"
+                      : "border-slate-600 text-slate-300"
+                  }`}
+                >
+                  전량 사용
+                </button>
               </div>
-              {!row.carryoverDisposition && (
+              {isLotDispositionSelectionRequired(row, isGOnly) && !row.carryoverDisposition && (
                 <p className="mt-1.5 text-[11px] text-amber-200">LOT 상태를 선택해 주세요.</p>
               )}
             </div>
@@ -2735,21 +2758,7 @@ function MaterialCardBlock({
                 )}
               </div>
               <div className="rounded-lg border border-slate-600/80 bg-space-900/50 p-3">
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <p className="text-xs font-medium text-slate-400">당일재고</p>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onUpdateLot(row.lotRowId, {
-                        currentDayUnitCount: 0,
-                        currentDayRemainderG: 0,
-                      })
-                    }
-                    className="text-xs font-medium text-slate-300 hover:text-cyan-300 border border-slate-600 hover:border-cyan-500/50 rounded-lg py-1.5 px-2.5 transition-colors"
-                  >
-                    전량 사용
-                  </button>
-                </div>
+                <p className="text-xs font-medium text-slate-400 mb-2">당일재고</p>
                 <div className={isGOnly ? "space-y-2" : "grid grid-cols-2 gap-3"}>
                   {!isGOnly && (
                     <label className="flex flex-col gap-1">
