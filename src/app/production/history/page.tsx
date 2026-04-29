@@ -260,6 +260,8 @@ function findPreviousDayStock(
       if ((card.materialName ?? "").trim() !== matNorm) continue;
       const lot = card.lots.find((row) => (row.expiryDate ?? "").trim() === expiryNorm);
       if (!lot) continue;
+      // 최신 동일 LOT 기준으로 keep_2f가 아니면 제외(더 과거 fallback 금지).
+      if (lot.carryoverDisposition !== "keep_2f") return null;
       return {
         prevUnitCount: lot.currentDayUnitCount ?? "",
         prevRemainderG: lot.currentDayRemainderG ?? "",
@@ -467,6 +469,10 @@ function isKeep2fDisposition(row: LotRow): boolean {
   return (row.carryoverDisposition ?? "keep_2f") === "keep_2f";
 }
 
+function hasExplicitKeep2fDisposition(row: LotRow): boolean {
+  return row.carryoverDisposition === "keep_2f";
+}
+
 function isLotDispositionSelectionRequired(row: LotRow, isGOnly: boolean): boolean {
   if (row.outboundQty > 0) return true;
   if (row.prevLoadedFromDate) return true;
@@ -478,6 +484,21 @@ function isLotDispositionSelectionRequired(row: LotRow, isGOnly: boolean): boole
 
 function normalizeName(name: string): string {
   return (name ?? "").trim();
+}
+
+const AUTO_CARRYOVER_BLOCKED_MATERIALS = new Set(
+  [
+    "토핑 토마토소스",
+    "도우 토마토소스",
+    "토핑 베샤멜소스",
+    "도우 베샤멜소스",
+    "토핑 로제소스",
+    "도우 로제소스",
+  ].map(normalizeName)
+);
+
+function isAutoCarryoverBlockedMaterial(materialName: string): boolean {
+  return AUTO_CARRYOVER_BLOCKED_MATERIALS.has(normalizeName(materialName));
 }
 
 function getCarryoverGroupKey(materialName: string): CarryoverGroupKey | null {
@@ -536,6 +557,7 @@ function getCarryoverLotsFromPreviousState(
   for (const { row, fromDate, positive, keep2f } of Array.from(latestByExpiry.values())) {
     if (!positive) continue;
     if (!keep2f) continue;
+    if (!hasExplicitKeep2fDisposition(row)) continue;
     candidates.push({
       lotRowId: generateId(),
       sourceType: "manual",
@@ -693,9 +715,11 @@ function buildInitialMaterials(
 
   for (const [materialName, card] of Array.from(byName.entries())) {
     const existingExpiry = new Set(card.lots.map((row) => (row.expiryDate ?? "").trim()));
-    const carryoverRows = getCarryoverLotsFromPreviousState(groupStateByDate, date, materialName).filter(
-      (row: LotRow) => !existingExpiry.has((row.expiryDate ?? "").trim())
-    );
+    const carryoverRows = isAutoCarryoverBlockedMaterial(materialName)
+      ? []
+      : getCarryoverLotsFromPreviousState(groupStateByDate, date, materialName).filter(
+          (row: LotRow) => !existingExpiry.has((row.expiryDate ?? "").trim())
+        );
     if (carryoverRows.length > 0) {
       card.lots = [...card.lots, ...carryoverRows];
     }
