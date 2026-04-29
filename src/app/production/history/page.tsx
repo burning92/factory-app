@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useState, useCallback, useEffect, useRef } from "react";
+import { Suspense, useMemo, useState, useCallback, useEffect, useRef, type FocusEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMasterStore, type ProductionLog, type OutboundLine } from "@/store/useMasterStore";
@@ -977,6 +977,7 @@ function UsageCalculationPageContent() {
   const [groupStateByDate, setGroupStateByDate] = useState<Record<string, DateGroupState>>({});
   const [showIncompleteOnlyByDate, setShowIncompleteOnlyByDate] = useState<Record<string, boolean>>({});
   const [expandedMaterialCardsByDate, setExpandedMaterialCardsByDate] = useState<Record<string, string[]>>({});
+  const [editingMaterialCardByDate, setEditingMaterialCardByDate] = useState<Record<string, string | null>>({});
   const [toast, setToast] = useState<{ message: string } | null>(null);
   const [saving, setSaving] = useState<{ date: string; type: "first" | "second" } | null>(null);
   const [resettingDateClosing, setResettingDateClosing] = useState<string | null>(null);
@@ -988,12 +989,21 @@ function UsageCalculationPageContent() {
   const [defaultAuthorReady, setDefaultAuthorReady] = useState(false);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const lotRefs = useRef<Record<string, HTMLLIElement | null>>({});
+  const editingBlurTimersByDate = useRef<Record<string, ReturnType<typeof setTimeout> | undefined>>({});
 
   /** URL ?date= 복원: 해당 날짜 아코디언 자동 펼침 */
   useEffect(() => {
     const q = searchParams.get("date");
     if (q) setExpandedDate(q);
   }, [searchParams]);
+
+  useEffect(() => {
+    return () => {
+      for (const timer of Object.values(editingBlurTimersByDate.current)) {
+        if (timer) clearTimeout(timer);
+      }
+    };
+  }, []);
 
   /** 마운트 시 1차 마감 최근 작성자명: Supabase → localStorage. 조회 후 defaultAuthorReady로 복원 시점 제어 */
   useEffect(() => {
@@ -1262,6 +1272,30 @@ function UsageCalculationPageContent() {
     (date: string, materialCardId: string) => (expandedMaterialCardsByDate[date] ?? []).includes(materialCardId),
     [expandedMaterialCardsByDate]
   );
+
+  const markCardEditingFocus = useCallback((date: string, materialCardId: string) => {
+    const timer = editingBlurTimersByDate.current[date];
+    if (timer) {
+      clearTimeout(timer);
+      editingBlurTimersByDate.current[date] = undefined;
+    }
+    setEditingMaterialCardByDate((prev) => {
+      if (prev[date] === materialCardId) return prev;
+      return { ...prev, [date]: materialCardId };
+    });
+  }, []);
+
+  const markCardEditingBlur = useCallback((date: string, materialCardId: string) => {
+    const timer = editingBlurTimersByDate.current[date];
+    if (timer) clearTimeout(timer);
+    editingBlurTimersByDate.current[date] = setTimeout(() => {
+      setEditingMaterialCardByDate((prev) => {
+        if (prev[date] !== materialCardId) return prev;
+        return { ...prev, [date]: null };
+      });
+      editingBlurTimersByDate.current[date] = undefined;
+    }, 120);
+  }, []);
 
   const takenSharedCandidateKeysByDate = useMemo((): Record<string, Set<string>> => {
     const out: Record<string, Set<string>> = {};
@@ -2039,7 +2073,13 @@ function UsageCalculationPageContent() {
                         {state.materials
                           .filter((card) => {
                             const p = getMaterialCardProgress(card, materialsList);
-                            return !isIncompleteOnly(date) || p.incompleteLots > 0 || p.unselectedDispositionLots > 0;
+                            const isEditingCard = editingMaterialCardByDate[date] === card.materialCardId;
+                            return (
+                              !isIncompleteOnly(date) ||
+                              p.incompleteLots > 0 ||
+                              p.unselectedDispositionLots > 0 ||
+                              isEditingCard
+                            );
                           })
                           .map((card) => {
                             const progress = getMaterialCardProgress(card, materialsList);
@@ -2120,6 +2160,8 @@ function UsageCalculationPageContent() {
                                       onLotRef={(lotRowId, el) => {
                                         lotRefs.current[`${date}:${card.materialCardId}:${lotRowId}`] = el;
                                       }}
+                                      onEditingFocus={() => markCardEditingFocus(date, card.materialCardId)}
+                                      onEditingBlur={() => markCardEditingBlur(date, card.materialCardId)}
                                     />
                                   </div>
                                 )}
@@ -2458,6 +2500,8 @@ function MaterialCardBlock({
   onLoadPrevStock,
   onImportSharedCarryoverCandidate,
   onLotRef,
+  onEditingFocus,
+  onEditingBlur,
 }: {
   card: MaterialCard;
   materialsList: MaterialsListLike;
@@ -2471,6 +2515,8 @@ function MaterialCardBlock({
   onLoadPrevStock?: (lotRowId: string, materialName: string, expiryDate: string) => void;
   onImportSharedCarryoverCandidate: (candidate: SharedCarryoverCandidate) => void;
   onLotRef?: (lotRowId: string, el: HTMLLIElement | null) => void;
+  onEditingFocus?: () => void;
+  onEditingBlur?: () => void;
 }) {
   const mat = materialsList.find((m) => m.materialName === card.materialName);
   const isGOnly = mat ? mat.boxWeightG === 0 && mat.unitWeightG === 0 : false;
@@ -2478,8 +2524,28 @@ function MaterialCardBlock({
   const stockInputCls = (isEmpty: boolean) =>
     `${inputCls} ${isEmpty ? "border-amber-500/55 bg-amber-950/25 ring-1 ring-amber-500/35 placeholder:text-amber-200/70" : ""}`;
   const numVal = (v: number | "") => (v === "" ? "" : v);
+  const handleEditorFocusCapture = (e: FocusEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement | null;
+    if (!target) return;
+    const tag = target.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+      onEditingFocus?.();
+    }
+  };
+  const handleEditorBlurCapture = (e: FocusEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement | null;
+    if (!target) return;
+    const tag = target.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+      onEditingBlur?.();
+    }
+  };
   return (
-    <div className="rounded-xl border border-slate-700 bg-space-900/70 p-3">
+    <div
+      className="rounded-xl border border-slate-700 bg-space-900/70 p-3"
+      onFocusCapture={handleEditorFocusCapture}
+      onBlurCapture={handleEditorBlurCapture}
+    >
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <h4 className="font-semibold text-slate-100 min-w-0 text-sm">{card.materialName}</h4>
         <button
