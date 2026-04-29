@@ -2735,7 +2735,21 @@ function MaterialCardBlock({
                 )}
               </div>
               <div className="rounded-lg border border-slate-600/80 bg-space-900/50 p-3">
-                <p className="text-xs font-medium text-slate-400 mb-2">당일재고</p>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <p className="text-xs font-medium text-slate-400">당일재고</p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onUpdateLot(row.lotRowId, {
+                        currentDayUnitCount: 0,
+                        currentDayRemainderG: 0,
+                      })
+                    }
+                    className="text-xs font-medium text-slate-300 hover:text-cyan-300 border border-slate-600 hover:border-cyan-500/50 rounded-lg py-1.5 px-2.5 transition-colors"
+                  >
+                    전량 사용
+                  </button>
+                </div>
                 <div className={isGOnly ? "space-y-2" : "grid grid-cols-2 gap-3"}>
                   {!isGOnly && (
                     <label className="flex flex-col gap-1">
