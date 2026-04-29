@@ -775,6 +775,7 @@ function mergeOutboundFromLogsForDate(
     const mn = (c.materialName ?? "").trim();
     for (const lot of c.lots) {
       const exp = (lot.expiryDate ?? "").trim();
+      if (!exp) continue;
       outboundByKey.set(`${mn}\t${exp}`, lot.outboundQty);
     }
   }
@@ -823,6 +824,8 @@ function mergeOutboundFromLogsForDate(
     const lots = [...card.lots];
     for (const fl of fc.lots) {
       const exp = (fl.expiryDate ?? "").trim();
+      // BOM-only 기본 placeholder(빈 소비기한)는 병합 단계에서 재추가하지 않는다.
+      if (!exp) continue;
       const key = `${mn}\t${exp}`;
       if (existingKeys.has(key)) continue;
       lots.push({
