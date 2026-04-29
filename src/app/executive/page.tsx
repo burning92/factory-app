@@ -790,13 +790,7 @@ export default function ExecutiveDashboardPage() {
                   currentMonth={planDashboard?.month ?? calendarMonth.m}
                   currentMonthAchievementPct={planDashboard?.achievementPct ?? null}
                   achievementPctByMonth={planSparklineAchievementByMonth}
-                  title={
-                    periodKey === "week"
-                      ? "이번 주 달성 현황"
-                      : periodKey === "month"
-                        ? "이번 달 달성 추이"
-                        : "올해 월별 달성 추이"
-                  }
+                  title="올해 월별 달성 추이"
                 />
               </div>
             </div>
@@ -874,18 +868,22 @@ export default function ExecutiveDashboardPage() {
                   Number.isFinite(ytdU)
                     ? monthU - ytdU
                     : null;
+                const compareLabel =
+                  periodKey === "ytd" ? "기준 평균 대비" : "직전 동일기간 대비";
+                const compareBaseLabel =
+                  periodKey === "ytd" ? "기준 평균" : "직전 동일기간 평균";
                 return (
                   <>
                     <p className={dashLabel}>{periodLabel} 평균 투입률</p>
                     <p className={`mt-2 ${dashHero} text-cyan-200/95`}>{pct(monthU)}</p>
                     {deltaUtilVsYtd != null && ytdU != null ? (
                       <p className={`mt-2 ${dashMutedMeta} leading-relaxed tabular-nums`}>
-                        직전/참고 평균 <span className="text-slate-300">{pct(ytdU)}</span> 대비{" "}
+                        {compareLabel}{" "}
                         <span className="text-slate-300">{formatDeltaPctPoint(deltaUtilVsYtd)}</span>
                       </p>
                     ) : ytdU != null ? (
                       <p className={`mt-2 ${dashMutedMeta}`}>
-                        기간 평균 <span className="tabular-nums text-slate-300">{pct(ytdU)}</span>
+                        {compareBaseLabel} <span className="tabular-nums text-slate-300">{pct(ytdU)}</span>
                       </p>
                     ) : null}
                     <div className="mt-5 h-3 w-full overflow-hidden rounded-full bg-slate-700/45">
@@ -1111,7 +1109,7 @@ export default function ExecutiveDashboardPage() {
 
               <div className="mt-5 border-t border-slate-700/45 pt-4">
                 <p className={`mb-3 ${dashCaption}`}>
-                  {periodKey === "ytd" ? "올해 누적 평균 기준" : `${periodLabel} 평균 기준`}
+                  {periodKey === "ytd" ? "올해 누적 환경 평균 기준" : `${periodLabel} 환경 평균 기준`}
                 </p>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                   <div className="min-w-0 flex-1">
