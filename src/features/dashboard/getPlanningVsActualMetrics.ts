@@ -1,11 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  loadPlanActualByProductForMonth,
   loadPlanActualDashboardMetrics,
+  majorCategoryForPlanActualProduct,
   planActualSparklineWindowMonths,
   type PlanActualDashboardMetrics,
 } from "@/features/dashboard/planVsActual";
 
 export type PlanningVsActualMetrics = {
+  periodLabel?: string;
   currentMonth: number;
   planTotal: number;
   actualTotal: number;
@@ -24,6 +27,30 @@ export type PlanningVsActualMetrics = {
   sparklineAchievementByMonth: Record<number, number | null>;
 };
 
+export type PlanningRangeParams = {
+  year: number;
+  month: number;
+  startDate: string;
+  endDate: string;
+  periodLabel: string;
+  periodKey: "week" | "month" | "ytd";
+};
+
+function monthFromDate(date: string): number {
+  return Number(String(date).slice(5, 7));
+}
+
+function monthSpan(startDate: string, endDate: string): number[] {
+  const ys = Number(startDate.slice(0, 4));
+  const ye = Number(endDate.slice(0, 4));
+  if (ys !== ye) return [];
+  const s = monthFromDate(startDate);
+  const e = monthFromDate(endDate);
+  const out: number[] = [];
+  for (let m = s; m <= e; m++) out.push(m);
+  return out;
+}
+
 /**
  * 대시보드 «계획 대비 실적» 카드 전용 selector.
  *
@@ -38,9 +65,9 @@ export type PlanningVsActualMetrics = {
  */
 export async function getPlanningVsActualMetrics(
   supabase: SupabaseClient,
-  year: number,
-  month: number
+  params: PlanningRangeParams
 ): Promise<PlanningVsActualMetrics> {
+  const { year, month, startDate, endDate, periodLabel, periodKey } = params;
   const current = await loadPlanActualDashboardMetrics(supabase, year, month);
   const monthsToLoad = Array.from({ length: month }, (_, i) => i + 1);
   const monthlyRows = await Promise.all(monthsToLoad.map((m) => loadPlanActualDashboardMetrics(supabase, year, m)));
@@ -59,32 +86,97 @@ export async function getPlanningVsActualMetrics(
     sparklineAchievementByMonth[m] = row?.achievementPct ?? null;
   }
 
+  const targetMonths = monthSpan(startDate, endDate);
+  const monthRowsForRange = await Promise.all(targetMonths.map((m) => loadPlanActualByProductForMonth(supabase, year, m)));
+  const planByCat: Record<"pizza" | "bread" | "parbake", number> = { pizza: 0, bread: 0, parbake: 0 };
+  const actualByCat: Record<"pizza" | "bread" | "parbake", number> = { pizza: 0, bread: 0, parbake: 0 };
+  for (const mm of monthRowsForRange) {
+    for (const row of mm.rows) {
+      const cat = majorCategoryForPlanActualProduct(row.productName);
+      const actualInRange = row.actualDailyBreakdown
+        .filter((d) => d.date >= startDate && d.date <= endDate)
+        .reduce((s, d) => s + d.qty, 0);
+      actualByCat[cat] += actualInRange;
+    }
+  }
+
+  const [{ data: legacyPlanRows }, { data: processedPlanRows }] = await Promise.all([
+    supabase
+      .from("production_plan_rows")
+      .select("plan_date, product_name, qty, source_sheet_name")
+      .gte("plan_date", startDate)
+      .lte("plan_date", endDate),
+    supabase
+      .from("production_plan_processed_rows")
+      .select("plan_date, product_name, qty")
+      .gte("plan_date", startDate)
+      .lte("plan_date", endDate),
+  ]);
+  const planningBoardDates = new Set(
+    (legacyPlanRows ?? [])
+      .filter((r) => String((r as { source_sheet_name?: string | null }).source_sheet_name ?? "") === "planning_board")
+      .map((r) => String((r as { plan_date?: string | null }).plan_date ?? "").slice(0, 10))
+      .filter(Boolean)
+  );
+  const mergedPlanRows = [
+    ...((legacyPlanRows ?? []).filter((r) => {
+      const rr = r as { plan_date?: string | null; source_sheet_name?: string | null };
+      const d = String(rr.plan_date ?? "").slice(0, 10);
+      if (!planningBoardDates.has(d)) return true;
+      return String(rr.source_sheet_name ?? "") === "planning_board";
+    }) as Array<{ product_name?: string | null; qty?: unknown }>),
+    ...((processedPlanRows ?? []).filter((r) => {
+      const d = String((r as { plan_date?: string | null }).plan_date ?? "").slice(0, 10);
+      return !planningBoardDates.has(d);
+    }) as Array<{ product_name?: string | null; qty?: unknown }>),
+  ];
+  for (const row of mergedPlanRows) {
+    const qty = Number(row.qty ?? 0);
+    if (!Number.isFinite(qty) || qty <= 0) continue;
+    const cat = majorCategoryForPlanActualProduct(String(row.product_name ?? "").trim());
+    planByCat[cat] += qty;
+  }
+
+  const rangePlanTotal = planByCat.pizza + planByCat.bread + planByCat.parbake;
+  const rangeActualTotal = actualByCat.pizza + actualByCat.bread + actualByCat.parbake;
+  const toBucket = (plan: number, actual: number) => ({
+    plan,
+    actual,
+    achievementPct: plan > 0 ? (actual / plan) * 100 : null,
+  });
+  const rangeBuckets = {
+    pizza: toBucket(planByCat.pizza, actualByCat.pizza),
+    bread: toBucket(planByCat.bread, actualByCat.bread),
+    parbake: toBucket(planByCat.parbake, actualByCat.parbake),
+  } as PlanActualDashboardMetrics["buckets"];
+
   return {
+    periodLabel,
     currentMonth: month,
-    planTotal: current.planTotal,
-    actualTotal: current.actualTotal,
-    achievementRate: current.achievementPct,
-    achievementPct: current.achievementPct,
+    planTotal: rangePlanTotal,
+    actualTotal: rangeActualTotal,
+    achievementRate: rangePlanTotal > 0 ? (rangeActualTotal / rangePlanTotal) * 100 : null,
+    achievementPct: rangePlanTotal > 0 ? (rangeActualTotal / rangePlanTotal) * 100 : null,
     monthlyTrend,
     categoryRates: [
-      { key: "pizza", rate: current.buckets.pizza.achievementPct },
-      { key: "bread", rate: current.buckets.bread.achievementPct },
-      { key: "parbake", rate: current.buckets.parbake.achievementPct },
+      { key: "pizza", rate: rangeBuckets.pizza.achievementPct },
+      { key: "bread", rate: rangeBuckets.bread.achievementPct },
+      { key: "parbake", rate: rangeBuckets.parbake.achievementPct },
     ],
     categoryPlanTotals: [
-      { key: "pizza", qty: current.buckets.pizza.plan },
-      { key: "bread", qty: current.buckets.bread.plan },
-      { key: "parbake", qty: current.buckets.parbake.plan },
+      { key: "pizza", qty: rangeBuckets.pizza.plan },
+      { key: "bread", qty: rangeBuckets.bread.plan },
+      { key: "parbake", qty: rangeBuckets.parbake.plan },
     ],
     categoryActualTotals: [
-      { key: "pizza", qty: current.buckets.pizza.actual },
-      { key: "bread", qty: current.buckets.bread.actual },
-      { key: "parbake", qty: current.buckets.parbake.actual },
+      { key: "pizza", qty: rangeBuckets.pizza.actual },
+      { key: "bread", qty: rangeBuckets.bread.actual },
+      { key: "parbake", qty: rangeBuckets.parbake.actual },
     ],
     year: current.year,
     month: current.month,
-    buckets: current.buckets,
-    planFromProcessedSheet: current.planFromProcessedSheet,
+    buckets: rangeBuckets,
+    planFromProcessedSheet: current.planFromProcessedSheet || periodKey !== "month",
     sparklineAchievementByMonth,
   };
 }

@@ -20,12 +20,15 @@ import {
   wasteYoYSecondLineMeta,
   type ManualWasteImportSeries,
   type WasteYoySamePeriodResult,
-  type WasteRollupFromDayRows,
+  type WasteDetailMockDayRow,
 } from "@/features/dashboard/wasteDetailMockData";
 import {
   planActualSparklineWindowMonths,
 } from "@/features/dashboard/planVsActual";
-import { loadClimateDashboardWindows, loadEquipmentIssues } from "@/features/dashboard/climateAndEquipment";
+import {
+  loadClimateDashboardWindowsForRange,
+  loadEquipmentIssuesForRange,
+} from "@/features/dashboard/climateAndEquipment";
 import {
   loadExecutiveEquipmentSlotSnapshots,
   type ExecutiveEquipmentUnitSnapshot,
@@ -43,6 +46,21 @@ import { ExecutivePortalTooltip } from "./ExecutivePortalTooltip";
 import { executiveTooltipHostRowClass } from "./executiveTooltipStyles";
 import type { ProductionBundle } from "@/features/dashboard/loadProductionBundle";
 import type { ClimateDashboardWindows } from "@/features/dashboard/climateAndEquipment";
+import { rollupYtdProduction } from "@/features/dashboard/aggregateProductionFromSnapshots";
+
+type PeriodKey = "week" | "month" | "ytd";
+
+function toYmd(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function mondayOfWeek(d: Date): Date {
+  const copy = new Date(d);
+  const day = copy.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  copy.setDate(copy.getDate() + diff);
+  return copy;
+}
 
 function equipmentDashboardUnitMeta(s: ExecutiveEquipmentUnitSnapshot): string {
   if (s.statusLabel === "이력 없음") return "고장 이력 없음 · 이력 등록 시 여기에 반영됩니다.";
@@ -79,6 +97,14 @@ function climateTrendVsPrevious(
 
 function num(n: number): string {
   return n.toLocaleString("ko-KR");
+}
+
+function zeroValueToneClass(n: number): string {
+  return n === 0 ? "text-slate-500" : "text-slate-200";
+}
+
+function zeroBarToneClass(n: number, normalClass: string): string {
+  return n === 0 ? "bg-slate-700/25" : normalClass;
 }
 
 /** 폐기율(%) 텍스트·막대 톤 — 4% 미만 안정, 4~10% 주의, 10%↑ 위험 */
@@ -136,12 +162,14 @@ function PlanActualYtdAchievementMiniBars({
   currentMonth,
   currentMonthAchievementPct,
   achievementPctByMonth,
+  title,
 }: {
   year: number;
   currentMonth: number;
   currentMonthAchievementPct: number | null;
   /** 스파크라인 구간 내 월별 종합 달성률(상세·도넛과 동일 소스). 미래 월은 키 없음. */
   achievementPctByMonth: Record<number, number | null>;
+  title: string;
 }) {
   const months = planActualSparklineWindowMonths(currentMonth);
   const values = months.map((m) => {
@@ -167,7 +195,7 @@ function PlanActualYtdAchievementMiniBars({
 
   return (
     <div className="w-full min-w-0 overflow-visible pt-1" aria-label={`${year}년 월별 달성 추이 미리보기`}>
-      <p className={`mb-2 text-left ${dashLabel}`}>올해 월별 달성 추이</p>
+      <p className={`mb-2 text-left ${dashLabel}`}>{title}</p>
       <div className="relative flex h-[4.75rem] items-end justify-between gap-1 overflow-visible sm:gap-1.5">
         {months.map((m, i) => {
           const v = values[i]!;
@@ -330,9 +358,10 @@ export default function ExecutiveDashboardPage() {
     majorStats: { 화덕: ExecutiveEquipmentUnitSnapshot[]; 호이스트: ExecutiveEquipmentUnitSnapshot[] } | null;
   } | null>(null);
   const [manpower, setManpower] = useState<ManpowerKpis | null>(null);
-  /** 수동 JSONL 병합 후 올해 폐기 누적(상세 페이지와 동일 소스) */
-  const [wasteMergedRollup, setWasteMergedRollup] = useState<WasteRollupFromDayRows | null>(null);
+  /** 수동 JSONL 병합 후 일자 행(상세 페이지와 동일 소스) */
+  const [wasteMergedRows, setWasteMergedRows] = useState<WasteDetailMockDayRow[]>([]);
   const [wasteYoy, setWasteYoy] = useState<WasteYoySamePeriodResult | null>(null);
+  const [periodKey, setPeriodKey] = useState<PeriodKey>("ytd");
 
   const year = useMemo(() => new Date().getFullYear(), []);
   const calendarMonth = useMemo(() => {
@@ -340,14 +369,34 @@ export default function ExecutiveDashboardPage() {
     return { y: d.getFullYear(), m: d.getMonth() + 1 };
   }, []);
 
+  const todayYmd = useMemo(() => toYmd(new Date()), []);
+  const periodRange = useMemo(() => {
+    const today = new Date();
+    const end = toYmd(today);
+    if (periodKey === "week") {
+      return { start: toYmd(mondayOfWeek(today)), end };
+    }
+    if (periodKey === "month") {
+      return { start: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`, end };
+    }
+    return { start: `${today.getFullYear()}-01-01`, end };
+  }, [periodKey]);
+
+  const periodLabel = useMemo(() => {
+    if (periodKey === "week") return "이번 주";
+    if (periodKey === "month") return "이번 달";
+    return "올해 누적";
+  }, [periodKey]);
+
   const wasteYoyCompareUi = useMemo(() => {
+    if (periodKey !== "ytd") return null;
     if (!wasteYoy?.periodEndDate) return null;
     const status = wasteYoYCompareStatusFromDelta(wasteYoy.deltaPctPoint);
     const primaryPhrase = wasteYoYDeltaPlainPhrase(wasteYoy.deltaPctPoint);
     const secondLine = wasteYoYSecondLineMeta(wasteYoy.prevSamePeriodRate, wasteYoy.currentRate);
     if (!status && !primaryPhrase && !secondLine) return null;
     return { status, primaryPhrase, secondLine };
-  }, [wasteYoy]);
+  }, [wasteYoy, periodKey]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -376,7 +425,7 @@ export default function ExecutiveDashboardPage() {
         setPlanDashboard(null);
         setPlanSparklineAchievementByMonth({});
         setManpower(null);
-        setWasteMergedRollup(null);
+        setWasteMergedRows([]);
         setWasteYoy(null);
       } else {
         setBundle(b);
@@ -405,31 +454,45 @@ export default function ExecutiveDashboardPage() {
           ]);
           if (cancelled) return;
           if (!b?.days) {
-            setWasteMergedRollup(null);
+            setWasteMergedRows([]);
             setWasteYoy(null);
           } else {
             const rowsCur = mergeBundleDaysWithManualImportsForTable(b.days, mCur).rows;
-            setWasteMergedRollup(rollupWasteMockFromDayRows(rowsCur));
+            setWasteMergedRows(rowsCur);
             const rowsPrev = mergeBundleDaysWithManualImportsForTable(bPrev.bundle?.days ?? [], mPrev).rows;
             setWasteYoy(computeWasteYoySamePeriod(rowsCur, rowsPrev, year));
           }
         } catch {
           if (!cancelled) {
-            setWasteMergedRollup(null);
+            setWasteMergedRows([]);
             setWasteYoy(null);
           }
         }
-        const planMetrics = await getPlanningVsActualMetrics(supabase, calendarMonth.y, calendarMonth.m);
+        const planMetrics = await getPlanningVsActualMetrics(supabase, {
+          year: calendarMonth.y,
+          month: calendarMonth.m,
+          startDate: periodRange.start,
+          endDate: periodRange.end,
+          periodLabel,
+          periodKey,
+        });
         if (cancelled) return;
         setPlanSparklineAchievementByMonth(planMetrics.sparklineAchievementByMonth);
         setPlanDashboard(planMetrics);
-        const mp = await getManpowerKpis(supabase, calendarMonth.y, calendarMonth.m);
+        const mp = await getManpowerKpis(supabase, {
+          year: calendarMonth.y,
+          month: calendarMonth.m,
+          startDate: periodRange.start,
+          endDate: periodRange.end,
+          periodLabel,
+          periodActualTotal: planMetrics.actualTotal,
+        });
         if (cancelled) return;
         setManpower(mp);
       }
 
-      const cl = await loadClimateDashboardWindows(supabase, orgCode, 7);
-      const eq = await loadEquipmentIssues(supabase, orgCode, 7);
+      const cl = await loadClimateDashboardWindowsForRange(supabase, orgCode, periodRange.start, periodRange.end);
+      const eq = await loadEquipmentIssuesForRange(supabase, orgCode, periodRange.start, periodRange.end);
       const majorStats = await loadExecutiveEquipmentSlotSnapshots(supabase, orgCode);
       if (cancelled) return;
       setClimateWindows(cl);
@@ -449,6 +512,10 @@ export default function ExecutiveDashboardPage() {
     calendarMonth.y,
     calendarMonth.m,
     orgCode,
+    periodRange.start,
+    periodRange.end,
+    periodLabel,
+    periodKey,
   ]);
 
   if (authLoading || !profile) {
@@ -459,17 +526,35 @@ export default function ExecutiveDashboardPage() {
     );
   }
 
-  const y = bundle?.ytdProduction;
-  /** 폐기 카드: 수동 JSONL 병합값 우선, 실패 시 스냅샷·이카운트 번들 ytd */
-  const w = wasteMergedRollup ?? bundle?.ytdWaste;
+  const periodDays = useMemo(() => {
+    const days = bundle?.days ?? [];
+    return days.filter((d) => d.date >= periodRange.start && d.date <= periodRange.end);
+  }, [bundle?.days, periodRange.start, periodRange.end]);
 
-  const totalProductionYtd =
-    y != null
-      ? y.lightPizza + y.heavyPizza + y.bread + y.other + y.astronautParbake + y.saleParbake
-      : null;
+  const y = useMemo(() => rollupYtdProduction(periodDays), [periodDays]);
 
-  const mainBarMax =
-    y != null ? Math.max(y.lightPizza, y.heavyPizza, y.bread, 1) : 1;
+  const periodWasteRows = useMemo(
+    () => wasteMergedRows.filter((r) => r.date >= periodRange.start && r.date <= periodRange.end),
+    [wasteMergedRows, periodRange.start, periodRange.end]
+  );
+  const w = useMemo(() => {
+    if (periodWasteRows.length > 0) return rollupWasteMockFromDayRows(periodWasteRows);
+    if (periodDays.length > 0) return rollupWasteMockFromDayRows(periodDays.map((d) => ({
+      date: d.date,
+      doughMixQty: d.doughMixQty,
+      doughWasteQty: d.doughWasteQty,
+      parbakeWasteQty: d.parbakeWasteQty,
+      sameDayParbakeProductionQty: d.sameDayParbakeProductionQty,
+      doughDiscardRatePct: null,
+      parbakeDiscardRatePct: null,
+      overallDiscardRatePct: null,
+    })));
+    return null;
+  }, [periodWasteRows, periodDays]);
+
+  const totalProductionYtd = y.lightPizza + y.heavyPizza + y.bread + y.other + y.astronautParbake + y.saleParbake;
+
+  const mainBarMax = Math.max(y.lightPizza, y.heavyPizza, y.bread, 1);
   const barPct = (v: number) => `${Math.min(100, (v / mainBarMax) * 100)}%`;
 
   const climateDashboardCard = useMemo(() => {
@@ -488,15 +573,38 @@ export default function ExecutiveDashboardPage() {
   return (
     <div className="mx-auto w-full min-h-[calc(100dvh-3.5rem)] md:min-h-0 max-w-[1800px] px-4 md:px-6 lg:px-8 xl:px-10 pb-24 md:pb-8">
       <header className="mb-6 md:mb-8 lg:mb-10">
-        <div className="flex items-center gap-2 text-cyan-400/90 mb-2">
-          <LayoutDashboard className="w-6 h-6 md:w-7 md:h-7" strokeWidth={1.8} />
-          <span className="text-xs md:text-sm font-semibold uppercase tracking-wide">Dashboard</span>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-cyan-400/90">
+            <LayoutDashboard className="w-6 h-6 md:w-7 md:h-7" strokeWidth={1.8} />
+            <span className="text-xs md:text-sm font-semibold uppercase tracking-wide">Dashboard</span>
+          </div>
+          <div className="inline-flex shrink-0 items-center rounded-lg border border-slate-700/70 bg-slate-900/60 p-0.5">
+            {([
+              ["week", "이번 주"],
+              ["month", "이번 달"],
+              ["ytd", "올해 누적"],
+            ] as const).map(([key, label]) => {
+              const active = periodKey === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setPeriodKey(key)}
+                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                    active ? "bg-cyan-500/20 text-cyan-200" : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
         </div>
         <h1 className="text-2xl md:text-3xl lg:text-4xl font-semibold text-slate-100 tracking-tight">
           대시보드
         </h1>
         <p className="text-slate-400 text-sm md:text-base mt-2 md:mt-3 max-w-4xl leading-relaxed font-medium">
-          {year}년 생산·계획·폐기·환경 지표를 한 화면에서 확인합니다. 온·습도와 설비는 최근 7일 기준입니다.
+          {year}년 생산·계획·폐기·환경 지표를 한 화면에서 확인합니다. 현재 표시 기준은 {periodLabel}입니다.
         </p>
       </header>
 
@@ -512,7 +620,7 @@ export default function ExecutiveDashboardPage() {
         <section className={`${dashCard} lg:col-span-7 lg:min-h-[300px]`}>
           <div className={`flex items-center justify-between gap-2 mb-1 ${executiveTooltipHostRowClass}`}>
             <div className="flex items-center gap-1.5 min-w-0">
-              <h2 className={dashTitle}>생산량 (올해 누적)</h2>
+              <h2 className={dashTitle}>생산량 ({periodLabel})</h2>
               <ExecutivePortalTooltip
                 trigger={
                   <button
@@ -544,7 +652,7 @@ export default function ExecutiveDashboardPage() {
           <div className="mt-3 mb-5 lg:mb-6">
             <p className={`${dashLabel} normal-case tracking-normal`}>총 생산량</p>
             <p className={`mt-1 ${dashHero} text-cyan-200/95`}>
-              {totalProductionYtd != null ? num(totalProductionYtd) : "—"}
+              {num(totalProductionYtd)}
             </p>
           </div>
 
@@ -552,40 +660,49 @@ export default function ExecutiveDashboardPage() {
             <div className="space-y-1.5">
               <div className="flex justify-between gap-2">
                 <span className={dashMuted}>라이트 피자</span>
-                <span className={`${dashSubMetric} text-slate-200`}>{y ? num(y.lightPizza) : "—"}</span>
+                <span className={`${dashSubMetric} ${zeroValueToneClass(y.lightPizza)}`}>{num(y.lightPizza)}</span>
               </div>
               <div className="h-2 w-full overflow-hidden rounded-full bg-slate-700/45">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-cyan-500/45 to-teal-400/30"
-                  style={{ width: y ? barPct(y.lightPizza) : "0%" }}
+                  className={`h-full rounded-full ${zeroBarToneClass(
+                    y.lightPizza,
+                    "bg-gradient-to-r from-cyan-500/45 to-teal-400/30"
+                  )}`}
+                  style={{ width: barPct(y.lightPizza) }}
                 />
               </div>
             </div>
             <div className="space-y-1.5">
               <div className="flex justify-between gap-2">
                 <span className={dashMuted}>헤비 피자</span>
-                <span className={`${dashSubMetric} text-slate-200`}>{y ? num(y.heavyPizza) : "—"}</span>
+                <span className={`${dashSubMetric} ${zeroValueToneClass(y.heavyPizza)}`}>{num(y.heavyPizza)}</span>
               </div>
               <div className="h-2 w-full overflow-hidden rounded-full bg-slate-700/45">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-cyan-400/35 to-cyan-600/25"
-                  style={{ width: y ? barPct(y.heavyPizza) : "0%" }}
+                  className={`h-full rounded-full ${zeroBarToneClass(
+                    y.heavyPizza,
+                    "bg-gradient-to-r from-cyan-400/35 to-cyan-600/25"
+                  )}`}
+                  style={{ width: barPct(y.heavyPizza) }}
                 />
               </div>
             </div>
             <div className="space-y-1.5">
               <div className="flex justify-between gap-2">
                 <span className={dashMuted}>브레드</span>
-                <span className={`${dashSubMetric} text-slate-200`}>{y ? num(y.bread) : "—"}</span>
+                <span className={`${dashSubMetric} ${zeroValueToneClass(y.bread)}`}>{num(y.bread)}</span>
               </div>
               <div className="h-2 w-full overflow-hidden rounded-full bg-slate-700/45">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-teal-400/40 to-cyan-500/28"
-                  style={{ width: y ? barPct(y.bread) : "0%" }}
+                  className={`h-full rounded-full ${zeroBarToneClass(
+                    y.bread,
+                    "bg-gradient-to-r from-teal-400/40 to-cyan-500/28"
+                  )}`}
+                  style={{ width: barPct(y.bread) }}
                 />
               </div>
             </div>
-            {y != null && y.other > 0 && (
+            {y.other > 0 && (
               <div className={`flex justify-between gap-2 pt-0.5 ${dashMuted}`}>
                 <span>기타 완제품</span>
                 <span className="tabular-nums">{num(y.other)}</span>
@@ -596,11 +713,15 @@ export default function ExecutiveDashboardPage() {
           <ul className={`mt-4 space-y-2 border-t border-slate-700/50 pt-3 ${dashMutedMeta}`}>
             <li className="flex justify-between gap-2">
               <span>파베이크 우주인(보관용)</span>
-              <span className={`${dashSubMetric} text-slate-300`}>{y ? num(y.astronautParbake) : "—"}</span>
+              <span className={`${dashSubMetric} ${y.astronautParbake === 0 ? "text-slate-500" : "text-slate-300"}`}>
+                {num(y.astronautParbake)}
+              </span>
             </li>
             <li className="flex justify-between gap-2">
               <span>파베이크 판매용</span>
-              <span className={`${dashSubMetric} text-slate-300`}>{y ? num(y.saleParbake) : "—"}</span>
+              <span className={`${dashSubMetric} ${y.saleParbake === 0 ? "text-slate-500" : "text-slate-300"}`}>
+                {num(y.saleParbake)}
+              </span>
             </li>
           </ul>
         </section>
@@ -609,6 +730,9 @@ export default function ExecutiveDashboardPage() {
           <div className={`flex items-center justify-between gap-3 ${executiveTooltipHostRowClass}`}>
             <div className="flex items-center gap-1.5 min-w-0">
               <h2 className={dashTitle}>계획 대비 실적</h2>
+              <span className="rounded border border-slate-600/55 bg-slate-800/55 px-1.5 py-0.5 text-[10px] font-medium text-slate-400">
+                {periodLabel} 기준
+              </span>
               <ExecutivePortalTooltip
                 trigger={
                   <button
@@ -620,7 +744,7 @@ export default function ExecutiveDashboardPage() {
                   </button>
                 }
               >
-                이번 달 계획 대비 생산실적입니다. 월별 추이와 품목군별 달성률을 함께 보여줍니다.
+                선택한 기간의 계획 대비 생산실적입니다. 추이와 품목군별 달성률을 함께 보여줍니다.
               </ExecutivePortalTooltip>
             </div>
             <Link href="/executive/plan-actual" className={dashCardDetailLink}>
@@ -634,7 +758,7 @@ export default function ExecutiveDashboardPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <p className={dashLabel}>종합 달성률</p>
                   <span className="rounded-md border border-cyan-500/45 bg-cyan-500/10 px-2 py-0.5 text-xs sm:text-sm font-bold tracking-wide text-cyan-300 shadow-[0_0_12px_rgba(34,211,238,0.12)]">
-                    이번 달 · {planDashboard?.month ?? calendarMonth.m}월
+                    {periodLabel}
                   </span>
                 </div>
                 <p
@@ -666,6 +790,13 @@ export default function ExecutiveDashboardPage() {
                   currentMonth={planDashboard?.month ?? calendarMonth.m}
                   currentMonthAchievementPct={planDashboard?.achievementPct ?? null}
                   achievementPctByMonth={planSparklineAchievementByMonth}
+                  title={
+                    periodKey === "week"
+                      ? "이번 주 달성 현황"
+                      : periodKey === "month"
+                        ? "이번 달 달성 추이"
+                        : "올해 월별 달성 추이"
+                  }
                 />
               </div>
             </div>
@@ -700,6 +831,9 @@ export default function ExecutiveDashboardPage() {
           <div className={`flex items-start justify-between gap-4 ${executiveTooltipHostRowClass}`}>
             <div className="flex min-w-0 items-center gap-1.5">
               <h2 className={dashTitle}>인력 가동 현황</h2>
+              <span className="rounded border border-slate-600/55 bg-slate-800/55 px-1.5 py-0.5 text-[10px] font-medium text-slate-400">
+                {periodLabel} 기준
+              </span>
               <ExecutivePortalTooltip
                 trigger={
                   <button
@@ -711,14 +845,14 @@ export default function ExecutiveDashboardPage() {
                   </button>
                 }
               >
-                이번 달 평균 투입 인원을 기준 총원(baseline headcount)과 비교한 수치입니다. 참고 인원 수는 회사코드
+                선택한 기간의 평균 투입 인원을 기준 총원(baseline headcount)과 비교한 수치입니다. 참고 인원 수는 회사코드
                 100~199 소속이면서 worker·준매니저·매니저 역할만 집계합니다. 생산성은 1인당 하루 평균 생산량입니다.
               </ExecutivePortalTooltip>
             </div>
             {manpower?.productivityPerPersonDay != null && (
               <p
                 className={`shrink-0 text-right ${dashMutedMeta} tabular-nums`}
-                title="이번 달 완제품 합계·가동일·평균 투입 인원 기준"
+                title={`${periodLabel} 완제품 합계·가동일·평균 투입 인원 기준`}
               >
                 생산성{" "}
                 <span className="text-slate-300">
@@ -742,16 +876,16 @@ export default function ExecutiveDashboardPage() {
                     : null;
                 return (
                   <>
-                    <p className={dashLabel}>이번 달 평균 투입률</p>
+                    <p className={dashLabel}>{periodLabel} 평균 투입률</p>
                     <p className={`mt-2 ${dashHero} text-cyan-200/95`}>{pct(monthU)}</p>
                     {deltaUtilVsYtd != null && ytdU != null ? (
                       <p className={`mt-2 ${dashMutedMeta} leading-relaxed tabular-nums`}>
-                        올해 평균 <span className="text-slate-300">{pct(ytdU)}</span> 대비{" "}
+                        직전/참고 평균 <span className="text-slate-300">{pct(ytdU)}</span> 대비{" "}
                         <span className="text-slate-300">{formatDeltaPctPoint(deltaUtilVsYtd)}</span>
                       </p>
                     ) : ytdU != null ? (
                       <p className={`mt-2 ${dashMutedMeta}`}>
-                        올해 평균 <span className="tabular-nums text-slate-300">{pct(ytdU)}</span>
+                        기간 평균 <span className="tabular-nums text-slate-300">{pct(ytdU)}</span>
                       </p>
                     ) : null}
                     <div className="mt-5 h-3 w-full overflow-hidden rounded-full bg-slate-700/45">
@@ -769,7 +903,7 @@ export default function ExecutiveDashboardPage() {
                       </p>
                       <p className="mt-2 flex flex-wrap items-center gap-x-1 tabular-nums text-slate-400">
                         <span>
-                          가동일 이번 달 {manpower.operatingDaysThisMonth}일 · 올해 {manpower.operatingDaysYearToDate}일
+                          가동일 {periodLabel} {manpower.operatingDaysThisMonth}일 · 연누적 {manpower.operatingDaysYearToDate}일
                         </span>
                         {manpower.monthlyOperatingDays.length > 0 && (
                           <ExecutivePortalTooltip
@@ -805,7 +939,7 @@ export default function ExecutiveDashboardPage() {
         <section className={dashCard}>
           <div className={`flex items-center justify-between gap-3 ${executiveTooltipHostRowClass}`}>
             <div className="flex items-center gap-1.5 min-w-0">
-              <h2 className={dashTitle}>폐기율 (올해 가중)</h2>
+              <h2 className={dashTitle}>폐기율 ({periodLabel})</h2>
               <ExecutivePortalTooltip
                 trigger={
                   <button
@@ -818,15 +952,15 @@ export default function ExecutiveDashboardPage() {
                 }
               >
                 <span className="block">
-                  도우와 파베이크 공정의 폐기율을 올해 누적으로 집계한 값입니다. 전년 같은 기간과 비교해 개선 여부를
-                  확인할 수 있습니다.
+                  도우와 파베이크 공정의 폐기율을 합계 기반 비율(가중)로 집계한 값입니다. 전년 같은 기간과 비교해
+                  개선 여부를 확인할 수 있습니다.
                 </span>
                 <span className="mt-2 block text-slate-300">
                   생산수량 대비 폐기수량 기준으로 계산했으며, 누락된 기록은 별도 생산기록으로 보완했습니다.
                 </span>
               </ExecutivePortalTooltip>
             </div>
-            <Link href="/executive/waste" className={dashCardDetailLink}>
+            <Link href={`/executive/waste?period=${periodKey}`} className={dashCardDetailLink}>
               상세보기 →
             </Link>
           </div>
@@ -914,7 +1048,7 @@ export default function ExecutiveDashboardPage() {
         <section className={`${dashCard} md:col-span-2 lg:col-span-1`}>
           <div className={`mb-1 flex items-center justify-between gap-3 ${executiveTooltipHostRowClass}`}>
             <div className="flex min-w-0 items-center gap-1.5">
-              <h2 className={dashTitle}>온·습도 (최근 7일)</h2>
+              <h2 className={dashTitle}>온·습도 ({periodLabel})</h2>
               <ExecutivePortalTooltip
                 trigger={
                   <button
@@ -926,7 +1060,7 @@ export default function ExecutiveDashboardPage() {
                   </button>
                 }
               >
-                최근 7일 온·습도 점검 결과의 평균값입니다. 증감은 바로 이전 7일과 비교한 값입니다.
+                {periodLabel} 온·습도 점검 결과의 평균값입니다. 증감은 직전 동일기간과 비교한 값입니다.
               </ExecutivePortalTooltip>
             </div>
             <Link href="/executive/climate" className={dashCardDetailLink}>
@@ -950,7 +1084,7 @@ export default function ExecutiveDashboardPage() {
                   {climateDashboardCard.tempTrend && (
                     <p className={`mt-2 tabular-nums ${dashMutedMeta}`}>
                       {climateDashboardCard.tempTrend}
-                      <span className="ml-1 font-normal text-slate-500">· 직전 7일</span>
+                      <span className="ml-1 font-normal text-slate-500">· 직전 동일기간</span>
                     </p>
                   )}
                 </div>
@@ -969,13 +1103,16 @@ export default function ExecutiveDashboardPage() {
                   {climateDashboardCard.humTrend && (
                     <p className={`mt-2 tabular-nums ${dashMutedMeta}`}>
                       {climateDashboardCard.humTrend}
-                      <span className="ml-1 font-normal text-slate-500">· 직전 7일</span>
+                      <span className="ml-1 font-normal text-slate-500">· 직전 동일기간</span>
                     </p>
                   )}
                 </div>
               </div>
 
               <div className="mt-5 border-t border-slate-700/45 pt-4">
+                <p className={`mb-3 ${dashCaption}`}>
+                  {periodKey === "ytd" ? "올해 누적 평균 기준" : `${periodLabel} 평균 기준`}
+                </p>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                   <div className="min-w-0 flex-1">
                     <p className={`${dashLabel} font-medium normal-case tracking-normal`}>최고 온도 구역</p>
@@ -1007,6 +1144,9 @@ export default function ExecutiveDashboardPage() {
                 <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.65)]" />
               </span>
               <h2 className={dashTitle}>제조설비 점검</h2>
+              <span className="rounded border border-slate-600/55 bg-slate-800/55 px-1.5 py-0.5 text-[10px] font-medium text-slate-400">
+                점검 요약 {periodLabel}
+              </span>
               <ExecutivePortalTooltip
                 trigger={
                   <button
@@ -1036,7 +1176,7 @@ export default function ExecutiveDashboardPage() {
               <CheckCircle2 className="h-7 w-7 shrink-0 text-emerald-400" strokeWidth={2.25} aria-hidden />
               <div className="min-w-0">
                 <p className="text-base font-bold leading-tight text-emerald-200">점검 이상 무</p>
-                <p className={`mt-0.5 ${dashCaption} text-emerald-200/90`}>최근 7일 부적합 항목 없음</p>
+                <p className={`mt-0.5 ${dashCaption} text-emerald-200/90`}>{periodLabel} 부적합 항목 없음</p>
               </div>
             </div>
           )}
@@ -1047,7 +1187,9 @@ export default function ExecutiveDashboardPage() {
                 <p className="text-base font-bold leading-tight text-amber-100">
                   부적합 <span className="tabular-nums">{equipment.issueCount}</span>건
                 </p>
-                <p className={`mt-0.5 ${dashCaption} text-amber-200/90`}>최근 7일 · 상세에서 내용을 확인하세요</p>
+                <p className={`mt-0.5 ${dashCaption} text-amber-200/90`}>
+                  {periodLabel} · 상세에서 내용을 확인하세요
+                </p>
               </div>
             </div>
           )}

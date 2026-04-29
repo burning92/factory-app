@@ -1,11 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { loadPlanActualDashboardMetrics } from "@/features/dashboard/planVsActual";
 import {
   organizationCodeFromProfileRow,
   profileCountsTowardFieldHeadcount,
 } from "@/lib/profileFieldHeadcount";
 
 export type ManpowerKpis = {
+  periodLabel?: string;
   baselineHeadcount: number;
   totalMembers: number;
   operatingDaysThisMonth: number;
@@ -16,6 +16,15 @@ export type ManpowerKpis = {
   yearlyAvgUtilization: number | null;
   monthlyOperatingDays: { month: number; days: number }[];
   hasData: boolean;
+};
+
+export type ManpowerRangeParams = {
+  year: number;
+  month: number;
+  startDate: string;
+  endDate: string;
+  periodLabel: string;
+  periodActualTotal: number;
 };
 
 /**
@@ -35,9 +44,9 @@ export type ManpowerKpis = {
  */
 export async function getManpowerKpis(
   supabase: SupabaseClient,
-  year: number,
-  month: number
+  params: ManpowerRangeParams
 ): Promise<ManpowerKpis> {
+  const { year, month, startDate, endDate, periodLabel, periodActualTotal } = params;
   const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
   const last = new Date(year, month, 0).getDate();
   const monthEnd = `${year}-${String(month).padStart(2, "0")}-${String(last).padStart(2, "0")}`;
@@ -83,6 +92,7 @@ export async function getManpowerKpis(
   const monthIds = monthRows.map((m) => String(m.id)).filter(Boolean);
   if (monthIds.length === 0) {
     return {
+      periodLabel,
       baselineHeadcount,
       totalMembers,
       operatingDaysThisMonth: 0,
@@ -107,9 +117,9 @@ export async function getManpowerKpis(
   const baselineByMonthId = new Map<string, number>();
   for (const m of monthRows) baselineByMonthId.set(String(m.id), Math.max(1, Number(m.baseline_headcount ?? 25) || 25));
 
-  const monthValues: number[] = [];
+  const periodValues: number[] = [];
   const ytdValues: number[] = [];
-  const ytdUtilValues: number[] = [];
+  const periodUtilValues: number[] = [];
   const monthlyDayCountMap = new Map<number, number>();
 
   for (const row of (manpowerRows ?? []) as Array<{ month_id: string | null; plan_date: string | null; actual_manpower: number | null }>) {
@@ -119,37 +129,37 @@ export async function getManpowerKpis(
     ytdValues.push(actual);
     const mm = Number(date.slice(5, 7));
     monthlyDayCountMap.set(mm, (monthlyDayCountMap.get(mm) ?? 0) + 1);
-    if (date >= monthStart && date <= monthEnd) monthValues.push(actual);
+    if (date >= startDate && date <= endDate) periodValues.push(actual);
     const perDayBase = baselineByMonthId.get(String(row.month_id ?? "")) ?? baselineHeadcount;
-    ytdUtilValues.push((actual / perDayBase) * 100);
+    if (date >= startDate && date <= endDate) periodUtilValues.push((actual / perDayBase) * 100);
   }
 
   const avg = (vals: number[]): number | null => (vals.length > 0 ? vals.reduce((s, v) => s + v, 0) / vals.length : null);
-  const avgActualManpowerThisMonth = avg(monthValues);
+  const avgActualManpowerThisMonth = avg(periodValues);
   const avgUtilizationThisMonth =
     avgActualManpowerThisMonth != null && baselineHeadcount > 0 ? (avgActualManpowerThisMonth / baselineHeadcount) * 100 : null;
-  const yearlyAvgUtilization = avg(ytdUtilValues);
+  const yearlyAvgUtilization = avg(periodUtilValues);
 
   const monthlyOperatingDays = Array.from(monthlyDayCountMap.entries())
     .sort((a, b) => a[0] - b[0])
     .map(([m, days]) => ({ month: m, days }));
 
-  const planActualMonth = await loadPlanActualDashboardMetrics(supabase, year, month);
   const productivityPerPersonDay =
-    monthValues.length > 0 && (avgActualManpowerThisMonth ?? 0) > 0
-      ? planActualMonth.actualTotal / (monthValues.length * (avgActualManpowerThisMonth as number))
+    periodValues.length > 0 && (avgActualManpowerThisMonth ?? 0) > 0
+      ? periodActualTotal / (periodValues.length * (avgActualManpowerThisMonth as number))
       : null;
 
   return {
+    periodLabel,
     baselineHeadcount,
     totalMembers,
-    operatingDaysThisMonth: monthValues.length,
+    operatingDaysThisMonth: periodValues.length,
     operatingDaysYearToDate: ytdValues.length,
     avgActualManpowerThisMonth,
     avgUtilizationThisMonth,
     productivityPerPersonDay,
     yearlyAvgUtilization,
     monthlyOperatingDays,
-    hasData: ytdValues.length > 0,
+    hasData: periodValues.length > 0,
   };
 }

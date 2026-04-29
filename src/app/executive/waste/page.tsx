@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { useMasterStore } from "@/store/useMasterStore";
@@ -26,6 +26,19 @@ import type { ProductionBundle } from "@/features/dashboard/loadProductionBundle
 
 const WASTE_WARN_PCT = 4;
 const WASTE_DANGER_PCT = 10;
+type PeriodKey = "week" | "month" | "ytd";
+
+function toYmd(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function mondayOfWeek(d: Date): Date {
+  const copy = new Date(d);
+  const day = copy.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  copy.setDate(copy.getDate() + diff);
+  return copy;
+}
 
 function pct2(n: number | null): string {
   if (n == null) return "—";
@@ -101,8 +114,14 @@ function groupWasteDayRowsByMonth(rows: WasteDetailMockDayRow[], year: number): 
 
 export default function ExecutiveWasteDetailPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { profile, loading: authLoading } = useAuth();
   const canView = !!profile;
+  const periodFromQuery = (searchParams.get("period") ?? "ytd") as PeriodKey;
+  const periodKey: PeriodKey =
+    periodFromQuery === "week" || periodFromQuery === "month" || periodFromQuery === "ytd"
+      ? periodFromQuery
+      : "ytd";
 
   const materials = useMasterStore((s) => s.materials);
   const bomList = useMasterStore((s) => s.bomList);
@@ -120,6 +139,22 @@ export default function ExecutiveWasteDetailPage() {
   const [showCriteria, setShowCriteria] = useState(false);
   const [activeChartMonth, setActiveChartMonth] = useState<number | null>(null);
 
+  const today = useMemo(() => new Date(), []);
+  const periodRange = useMemo(() => {
+    const end = toYmd(today);
+    if (periodKey === "week") return { start: toYmd(mondayOfWeek(today)), end };
+    if (periodKey === "month") {
+      return { start: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`, end };
+    }
+    return { start: `${year}-01-01`, end: `${year}-12-31` };
+  }, [periodKey, today, year]);
+
+  const periodLabel = useMemo(() => {
+    if (periodKey === "week") return "이번 주";
+    if (periodKey === "month") return "이번 달";
+    return "올해 누적";
+  }, [periodKey]);
+
   const { rows: tableRows, filledManualDates } = useMemo(() => {
     return mergeBundleDaysWithManualImportsForTable(bundle?.days ?? [], manualSeries);
   }, [bundle?.days, manualSeries]);
@@ -128,14 +163,19 @@ export default function ExecutiveWasteDetailPage() {
     return mergeBundleDaysWithManualImportsForTable(prevBundle?.days ?? [], prevManualSeries).rows;
   }, [prevBundle?.days, prevManualSeries]);
 
+  const periodRows = useMemo(
+    () => tableRows.filter((r) => r.date >= periodRange.start && r.date <= periodRange.end),
+    [tableRows, periodRange.start, periodRange.end]
+  );
+
   const w = useMemo(() => {
-    if (tableRows.length === 0) return null;
-    return rollupWasteMockFromDayRows(tableRows);
-  }, [tableRows]);
+    if (periodRows.length === 0) return null;
+    return rollupWasteMockFromDayRows(periodRows);
+  }, [periodRows]);
 
   const monthlyRows = useMemo(
-    () => rollupWasteMockByMonthFromDayRows(tableRows, year),
-    [tableRows, year]
+    () => rollupWasteMockByMonthFromDayRows(periodRows, year),
+    [periodRows, year]
   );
 
   const monthlyRowsWithData = useMemo(
@@ -167,16 +207,20 @@ export default function ExecutiveWasteDetailPage() {
   }, [monthlyRowsForChart, activeChartMonth]);
 
   const dailyRowsForYear = useMemo(() => {
-    return tableRows.filter((r) => r.date.startsWith(`${year}-`)).filter(wasteDayRowHasData);
-  }, [tableRows, year]);
+    return periodRows.filter((r) => r.date.startsWith(`${year}-`)).filter(wasteDayRowHasData);
+  }, [periodRows, year]);
 
   const dailyGroupsByMonth = useMemo(
     () => groupWasteDayRowsByMonth(dailyRowsForYear, year),
     [dailyRowsForYear, year]
   );
 
-  const yoy = useMemo(() => computeWasteYoySamePeriod(tableRows, prevTableRows, year), [tableRows, prevTableRows, year]);
+  const yoy = useMemo(() => {
+    if (periodKey !== "ytd") return null;
+    return computeWasteYoySamePeriod(tableRows, prevTableRows, year);
+  }, [periodKey, tableRows, prevTableRows, year]);
   const yoyCompareUi = useMemo(() => {
+    if (!yoy) return null;
     if (!yoy.periodEndDate) return null;
     const baseSecond = wasteYoYSecondLineMeta(yoy.prevSamePeriodRate, yoy.currentRate);
     const secondLine = baseSecond ? `${baseSecond} · ~${yoy.periodEndDate} 동기` : `~${yoy.periodEndDate} 동기`;
@@ -251,7 +295,7 @@ export default function ExecutiveWasteDetailPage() {
         <div className="min-w-0">
           <h1 className="text-lg font-semibold text-slate-100">폐기율 상세</h1>
           <p className="mt-1 text-[15px] font-medium leading-relaxed text-slate-400">
-            도우와 파베이크 공정의 폐기율을 연도 누적으로 집계한 값입니다.
+            도우와 파베이크 공정의 폐기율을 {periodLabel} 기준으로 집계한 값입니다.
             <button
               type="button"
               onClick={() => setShowCriteria((v) => !v)}
@@ -285,6 +329,7 @@ export default function ExecutiveWasteDetailPage() {
             className="rounded-md border border-slate-600/50 bg-slate-900/60 px-3 py-2 text-sm text-slate-200 focus:border-cyan-600/40 focus:outline-none focus:ring-1 focus:ring-cyan-500/30"
             value={year}
             onChange={(e) => setYear(Number(e.target.value))}
+            disabled={periodKey !== "ytd"}
           >
             {[2024, 2025, 2026].map((y) => (
               <option key={y} value={y}>
@@ -316,7 +361,7 @@ export default function ExecutiveWasteDetailPage() {
 
       {w && (
         <section className="mb-6">
-          <h2 className="mb-3 text-base font-semibold text-slate-200">연간 누적 요약</h2>
+          <h2 className="mb-3 text-base font-semibold text-slate-200">{periodLabel} 요약</h2>
           <div className="rounded-lg border border-slate-700/45 bg-slate-800/35 p-5">
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-3 sm:gap-6">
             <div className="sm:col-span-3 rounded-md border border-slate-700/30 bg-slate-900/25 px-4 py-3">
@@ -500,7 +545,7 @@ export default function ExecutiveWasteDetailPage() {
       <div className="mb-2">
         <h2 className="text-base font-semibold text-slate-200">일별 상세</h2>
         <p className="mt-1 text-xs text-slate-500">
-          {year}년 기준, 반죽·폐기·파베 생산 중 하나라도 있는 날만 표시합니다. 월을 누르면 해당 월 일자를 펼칩니다.
+          {periodLabel} 기준, 반죽·폐기·파베 생산 중 하나라도 있는 날만 표시합니다. 월을 누르면 해당 월 일자를 펼칩니다.
         </p>
       </div>
 
