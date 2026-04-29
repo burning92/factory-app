@@ -1465,6 +1465,39 @@ function UsageCalculationPageContent() {
     [getOrInitGroupState, setGroupState]
   );
 
+  const saveFirstDraft = useCallback(
+    async (date: string) => {
+      const s = getOrInitGroupState(date);
+      if (s.authorName.trim()) {
+        setAppRecentValue(FIRST_CLOSE_LAST_AUTHOR_KEY, s.authorName.trim());
+        setLastAuthorNameToStorage(s.authorName.trim());
+      }
+      setSaving({ date, type: "first" });
+      try {
+        const existing = getProductionHistoryDateState(date);
+        await saveProductionHistoryDateState(date, {
+          state_snapshot: s,
+          first_closed_at: new Date().toISOString(),
+          second_closed_at: existing?.second_closed_at ?? null,
+          author_name: s.authorName.trim() || null,
+          updated_by: s.authorName.trim() || null,
+        });
+        setGroupState(date, {
+          ...s,
+          isFirstClosed: true,
+          status: "1차마감완료",
+        });
+        setToast({ message: "임시저장되었습니다." });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "임시저장에 실패했습니다.";
+        setToast({ message: msg });
+      } finally {
+        setSaving(null);
+      }
+    },
+    [getOrInitGroupState, setGroupState, getProductionHistoryDateState, saveProductionHistoryDateState]
+  );
+
   const closeFirst = useCallback(
     async (date: string) => {
       const s = getOrInitGroupState(date);
@@ -1496,7 +1529,7 @@ function UsageCalculationPageContent() {
         setToast({
           message: `LOT 상태 미선택 ${unselected.length}건: ${preview}${
             unselected.length > 3 ? " 외" : ""
-          }`,
+          }\nLOT 상태를 선택한 뒤 1차 마감 저장해 주세요.`,
         });
         const first = unselected[0];
         if (first) {
@@ -1645,6 +1678,52 @@ function UsageCalculationPageContent() {
   const closeSecond = useCallback(
     async (date: string) => {
       const s = getOrInitGroupState(date);
+      const unselected: {
+        materialName: string;
+        expiryDate: string;
+        materialCardId: string;
+        lotRowId: string;
+      }[] = [];
+      for (const card of s.materials) {
+        const mat = materialsList.find((m) => m.materialName === card.materialName);
+        const isGOnly = mat ? mat.boxWeightG === 0 && mat.unitWeightG === 0 : false;
+        for (const row of card.lots) {
+          if (isLotDispositionSelectionRequired(row, isGOnly) && !row.carryoverDisposition) {
+            unselected.push({
+              materialName: card.materialName,
+              expiryDate: row.expiryDate || "LOT 미입력",
+              materialCardId: card.materialCardId,
+              lotRowId: row.lotRowId,
+            });
+          }
+        }
+      }
+      if (unselected.length > 0) {
+        const preview = unselected
+          .slice(0, 3)
+          .map((x) => `${x.materialName}(${x.expiryDate})`)
+          .join(", ");
+        setToast({
+          message: `2차 마감 저장 불가 · LOT 상태 미선택 ${unselected.length}건: ${preview}${
+            unselected.length > 3 ? " 외" : ""
+          }`,
+        });
+        const first = unselected[0];
+        if (first) {
+          setExpandedMaterialCardsByDate((prev) => {
+            const ids = prev[date] ?? [];
+            if (ids.includes(first.materialCardId)) return prev;
+            return { ...prev, [date]: [...ids, first.materialCardId] };
+          });
+          setTimeout(() => {
+            lotRefs.current[`${date}:${first.materialCardId}:${first.lotRowId}`]?.scrollIntoView({
+              behavior: "smooth",
+              block: "center",
+            });
+          }, 40);
+        }
+        return;
+      }
       const comp = computedByDate[date];
       if (comp) {
         const types = getDateParbakeTypes(comp.productSummaries);
@@ -1694,6 +1773,7 @@ function UsageCalculationPageContent() {
       setGroupState,
       getProductionHistoryDateState,
       saveProductionHistoryDateState,
+      materialsList,
       computedByDate,
     ]
   );
@@ -2110,6 +2190,18 @@ function UsageCalculationPageContent() {
                         >
                           2차 마감
                         </button>
+                        {(() => {
+                          const statusMissing = state.materials.reduce((sum, c) => {
+                            const p = getMaterialCardProgress(c, materialsList);
+                            return sum + p.unselectedDispositionLots;
+                          }, 0);
+                          if (statusMissing <= 0) return null;
+                          return (
+                            <p className="mt-2 text-xs text-amber-200">
+                              LOT 상태 미선택 {statusMissing}건으로 2차 마감 저장이 제한됩니다.
+                            </p>
+                          );
+                        })()}
                       </div>
 
                       {/* 2차 마감 입력 영역 */}
@@ -2362,10 +2454,10 @@ function UsageCalculationPageContent() {
                           <button
                             type="button"
                             disabled={saving?.date === date && saving?.type === "first"}
-                            onClick={() => closeFirst(date)}
+                            onClick={() => saveFirstDraft(date)}
                             className="flex-1 rounded-lg bg-cyan-500 px-3 py-2.5 text-sm font-semibold text-space-900 disabled:opacity-80"
                           >
-                            {saving?.date === date && saving?.type === "first" ? "저장 중..." : "1차 마감 저장"}
+                            {saving?.date === date && saving?.type === "first" ? "저장 중..." : "임시저장"}
                           </button>
                         </div>
                       </div>
