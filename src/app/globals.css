@@ -149,19 +149,19 @@ input:focus, select:focus, textarea:focus {
 .planning-a3-header {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 2.2mm;
+  gap: 1.8mm;
   align-items: end;
-  margin-bottom: 1mm;
+  margin-bottom: 0.7mm;
 }
 .planning-a3-title {
-  font-size: 6.2mm;
+  font-size: 5.7mm;
   line-height: 1.1;
   font-weight: 800;
   letter-spacing: -0.02em;
 }
 .planning-a3-subtitle {
-  margin-top: 0.6mm;
-  font-size: 2.4mm;
+  margin-top: 0.45mm;
+  font-size: 2.15mm;
   color: #4b5563;
 }
 .planning-a3-monthmark {
@@ -170,19 +170,19 @@ input:focus, select:focus, textarea:focus {
   color: #2563eb;
   font-weight: 900;
   line-height: 1;
-  font-size: 6.4mm;
+  font-size: 5.9mm;
   letter-spacing: -0.02em;
 }
 .planning-a3-summary-line {
   display: flex;
-  gap: 4mm;
+  gap: 3.2mm;
   flex-wrap: wrap;
-  margin-bottom: 1.6mm;
-  font-size: 2.2mm;
+  margin-bottom: 1.1mm;
+  font-size: 2mm;
   font-weight: 700;
   color: #334155;
   border-bottom: 1px dashed #94a3b8;
-  padding-bottom: 1.2mm;
+  padding-bottom: 0.9mm;
 }
 .planning-a3-calendar {
   display: grid;
@@ -199,9 +199,9 @@ input:focus, select:focus, textarea:focus {
   border-right: 1px solid #111827;
   border-bottom: 1px solid #111827;
   text-align: center;
-  font-size: 3.2mm;
+  font-size: 3.05mm;
   font-weight: 700;
-  padding: 1.1mm 0;
+  padding: 0.95mm 0;
   background: #4b5563;
   color: #fff;
 }
@@ -222,6 +222,7 @@ input:focus, select:focus, textarea:focus {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  justify-content: flex-start;
   gap: 0.35mm;
   background: #f8fafc;
   overflow: clip;
@@ -262,35 +263,35 @@ input:focus, select:focus, textarea:focus {
   overflow: clip;
 }
 .planning-a3-products p {
-  font-size: 2.75mm;
-  line-height: 1.12;
-  color: #030712;
-  font-weight: 700;
+  font-size: 2.95mm;
+  line-height: 1.14;
+  color: #020617;
+  font-weight: 760;
   word-break: keep-all;
   text-align: left;
 }
 .planning-a3-cell-main {
   min-height: 0;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
   overflow: clip;
 }
 .planning-a3-cell-meta {
-  margin-top: auto;
+  margin-top: 0.4mm;
   border-top: 1px solid #cbd5e1;
-  padding-top: 2px;
+  padding-top: 1px;
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 0.1mm;
 }
 .planning-a3-meta,
 .planning-a3-meta-list p {
-  font-size: 2.45mm;
-  line-height: 1.12;
-  color: #334155;
-  font-weight: 650;
+  font-size: 2.55mm;
+  line-height: 1.16;
+  color: #1f2937;
+  font-weight: 680;
   margin-top: 0;
   margin-bottom: 0;
   display: flex;
@@ -304,7 +305,8 @@ input:focus, select:focus, textarea:focus {
   align-items: flex-start;
 }
 .planning-a3-meta.leave .planning-a3-meta-label {
-  color: #b91c1c;
+  color: #991b1b;
+  font-weight: 800;
   flex-shrink: 0;
 }
 .planning-a3-meta.leave .planning-a3-meta-names {
@@ -313,7 +315,8 @@ input:focus, select:focus, textarea:focus {
   min-width: 0;
 }
 .planning-a3-meta.half .planning-a3-meta-label {
-  color: #a16207;
+  color: #92400e;
+  font-weight: 800;
   flex-shrink: 0;
 }
 .planning-a3-meta.half .planning-a3-meta-names {
@@ -328,16 +331,33 @@ input:focus, select:focus, textarea:focus {
   gap: 0;
 }
 .planning-a3-meta-list p {
-  color: #1e293b;
+  color: #1f2937;
   margin: 0;
   word-break: break-word;
 }
 .planning-a3-meta-list p.note {
-  color: #1e293b;
+  color: #1f2937;
+}
+.planning-a3-meta-list p.note .meta-tag {
+  font-weight: 820;
+  flex: 0 0 auto;
+  letter-spacing: -0.01em;
+}
+.planning-a3-meta-list p.note .meta-text {
+  font-weight: 700;
+  color: #111827;
+}
+.planning-a3-meta-list p.note.other .meta-tag {
+  color: #3730a3;
+}
+.planning-a3-meta-list p.note.other .meta-text {
+  color: #1f2937;
 }
 .planning-a3-meta-list p.note.alert {
+  color: #7f1d1d;
+}
+.planning-a3-meta-list p.note.alert .meta-tag {
   color: #991b1b;
-  font-weight: 700;
 }
 
 .planning-a3-product-row {
@@ -361,11 +381,11 @@ input:focus, select:focus, textarea:focus {
   flex: 0 0 auto;
   flex-shrink: 0;
   min-width: max-content;
-  font-size: 2.9mm;
-  font-weight: 800;
-  color: #111827;
+  font-size: 3.1mm;
+  font-weight: 850;
+  color: #020617;
   text-align: right;
-  line-height: 1.1;
+  line-height: 1.12;
 }
 .planning-a3-product-row.parbake {
   border-left-color: transparent;

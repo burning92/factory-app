@@ -293,8 +293,18 @@ export default function PlanningPrintPage() {
                     ) : null}
                     {otherLine.length > 0 || plainNotes.length > 0 ? (
                       <div className="planning-a3-meta-list">
-                        {otherLine.length > 0 ? <p className="note">기타 {otherLine.join(", ")}</p> : null}
-                        {plainNotes.length > 0 ? <p className="note alert">비고 {plainNotes.join(", ")}</p> : null}
+                        {otherLine.length > 0 ? (
+                          <p className="note other">
+                            <span className="meta-tag">기타</span>
+                            <span className="meta-text">{otherLine.join(", ")}</span>
+                          </p>
+                        ) : null}
+                        {plainNotes.length > 0 ? (
+                          <p className="note alert">
+                            <span className="meta-tag">비고</span>
+                            <span className="meta-text">{plainNotes.join(", ")}</span>
+                          </p>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>
