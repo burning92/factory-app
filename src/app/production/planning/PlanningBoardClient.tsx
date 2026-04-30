@@ -511,10 +511,6 @@ export default function PlanningBoardClient() {
     () => enumerateRangeDates(rangeDraft.start_date, rangeDraft.end_date, rangeDraft.apply_mode),
     [rangeDraft.apply_mode, rangeDraft.end_date, rangeDraft.start_date]
   );
-  const activeRangeEntries = useMemo(() => {
-    const today = ymd(now.getFullYear(), now.getMonth() + 1, now.getDate());
-    return (data?.rangeEntries ?? []).filter((r) => r.start_date <= today && r.end_date >= today);
-  }, [data?.rangeEntries, now]);
 
   const saveDay = async () => {
     if (!data || !canEdit) return;
@@ -640,30 +636,6 @@ export default function PlanningBoardClient() {
     }
     setRangeConflictDates([]);
     setRangeModalOpen(false);
-    await loadMonth();
-  };
-
-  const deleteRangeEntry = async (id: string) => {
-    if (!canEdit || !id) return;
-    const confirmed = window.confirm("장기 일정 원본 1건을 삭제합니다. 이미 전개된 일자 데이터는 유지됩니다. 삭제할까요?");
-    if (!confirmed) return;
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session?.access_token || !session?.refresh_token) {
-      setError("로그인 세션이 없습니다.");
-      return;
-    }
-    const qs = new URLSearchParams({
-      id,
-      access_token: session.access_token,
-      refresh_token: session.refresh_token,
-    });
-    const res = await fetch(`/api/production/planning/range?${qs.toString()}`, { method: "DELETE" });
-    if (!res.ok) {
-      setError("장기 일정 삭제 실패");
-      return;
-    }
     await loadMonth();
   };
 
@@ -1531,30 +1503,6 @@ export default function PlanningBoardClient() {
                           </div>
                         ) : null}
                       </div>
-                      {(activeRangeEntries.length > 0 || (data.rangeEntries?.length ?? 0) > 0) && detailMode === "leave" ? (
-                        <div className="rounded-lg border border-cyan-600/30 bg-cyan-950/20 px-3 py-2">
-                          <p className="text-xs text-cyan-200">장기 일정 {activeRangeEntries.length}건 적용중</p>
-                          <div className="mt-1 space-y-1">
-                            {(data.rangeEntries ?? []).slice(0, 3).map((r) => (
-                              <div key={r.id} className="flex items-center justify-between gap-2 text-[11px] text-slate-300">
-                                <span className="truncate">
-                                  {r.person_name} · {r.entry_type === "annual" ? "연차" : r.entry_type === "half" ? "반차" : `기타(${r.reason ?? "-"})`} ·{" "}
-                                  {r.start_date.slice(5)}~{r.end_date.slice(5)}
-                                </span>
-                                {canEdit ? (
-                                  <button
-                                    type="button"
-                                    className="shrink-0 rounded border border-slate-600 px-1.5 py-0.5 text-[10px] text-slate-300 hover:text-rose-200"
-                                    onClick={() => void deleteRangeEntry(r.id)}
-                                  >
-                                    삭제
-                                  </button>
-                                ) : null}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
                       <div className="max-h-[min(34vh,300px)] space-y-2 overflow-y-auto">
                         {draft.leaves.map((leave, idx) => (
                           <div key={`leave-${idx}`} className="grid grid-cols-[5rem_1fr_2rem] items-center gap-2">
