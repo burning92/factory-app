@@ -70,6 +70,10 @@ function parseOtherNoteText(noteText: string): { detail: string; person: string 
   return { detail, person };
 }
 
+function stripOtherPrefix(noteText: string): string {
+  return noteText.replace(/^\[기타\]\s*/, "").trim();
+}
+
 export default function PlanningPrintPage() {
   const now = new Date();
   const sp = useSearchParams();
@@ -226,6 +230,20 @@ export default function PlanningPrintPage() {
               const list = entriesByDate.get(dateKey) ?? [];
               const dayLeaves = leavesByDate.get(dateKey) ?? [];
               const dayNotes = notesByDate.get(dateKey) ?? [];
+              const annualLeaveNames = dayLeaves
+                .filter((x) => x.type === "annual")
+                .map((x) => `${x.person}(연)`);
+              const halfLeaveNames = dayLeaves
+                .filter((x) => x.type === "half")
+                .map((x) => `${x.person}(반)`);
+              const parsedOthers = dayNotes
+                .map((note) => parseOtherNoteText(note))
+                .filter((x): x is { detail: string; person: string } => x !== null);
+              const otherLine = parsedOthers.map((x) => `${x.person}(${x.detail})`);
+              const plainNotes = dayNotes
+                .filter((note) => parseOtherNoteText(note) === null)
+                .map((note) => stripOtherPrefix(note))
+                .filter(Boolean);
               const holidayName = isKoreanPublicHoliday(dateKey) ? getKoreanHolidayName(dateKey) : null;
               const weekday = idx % 7;
               const isSunday = weekday === 0;
@@ -241,7 +259,7 @@ export default function PlanningPrintPage() {
                     </span>
                   </div>
                   <div className="planning-a3-cell-main">
-                    {holidayName ? <p className="planning-a3-holiday">🔴 {holidayName}</p> : null}
+                    {holidayName ? <p className="planning-a3-holiday">{holidayName}</p> : null}
                     <div className="planning-a3-products">
                       {list.map((row, i) => {
                         const qty = rollupQtyForPlanning(row.product, row.qty);
@@ -257,32 +275,26 @@ export default function PlanningPrintPage() {
                     </div>
                   </div>
                   <div className="planning-a3-cell-meta">
-                    {dayLeaves.filter((x) => x.type === "annual").length > 0 ? (
+                    {annualLeaveNames.length > 0 ? (
                       <p className="planning-a3-meta leave">
-                        <span className="planning-a3-meta-label">🟥휴무:</span>
+                        <span className="planning-a3-meta-label">휴무</span>
                         <span className="planning-a3-meta-names">
-                          {dayLeaves.filter((x) => x.type === "annual").map((x) => x.person).join(", ")}
+                          {annualLeaveNames.join(", ")}
                         </span>
                       </p>
                     ) : null}
-                    {dayLeaves.filter((x) => x.type === "half").length > 0 ? (
+                    {halfLeaveNames.length > 0 ? (
                       <p className="planning-a3-meta half">
-                        <span className="planning-a3-meta-label">🟨반차:</span>
+                        <span className="planning-a3-meta-label">반차</span>
                         <span className="planning-a3-meta-names">
-                          {dayLeaves.filter((x) => x.type === "half").map((x) => x.person).join(", ")}
+                          {halfLeaveNames.join(", ")}
                         </span>
                       </p>
                     ) : null}
-                    {dayNotes.length > 0 ? (
+                    {otherLine.length > 0 || plainNotes.length > 0 ? (
                       <div className="planning-a3-meta-list">
-                        {dayNotes.slice(0, 1).map((n, i) => {
-                          const parsed = parseOtherNoteText(n);
-                          return (
-                            <p key={`${dateKey}-note-${i}`} className={`note ${parsed ? "" : "alert"}`}>
-                              {parsed ? `■ 비고: ${parsed.detail} : ${parsed.person}` : `■ 비고: ${n.replace(/^\[기타\]\s*/, "")}`}
-                            </p>
-                          );
-                        })}
+                        {otherLine.length > 0 ? <p className="note">기타 {otherLine.join(", ")}</p> : null}
+                        {plainNotes.length > 0 ? <p className="note alert">비고 {plainNotes.join(", ")}</p> : null}
                       </div>
                     ) : null}
                   </div>

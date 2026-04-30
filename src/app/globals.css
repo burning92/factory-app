@@ -128,33 +128,40 @@ input:focus, select:focus, textarea:focus {
 /* 월간 플래닝 인쇄: A3 가로, 달력 중심 레이아웃 */
 .planning-a3-wrap {
   min-height: 100%;
+  padding: 4mm 0;
 }
 .planning-a3-page {
-  width: min(430mm, calc(100vw - 0.5rem));
-  margin: 0 auto 1rem;
+  /* A3 landscape(420x297)에서 @page margin 10mm 적용 시 실사용 영역(400x277) */
+  width: min(400mm, calc(100vw - 8mm));
+  aspect-ratio: 400 / 277;
+  margin: 0 auto;
   background: #fff;
   color: #111827;
   border: 1px solid #111827;
   border-radius: 0.5rem;
-  padding: 7mm;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.2);
+  padding: 1mm 1mm 0 1mm;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: clip;
 }
 .planning-a3-header {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 4mm;
+  gap: 2.2mm;
   align-items: end;
-  margin-bottom: 2mm;
+  margin-bottom: 1mm;
 }
 .planning-a3-title {
-  font-size: 9.2mm;
-  line-height: 1.2;
+  font-size: 6.2mm;
+  line-height: 1.1;
   font-weight: 800;
   letter-spacing: -0.02em;
 }
 .planning-a3-subtitle {
-  margin-top: 1mm;
-  font-size: 3.5mm;
+  margin-top: 0.6mm;
+  font-size: 2.4mm;
   color: #4b5563;
 }
 .planning-a3-monthmark {
@@ -163,34 +170,38 @@ input:focus, select:focus, textarea:focus {
   color: #2563eb;
   font-weight: 900;
   line-height: 1;
-  font-size: 9.8mm;
+  font-size: 6.4mm;
   letter-spacing: -0.02em;
 }
 .planning-a3-summary-line {
   display: flex;
-  gap: 7mm;
+  gap: 4mm;
   flex-wrap: wrap;
-  margin-bottom: 4mm;
-  font-size: 3.4mm;
+  margin-bottom: 1.6mm;
+  font-size: 2.2mm;
   font-weight: 700;
   color: #334155;
   border-bottom: 1px dashed #94a3b8;
-  padding-bottom: 2.6mm;
+  padding-bottom: 1.2mm;
 }
 .planning-a3-calendar {
   display: grid;
   grid-template-columns: 0.58fr 1fr 1fr 1fr 1fr 1fr 0.58fr;
+  grid-template-rows: 6.5mm repeat(5, 1fr);
   border-top: 1px solid #111827;
   border-left: 1px solid #111827;
+  flex: 1 1 auto;
   height: 100%;
+  max-height: 100%;
+  overflow: clip;
 }
 .planning-a3-weekday {
   border-right: 1px solid #111827;
   border-bottom: 1px solid #111827;
   text-align: center;
-  font-size: 4.2mm;
+  font-size: 3.2mm;
   font-weight: 700;
-  padding: 1.6mm 0;
+  padding: 1.1mm 0;
   background: #4b5563;
   color: #fff;
 }
@@ -204,14 +215,16 @@ input:focus, select:focus, textarea:focus {
 }
 .planning-a3-cell {
   min-height: 0;
+  height: 100%;
   border-right: 1px solid #111827;
   border-bottom: 1px solid #111827;
-  padding: 2.8mm 2.5mm 2.2mm;
+  padding: 1.4mm 1.25mm 1.1mm;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 1mm;
+  gap: 0.35mm;
   background: #f8fafc;
+  overflow: clip;
 }
 .planning-a3-cell.weekend {
   background: #f1f5f9;
@@ -221,10 +234,10 @@ input:focus, select:focus, textarea:focus {
   opacity: 0.7;
 }
 .planning-a3-cell-head {
-  min-height: 5.2mm;
+  min-height: 3.5mm;
 }
 .planning-a3-cell-head .date {
-  font-size: 5mm;
+  font-size: 3.8mm;
   font-weight: 800;
   color: #0f172a;
 }
@@ -235,7 +248,7 @@ input:focus, select:focus, textarea:focus {
   color: #2563eb;
 }
 .planning-a3-holiday {
-  font-size: 3mm;
+  font-size: 2.1mm;
   line-height: 1.2;
   color: #b91c1c;
   font-weight: 800;
@@ -243,13 +256,14 @@ input:focus, select:focus, textarea:focus {
 .planning-a3-products {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 1px;
   min-height: 0;
-  margin-top: 0.8mm;
+  margin-top: 0;
+  overflow: clip;
 }
 .planning-a3-products p {
-  font-size: 3.7mm;
-  line-height: 1.45;
+  font-size: 2.75mm;
+  line-height: 1.12;
   color: #030712;
   font-weight: 700;
   word-break: keep-all;
@@ -261,28 +275,29 @@ input:focus, select:focus, textarea:focus {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
+  overflow: clip;
 }
 .planning-a3-cell-meta {
   margin-top: auto;
   border-top: 1px solid #cbd5e1;
-  padding-top: 10px;
+  padding-top: 2px;
   display: flex;
   flex-direction: column;
-  gap: 0.4mm;
+  gap: 0;
 }
 .planning-a3-meta,
 .planning-a3-meta-list p {
-  font-size: 3.4mm;
-  line-height: 1.42;
+  font-size: 2.45mm;
+  line-height: 1.12;
   color: #334155;
-  font-weight: 700;
+  font-weight: 650;
   margin-top: 0;
-  margin-bottom: 3px;
+  margin-bottom: 0;
   display: flex;
-  align-items: center;
-  gap: 4px;
+  align-items: flex-start;
+  gap: 2px;
 }
-/* 휴무/반차: 🟥/🟨·라벨만 색, 이름만 검정 */
+/* 휴무/반차: 라벨만 색, 이름은 검정 */
 .planning-a3-meta.leave,
 .planning-a3-meta.half {
   flex-wrap: wrap;
@@ -305,6 +320,17 @@ input:focus, select:focus, textarea:focus {
   color: #0f172a;
   flex: 1 1 auto;
   min-width: 0;
+  word-break: keep-all;
+}
+.planning-a3-meta-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.planning-a3-meta-list p {
+  color: #1e293b;
+  margin: 0;
+  word-break: break-word;
 }
 .planning-a3-meta-list p.note {
   color: #1e293b;
@@ -318,8 +344,8 @@ input:focus, select:focus, textarea:focus {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 6px;
-  gap: 12px;
+  margin-bottom: 0;
+  gap: 4px;
   border-left: 0;
   padding-left: 0;
 }
@@ -327,19 +353,19 @@ input:focus, select:focus, textarea:focus {
   flex: 1;
   min-width: 0;
   color: #333333;
-  padding-right: 12px;
+  padding-right: 2px;
   word-break: keep-all;
-  line-height: 1.35;
+  line-height: 1.12;
 }
 .planning-a3-product-row .qty {
   flex: 0 0 auto;
   flex-shrink: 0;
   min-width: max-content;
-  font-size: 4.1mm;
+  font-size: 2.9mm;
   font-weight: 800;
   color: #111827;
   text-align: right;
-  line-height: 1.3;
+  line-height: 1.1;
 }
 .planning-a3-product-row.parbake {
   border-left-color: transparent;
@@ -363,79 +389,24 @@ input:focus, select:focus, textarea:focus {
     margin: 10mm;
   }
   body {
-    width: 100vw;
-    height: 100vh;
     margin: 0;
     padding: 0;
-    overflow: hidden;
     background: #fff !important;
     color: #111 !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+  .planning-a3-wrap {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
   .planning-a3-page {
-    width: 100%;
-    height: calc(297mm - 20mm);
-    max-height: calc(297mm - 20mm);
+    width: 400mm;
+    height: 277mm;
+    aspect-ratio: auto;
     margin: 0;
     border: 0;
     border-radius: 0;
     box-shadow: none;
-    padding: 1mm 1mm 0 1mm;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-  .planning-a3-calendar {
-    flex: 1 1 auto;
-    grid-template-rows: 8mm repeat(5, 1fr);
-    height: 100%;
-    max-height: 100%;
-    overflow: hidden;
-  }
-  .planning-a3-cell {
-    height: 100%;
-    min-height: 0;
-    overflow: hidden;
-  }
-  .planning-a3-cell-main {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow: hidden;
-  }
-  .planning-a3-products {
-    gap: 2px;
-    margin-top: 0;
-    overflow: hidden;
-  }
-  .planning-a3-product-row {
-    margin-bottom: 2px;
-    gap: 8px;
-  }
-  .planning-a3-product-row .name {
-    line-height: 1.3;
-    font-size: 3.25mm;
-  }
-  .planning-a3-product-row .qty {
-    font-size: 3.55mm;
-    line-height: 1.2;
-  }
-  .planning-a3-cell-meta {
-    margin-top: auto;
-    padding-top: 8px;
-  }
-  .planning-a3-meta,
-  .planning-a3-meta-list p {
-    font-size: 3.2mm;
-    line-height: 1.4;
-    font-weight: 700;
-    margin-bottom: 2px;
-    display: flex;
-    align-items: center;
-    gap: 3px;
-  }
-  .planning-a3-wrap {
-    padding: 0 !important;
-    margin: 0 !important;
   }
 }
