@@ -125,283 +125,106 @@ input:focus, select:focus, textarea:focus {
   margin-bottom: 0;
 }
 
-/* 월간 플래닝 인쇄: A3 가로, 달력 중심 레이아웃 */
-.planning-a3-wrap {
-  min-height: 100%;
-  padding: 4mm 0;
-}
+/* 월간 플래닝 인쇄: A3 가로, 주차별 리스트형 게시판 */
+.planning-a3-wrap { min-height: 100%; padding: 4mm 0; }
 .planning-a3-page {
-  /* A3 landscape(420x297)에서 @page margin 10mm 적용 시 실사용 영역(400x277) */
   width: min(400mm, calc(100vw - 8mm));
   aspect-ratio: 400 / 277;
   margin: 0 auto;
   background: #fff;
-  color: #111827;
-  border: 1px solid #111827;
+  color: #0f172a;
+  border: 1px solid #345d87;
   border-radius: 0.5rem;
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.2);
-  padding: 1mm 1mm 0 1mm;
+  padding: 1.8mm 2mm 1.5mm;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   overflow: clip;
 }
-.planning-a3-header {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 1.8mm;
-  align-items: end;
-  margin-bottom: 0.7mm;
+.planning-a3-header { display: grid; grid-template-columns: 1fr auto; gap: 2mm; align-items: end; margin-bottom: 0.8mm; }
+.planning-a3-title { font-size: 7.8mm; line-height: 1; font-weight: 900; letter-spacing: -0.02em; color: #0b2c59; }
+.planning-a3-subtitle { margin-top: 0.35mm; font-size: 2.6mm; font-weight: 700; color: #1f2937; }
+.planning-a3-monthmark { color: #0b2c59; font-weight: 900; line-height: 1; font-size: 8.8mm; letter-spacing: -0.02em; }
+
+.planning-a3-summary-line { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.8mm; margin-bottom: 1.3mm; }
+.planning-a3-summary-card { border: 1px solid #88a9cb; border-radius: 0.9mm; background: #f3f8ff; overflow: hidden; }
+.planning-a3-summary-card .label {
+  margin: 0; padding: 0.4mm 0.8mm; background: #0b2c59; color: #fff; text-align: center;
+  font-size: 2.45mm; font-weight: 900; line-height: 1.1;
 }
-.planning-a3-title {
-  font-size: 5.7mm;
-  line-height: 1.1;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-}
-.planning-a3-subtitle {
-  margin-top: 0.45mm;
-  font-size: 2.15mm;
-  color: #4b5563;
-}
-.planning-a3-monthmark {
-  display: inline-flex;
-  align-items: baseline;
-  color: #2563eb;
-  font-weight: 900;
-  line-height: 1;
-  font-size: 5.9mm;
-  letter-spacing: -0.02em;
-}
-.planning-a3-summary-line {
-  display: flex;
-  gap: 3.2mm;
-  flex-wrap: wrap;
-  margin-bottom: 1.1mm;
-  font-size: 2mm;
-  font-weight: 700;
-  color: #334155;
-  border-bottom: 1px dashed #94a3b8;
-  padding-bottom: 0.9mm;
-}
-.planning-a3-calendar {
-  display: grid;
-  grid-template-columns: 0.58fr 1fr 1fr 1fr 1fr 1fr 0.58fr;
-  grid-template-rows: 6.5mm repeat(5, 1fr);
-  border-top: 1px solid #111827;
-  border-left: 1px solid #111827;
-  flex: 1 1 auto;
-  height: 100%;
-  max-height: 100%;
-  overflow: clip;
-}
-.planning-a3-weekday {
-  border-right: 1px solid #111827;
-  border-bottom: 1px solid #111827;
-  text-align: center;
-  font-size: 3.05mm;
-  font-weight: 700;
-  padding: 0.95mm 0;
-  background: #4b5563;
-  color: #fff;
-}
-.planning-a3-weekday.sun {
-  background: #ef4444;
-  color: #fff;
-}
-.planning-a3-weekday.sat {
-  background: #3b82f6;
-  color: #fff;
-}
-.planning-a3-cell {
-  min-height: 0;
-  height: 100%;
-  border-right: 1px solid #111827;
-  border-bottom: 1px solid #111827;
-  padding: 1.4mm 1.25mm 1.1mm;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  gap: 0.35mm;
-  background: #f8fafc;
-  overflow: clip;
-}
-.planning-a3-cell.weekend {
-  background: #f1f5f9;
-}
-.planning-a3-cell.empty {
-  background: #e9edf2;
-  opacity: 0.7;
-}
-.planning-a3-cell-head {
-  min-height: 3.5mm;
-}
-.planning-a3-cell-head .date {
-  font-size: 3.8mm;
-  font-weight: 800;
-  color: #0f172a;
-}
-.planning-a3-cell-head .date.holiday {
-  color: #dc2626;
-}
-.planning-a3-cell-head .date.sat {
-  color: #2563eb;
-}
-.planning-a3-holiday {
-  font-size: 2.1mm;
-  line-height: 1.2;
-  color: #b91c1c;
-  font-weight: 800;
-}
-.planning-a3-products {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-height: 0;
-  margin-top: 0;
-  overflow: clip;
-}
-.planning-a3-products p {
-  font-size: 2.95mm;
-  line-height: 1.14;
-  color: #020617;
-  font-weight: 760;
-  word-break: keep-all;
-  text-align: left;
-}
-.planning-a3-cell-main {
-  min-height: 0;
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  overflow: clip;
-}
-.planning-a3-cell-meta {
-  margin-top: 0.4mm;
-  border-top: 1px solid #cbd5e1;
-  padding-top: 1px;
-  display: flex;
-  flex-direction: column;
-  gap: 0.1mm;
-}
-.planning-a3-meta,
-.planning-a3-meta-list p {
-  font-size: 2.55mm;
-  line-height: 1.16;
-  color: #1f2937;
-  font-weight: 680;
-  margin-top: 0;
-  margin-bottom: 0;
-  display: flex;
-  align-items: flex-start;
-  gap: 2px;
-}
-/* 휴무/반차: 라벨만 색, 이름은 검정 */
-.planning-a3-meta.leave,
-.planning-a3-meta.half {
-  flex-wrap: wrap;
-  align-items: flex-start;
-}
-.planning-a3-meta.leave .planning-a3-meta-label {
-  color: #991b1b;
-  font-weight: 800;
-  flex-shrink: 0;
-}
-.planning-a3-meta.leave .planning-a3-meta-names {
-  color: #0f172a;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.planning-a3-meta.half .planning-a3-meta-label {
-  color: #92400e;
-  font-weight: 800;
-  flex-shrink: 0;
-}
-.planning-a3-meta.half .planning-a3-meta-names {
-  color: #0f172a;
-  flex: 1 1 auto;
-  min-width: 0;
-  word-break: keep-all;
-}
-.planning-a3-meta-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-.planning-a3-meta-list p {
-  color: #1f2937;
-  margin: 0;
-  word-break: break-word;
-}
-.planning-a3-meta-list p.note {
-  color: #1f2937;
-}
-.planning-a3-meta-list p.note .meta-tag {
-  font-weight: 820;
-  flex: 0 0 auto;
-  letter-spacing: -0.01em;
-}
-.planning-a3-meta-list p.note .meta-text {
-  font-weight: 700;
-  color: #111827;
-}
-.planning-a3-meta-list p.note.other .meta-tag {
-  color: #3730a3;
-}
-.planning-a3-meta-list p.note.other .meta-text {
-  color: #1f2937;
-}
-.planning-a3-meta-list p.note.alert {
-  color: #7f1d1d;
-}
-.planning-a3-meta-list p.note.alert .meta-tag {
-  color: #991b1b;
+.planning-a3-summary-card .value {
+  margin: 0; padding: 0.45mm 0.8mm 0.55mm; text-align: center; color: #0f172a;
+  font-size: 6.15mm; font-weight: 900; line-height: 1; letter-spacing: -0.01em;
 }
 
-.planning-a3-product-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 0;
-  gap: 4px;
-  border-left: 0;
-  padding-left: 0;
+.planning-a3-list { flex: 1 1 auto; display: flex; flex-direction: column; gap: 1.2mm; min-height: 0; }
+.planning-week-block {
+  display: grid; grid-template-columns: 10.5mm 1fr; border: 1px solid #7ea0c2; border-radius: 0.7mm;
+  background: #fff; overflow: hidden; flex: calc(var(--week-grow, 1) * 1) 1 0; min-height: 0;
 }
-.planning-a3-product-row .name {
-  flex: 1;
-  min-width: 0;
-  color: #333333;
-  padding-right: 2px;
-  word-break: keep-all;
-  line-height: 1.12;
-}
-.planning-a3-product-row .qty {
+.planning-week-block.compact {
+  /* 1~2행 주차는 자동 높이만 사용하여 과도한 세로 팽창 방지 */
   flex: 0 0 auto;
-  flex-shrink: 0;
-  min-width: max-content;
-  font-size: 3.1mm;
-  font-weight: 850;
-  color: #020617;
-  text-align: right;
-  line-height: 1.12;
 }
-.planning-a3-product-row.parbake {
-  border-left-color: transparent;
+.planning-week-block.normal {
+  flex: calc(var(--week-grow, 1) * 1) 1 0;
 }
-.planning-a3-product-row.parbake .name {
-  color: #2563eb;
+.planning-week-label {
+  background: linear-gradient(180deg, #3d79b8 0%, #2f6eb2 100%); color: #fff; font-size: 4.6mm; font-weight: 900;
+  line-height: 1; display: flex; align-items: center; justify-content: center; letter-spacing: -0.01em;
+  border-right: 1px solid #8fb1d4; padding: 1mm 0;
 }
-.planning-a3-product-row.bread {
-  border-left-color: transparent;
+.planning-week-label-stack { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.15mm; line-height: 1; }
+.planning-week-label-stack .char { display: block; }
+.planning-week-main { display: grid; grid-template-rows: auto repeat(var(--week-row-count, 1), minmax(0, 1fr)); min-width: 0; min-height: 0; }
+.planning-week-head, .planning-week-row { display: grid; grid-template-columns: 13% 54% 33%; }
+.planning-week-head {
+  background: #f2f6fb; color: #0b2c59; font-weight: 800; font-size: 2.85mm; border-bottom: 1px solid #a7c0da;
 }
-.planning-a3-product-row.bread .name {
-  color: #059669;
+.planning-week-head > div { padding: 0.62mm 0.95mm; border-right: 1px solid #d4e1ee; }
+.planning-week-head > div:last-child { border-right: 0; }
+.planning-week-row { border-bottom: 1px solid #e6edf6; }
+.planning-week-row:last-child { border-bottom: 0; }
+.planning-week-row > div { padding: 1.2mm 1.05mm; border-right: 1px solid #edf2f8; }
+.planning-week-row > div:last-child { border-right: 0; }
+
+.planning-week-date {
+  font-size: 3.65mm; line-height: 1.06; font-weight: 800; color: #0f172a; background: #f3f8ff;
+  padding-left: 0.8mm !important; padding-top: 0.4mm !important; padding-bottom: 0.35mm !important;
+  display: flex; align-items: center;
 }
-.planning-a3-product-row.pizza {
-  border-left-color: #333333;
+.planning-week-date .date-main { margin: 0; font-size: 4.6mm; font-weight: 900; line-height: 0.95; letter-spacing: -0.01em; }
+.planning-week-date.holiday .date-main { color: #b91c1c; }
+.planning-week-date.sun .date-main { color: #b91c1c; }
+.planning-week-date.sat .date-main { color: #1d4ed8; }
+
+.planning-week-plan { font-size: 3.35mm; line-height: 1.3; color: #0f172a; font-weight: 700; word-break: keep-all; }
+.planning-week-plan .plan-item .name { color: #0f172a; }
+.planning-week-plan .holiday-inline { margin: 0 0 0.28mm; color: #b91c1c; font-size: 3.05mm; font-weight: 900; line-height: 1.16; }
+.planning-week-plan .plan-item .qty { font-weight: 900; color: #111827; }
+.planning-week-plan .sep { color: #64748b; font-weight: 700; }
+
+.planning-week-meta {
+  font-size: 3.18mm; line-height: 1.3; color: #1f2937; display: flex; flex-wrap: wrap;
+  align-items: flex-start; gap: 0.7mm 1.1mm;
 }
+.planning-week-meta .meta-line {
+  margin: 0; white-space: normal; display: inline-flex; align-items: baseline; gap: 0.32mm;
+  padding: 0.15mm 0.38mm; border-radius: 0.4mm; background: #f8fbff;
+}
+.planning-week-meta .meta-line .tag { font-weight: 900; margin-right: 0.25mm; }
+.planning-week-meta .meta-line.leave .tag { color: #dc2626; }
+.planning-week-meta .meta-line.half .tag { color: #2563eb; }
+.planning-week-meta .meta-line.other .tag { color: #b45309; }
+.planning-week-meta .meta-line.note .tag { color: #5b21b6; }
+.planning-week-plan .dash, .planning-week-meta .dash { color: #64748b; font-weight: 700; }
+
+.planning-a3-legend {
+  margin-top: 1.9mm; padding-top: 1.2mm; border-top: 1px solid #9fb9d8; display: flex;
+  flex-wrap: wrap; gap: 1.2mm 3.5mm; font-size: 2.45mm; color: #334155; font-weight: 700;
+}
+.planning-a3-legend span em { font-style: normal; font-weight: 900; color: #0f172a; }
 
 @media print {
   @page {

@@ -51,12 +51,6 @@ function formatPrintProductLine(productSnapshot: string, qty: number): { name: s
   };
 }
 
-function productToneClass(name: string): "parbake" | "bread" | "pizza" {
-  if (name.includes("파베이크")) return "parbake";
-  if (name.includes("브레드") || name.includes("포노")) return "bread";
-  return "pizza";
-}
-
 function parseOtherNoteText(noteText: string): { detail: string; person: string } | null {
   const prefix = "[기타]";
   const t = noteText.trim();
@@ -72,6 +66,17 @@ function parseOtherNoteText(noteText: string): { detail: string; person: string 
 
 function stripOtherPrefix(noteText: string): string {
   return noteText.replace(/^\[기타\]\s*/, "").trim();
+}
+
+const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"] as const;
+
+function weekdayLabelOf(dateKey: string): string {
+  const d = new Date(`${dateKey}T00:00:00`);
+  return WEEKDAY_LABELS[d.getDay()] ?? "";
+}
+
+function isWeekendLabel(label: string): boolean {
+  return label === "토" || label === "일";
 }
 
 export default function PlanningPrintPage() {
@@ -157,15 +162,97 @@ export default function PlanningPrintPage() {
     return map;
   }, [data?.notes]);
 
-  const calendarCells = useMemo(() => {
+  const weekGroups = useMemo(() => {
     const firstWeekday = weekdayOfFirstDay(year, month);
     const totalDays = monthDays(year, month);
-    const cells: Array<string | null> = [];
-    for (let i = 0; i < firstWeekday; i += 1) cells.push(null);
-    for (let d = 1; d <= totalDays; d += 1) cells.push(ymd(year, month, d));
-    while (cells.length % 7 !== 0) cells.push(null);
-    return cells;
+    const weekCount = Math.ceil((firstWeekday + totalDays) / 7);
+    const groups = Array.from({ length: weekCount }, (_, idx) => ({
+      weekNo: idx + 1,
+      dates: [] as string[],
+    }));
+    for (let day = 1; day <= totalDays; day += 1) {
+      const dateKey = ymd(year, month, day);
+      const rowIdx = Math.floor((firstWeekday + (day - 1)) / 7);
+      groups[rowIdx]?.dates.push(dateKey);
+    }
+    return groups;
   }, [month, year]);
+
+  type WeekRenderRow = {
+    dateKey: string;
+    weekdayLabel: string;
+    isSun: boolean;
+    isSat: boolean;
+    holidayName: string | null;
+    list: Array<{ product: string; qty: number }>;
+    annualLeaveNames: string[];
+    halfLeaveNames: string[];
+    otherLine: string[];
+    plainNotes: string[];
+    hasAnyInfo: boolean;
+  };
+
+  const renderedWeeks = useMemo(() => {
+    const weeks = weekGroups
+      .map((week) => {
+        const rows: WeekRenderRow[] = week.dates
+          .map((dateKey) => {
+            const list = entriesByDate.get(dateKey) ?? [];
+            const dayLeaves = leavesByDate.get(dateKey) ?? [];
+            const dayNotes = notesByDate.get(dateKey) ?? [];
+            const annualLeaveNames = dayLeaves.filter((x) => x.type === "annual").map((x) => x.person);
+            const halfLeaveNames = dayLeaves.filter((x) => x.type === "half").map((x) => x.person);
+            const parsedOthers = dayNotes
+              .map((note) => parseOtherNoteText(note))
+              .filter((x): x is { detail: string; person: string } => x !== null);
+            const otherLine = parsedOthers.map((x) => `${x.person}(${x.detail})`);
+            const plainNotes = dayNotes
+              .filter((note) => parseOtherNoteText(note) === null)
+              .map((note) => stripOtherPrefix(note))
+              .filter(Boolean);
+            const holidayName = isKoreanPublicHoliday(dateKey) ? getKoreanHolidayName(dateKey) : null;
+            const weekdayLabel = weekdayLabelOf(dateKey);
+            const hasAnyInfo =
+              list.length > 0 ||
+              annualLeaveNames.length > 0 ||
+              halfLeaveNames.length > 0 ||
+              otherLine.length > 0 ||
+              plainNotes.length > 0 ||
+              Boolean(holidayName);
+            return {
+              dateKey,
+              weekdayLabel,
+              isSun: weekdayLabel === "일",
+              isSat: weekdayLabel === "토",
+              holidayName,
+              list,
+              annualLeaveNames,
+              halfLeaveNames,
+              otherLine,
+              plainNotes,
+              hasAnyInfo,
+            };
+          })
+          .filter((row) => !(isWeekendLabel(row.weekdayLabel) && !row.hasAnyInfo));
+        return { weekNo: week.weekNo, rows };
+      })
+      .filter((w) => w.rows.length > 0);
+
+    const totalRows = weeks.reduce((sum, w) => sum + w.rows.length, 0);
+    const normalWeeks = weeks.filter((w) => w.rows.length >= 3);
+    const totalNormalRows = normalWeeks.reduce((sum, w) => sum + w.rows.length, 0);
+    return weeks.map((w) => {
+      const isCompact = w.rows.length <= 2;
+      if (isCompact) {
+        // 저행수 주차는 과확장을 막기 위해 compact 고정 가중치
+        const compactGrow = w.rows.length <= 1 ? 0.22 : 0.3;
+        return { ...w, isCompact, weekGrow: compactGrow };
+      }
+      const proportional = totalNormalRows > 0 ? (w.rows.length / totalNormalRows) * Math.max(1, normalWeeks.length) : 1;
+      const weekGrow = Math.max(1, proportional);
+      return { ...w, isCompact, weekGrow };
+    });
+  }, [entriesByDate, leavesByDate, notesByDate, weekGroups]);
 
   const rollup = useMemo(() => (data ? computeMonthlyCategoryTotals(data.entries) : null), [data]);
 
@@ -206,112 +293,110 @@ export default function PlanningPrintPage() {
           <header className="planning-a3-header">
             <div>
               <h1 className="planning-a3-title">월간 생산계획표</h1>
-              <p className="planning-a3-subtitle">
-                {year}년 {month}월 · 출력일 {printDate}
-              </p>
+              <p className="planning-a3-subtitle">출력일 {printDate}</p>
             </div>
             <div className="planning-a3-monthmark">{year}년 {month}월</div>
           </header>
           <div className="planning-a3-summary-line">
-            <span>총 {rollup.totalQty.toLocaleString("ko-KR")}</span>
-            <span>피자 {rollup.pizzaQty.toLocaleString("ko-KR")}</span>
-            <span>브레드 {rollup.breadQty.toLocaleString("ko-KR")}</span>
-            <span>파베이크 {rollup.parbakeTotal.toLocaleString("ko-KR")}</span>
+            <div className="planning-a3-summary-card">
+              <p className="label">총</p>
+              <p className="value">{rollup.totalQty.toLocaleString("ko-KR")}</p>
+            </div>
+            <div className="planning-a3-summary-card">
+              <p className="label">피자</p>
+              <p className="value">{rollup.pizzaQty.toLocaleString("ko-KR")}</p>
+            </div>
+            <div className="planning-a3-summary-card">
+              <p className="label">브레드</p>
+              <p className="value">{rollup.breadQty.toLocaleString("ko-KR")}</p>
+            </div>
+            <div className="planning-a3-summary-card">
+              <p className="label">파베이크</p>
+              <p className="value">{rollup.parbakeTotal.toLocaleString("ko-KR")}</p>
+            </div>
           </div>
 
-          <section className="planning-a3-calendar">
-            {["일", "월", "화", "수", "목", "금", "토"].map((w, idx) => (
-              <div key={w} className={`planning-a3-weekday ${idx === 0 ? "sun" : idx === 6 ? "sat" : ""}`}>
-                {w}
-              </div>
-            ))}
-            {calendarCells.map((dateKey, idx) => {
-              if (!dateKey) return <div key={`empty-${idx}`} className="planning-a3-cell empty" />;
-              const list = entriesByDate.get(dateKey) ?? [];
-              const dayLeaves = leavesByDate.get(dateKey) ?? [];
-              const dayNotes = notesByDate.get(dateKey) ?? [];
-              const annualLeaveNames = dayLeaves
-                .filter((x) => x.type === "annual")
-                .map((x) => `${x.person}(연)`);
-              const halfLeaveNames = dayLeaves
-                .filter((x) => x.type === "half")
-                .map((x) => `${x.person}(반)`);
-              const parsedOthers = dayNotes
-                .map((note) => parseOtherNoteText(note))
-                .filter((x): x is { detail: string; person: string } => x !== null);
-              const otherLine = parsedOthers.map((x) => `${x.person}(${x.detail})`);
-              const plainNotes = dayNotes
-                .filter((note) => parseOtherNoteText(note) === null)
-                .map((note) => stripOtherPrefix(note))
-                .filter(Boolean);
-              const holidayName = isKoreanPublicHoliday(dateKey) ? getKoreanHolidayName(dateKey) : null;
-              const weekday = idx % 7;
-              const isSunday = weekday === 0;
-              const isSaturday = weekday === 6;
-              const isWeekend = isSunday || isSaturday;
-              return (
-                <div key={dateKey} className={`planning-a3-cell ${isWeekend ? "weekend" : "weekday"}`}>
-                  <div className="planning-a3-cell-head">
-                    <span
-                      className={`date ${holidayName || isSunday ? "holiday" : isSaturday ? "sat" : ""}`}
-                    >
-                      {Number(dateKey.slice(8, 10))}
+          <section className="planning-a3-list">
+            {renderedWeeks.map((week) => (
+                <section
+                  key={`week-${week.weekNo}`}
+                  className={`planning-week-block ${week.isCompact ? "compact" : "normal"}`}
+                  style={{ ["--week-grow" as string]: String(week.weekGrow), ["--week-row-count" as string]: String(week.rows.length) }}
+                >
+                  <div className="planning-week-label" aria-label={`${week.weekNo}주차`}>
+                    <span className="planning-week-label-stack">
+                      {`${week.weekNo}주차`.split("").map((ch, i) => (
+                        <span key={`week-${week.weekNo}-ch-${i}`} className="char">{ch}</span>
+                      ))}
                     </span>
                   </div>
-                  <div className="planning-a3-cell-main">
-                    {holidayName ? <p className="planning-a3-holiday">{holidayName}</p> : null}
-                    <div className="planning-a3-products">
-                      {list.map((row, i) => {
-                        const qty = rollupQtyForPlanning(row.product, row.qty);
-                        const line = formatPrintProductLine(row.product, qty);
-                        const tone = productToneClass(line.name);
-                        return (
-                          <p key={`${row.product}-${i}`} className={`planning-a3-product-row ${tone}`}>
-                            <span className="name">{line.name}</span>
-                            <span className="qty">{line.qtyText}</span>
-                          </p>
-                        );
-                      })}
+                  <div className="planning-week-main">
+                    <div className="planning-week-head">
+                      <div>날짜</div>
+                      <div>생산계획</div>
+                      <div>인원 / 특이사항</div>
                     </div>
+                    {week.rows.map((row) => {
+                      return (
+                        <div key={row.dateKey} className="planning-week-row">
+                          <div className={`planning-week-date ${row.holidayName ? "holiday" : row.isSun ? "sun" : row.isSat ? "sat" : ""}`}>
+                            <p className="date-main">
+                              {Number(row.dateKey.slice(5, 7))}/{Number(row.dateKey.slice(8, 10))} ({row.weekdayLabel})
+                            </p>
+                          </div>
+                          <div className="planning-week-plan">
+                            {row.holidayName ? <p className="holiday-inline">{row.holidayName}</p> : null}
+                            {row.list.length === 0 && !row.holidayName ? (
+                              <span className="dash">-</span>
+                            ) : (
+                              row.list.map((item, i) => {
+                                const qty = rollupQtyForPlanning(item.product, item.qty);
+                                const line = formatPrintProductLine(item.product, qty);
+                                return (
+                                  <span key={`${row.dateKey}-prod-${i}`} className="plan-item">
+                                    <span className="name">{line.name}</span> <span className="qty">{line.qtyText}</span>
+                                    {i < row.list.length - 1 ? <span className="sep"> / </span> : null}
+                                  </span>
+                                );
+                              })
+                            )}
+                          </div>
+                          <div className="planning-week-meta">
+                            {!row.hasAnyInfo ? <span className="dash">-</span> : null}
+                            {row.annualLeaveNames.length > 0 ? (
+                              <p className="meta-line leave">
+                                <span className="tag">휴무:</span> {row.annualLeaveNames.join(", ")}
+                              </p>
+                            ) : null}
+                            {row.halfLeaveNames.length > 0 ? (
+                              <p className="meta-line half">
+                                <span className="tag">반차:</span> {row.halfLeaveNames.join(", ")}
+                              </p>
+                            ) : null}
+                            {row.otherLine.length > 0 ? (
+                              <p className="meta-line other">
+                                <span className="tag">기타:</span> {row.otherLine.join(", ")}
+                              </p>
+                            ) : null}
+                            {row.plainNotes.length > 0 ? (
+                              <p className="meta-line note">
+                                <span className="tag">비고:</span> {row.plainNotes.join(", ")}
+                              </p>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div className="planning-a3-cell-meta">
-                    {annualLeaveNames.length > 0 ? (
-                      <p className="planning-a3-meta leave">
-                        <span className="planning-a3-meta-label">휴무</span>
-                        <span className="planning-a3-meta-names">
-                          {annualLeaveNames.join(", ")}
-                        </span>
-                      </p>
-                    ) : null}
-                    {halfLeaveNames.length > 0 ? (
-                      <p className="planning-a3-meta half">
-                        <span className="planning-a3-meta-label">반차</span>
-                        <span className="planning-a3-meta-names">
-                          {halfLeaveNames.join(", ")}
-                        </span>
-                      </p>
-                    ) : null}
-                    {otherLine.length > 0 || plainNotes.length > 0 ? (
-                      <div className="planning-a3-meta-list">
-                        {otherLine.length > 0 ? (
-                          <p className="note other">
-                            <span className="meta-tag">기타</span>
-                            <span className="meta-text">{otherLine.join(", ")}</span>
-                          </p>
-                        ) : null}
-                        {plainNotes.length > 0 ? (
-                          <p className="note alert">
-                            <span className="meta-tag">비고</span>
-                            <span className="meta-text">{plainNotes.join(", ")}</span>
-                          </p>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })}
+                </section>
+            ))}
           </section>
+          <footer className="planning-a3-legend">
+            <span><em>휴무:</em> 연차 / 휴무</span>
+            <span><em>반차:</em> 반차</span>
+            <span><em>기타:</em> 기타 사유</span>
+            <span><em>비고:</em> 참고 사항</span>
+          </footer>
         </main>
       ) : null}
     </div>
