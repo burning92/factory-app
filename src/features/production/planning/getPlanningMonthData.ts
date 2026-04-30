@@ -12,11 +12,54 @@ import type {
   PlanningMaterialRow,
   PlanningMonthData,
   PlanningMonthRow,
+  PlanningNearExpiryRow,
   PlanningNoteRow,
   PlanningRangeEntryRow,
   PlanningSubmaterialRow,
   PlanningVersionType,
 } from "./types";
+
+const NEAR_EXPIRY_EXCLUDE_KEYWORDS = [
+  "설탕",
+  "소금",
+  "천일염",
+  "요거트향",
+  "피자박스",
+  "진공봉투",
+  "배송박스",
+  "무지봉투",
+  "아이마크",
+  "포장재",
+  "박스",
+  "스티커",
+  "상자",
+  "필름",
+  "세척사과",
+  "플래터",
+  "가지",
+  "지퍼백",
+];
+
+function parseLotDate(lotNo: string): Date | null {
+  const m = /^(\d{4})[.-](\d{2})[.-](\d{2})$/.exec(lotNo.trim());
+  if (!m) return null;
+  const d = new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00+09:00`);
+  if (Number.isNaN(d.getTime())) return null;
+  return d;
+}
+
+function daysDiffFromToday(target: Date): number {
+  const today = new Date();
+  const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return Math.floor((target.getTime() - todayMidnight.getTime()) / 86400000);
+}
+
+function shouldExcludeNearExpiryName(itemName: string): boolean {
+  const name = itemName.trim();
+  if (!name) return true;
+  if (name === "바질") return true;
+  return NEAR_EXPIRY_EXCLUDE_KEYWORDS.some((kw) => name.includes(kw));
+}
 
 function normalizeMonth(row: Record<string, unknown>): PlanningMonthRow {
   return {
@@ -67,7 +110,7 @@ export async function getPlanningMonthData(year: number, month: number, version:
   const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
   const monthEnd = `${year}-${String(month).padStart(2, "0")}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
 
-  const [entriesRes, notesRes, manpowerRes, leavesRes, rangeEntriesRes, monthsRes, bomRes, submaterialsRes, materialsRes, submaterialItemsRes, inventoryRes, profilesRes] =
+  const [entriesRes, notesRes, manpowerRes, leavesRes, rangeEntriesRes, monthsRes, bomRes, submaterialsRes, materialsRes, submaterialItemsRes, inventoryRes, nearExpiryRes, profilesRes] =
     await Promise.all([
     supabase
       .from("production_plan_entries")
@@ -111,6 +154,11 @@ export async function getPlanningMonthData(year: number, month: number, version:
       .select("item_code,qty,box_weight_g,unit_weight_g")
       .not("item_code", "is", null),
     supabase
+      .from("ecount_inventory_current")
+      .select("item_code,lot_no,qty,raw_item_name")
+      .not("item_code", "is", null)
+      .not("lot_no", "is", null),
+    supabase
       .from("profiles")
       .select("id,display_name,login_id,role,is_active,organizations(organization_code)")
       .eq("is_active", true),
@@ -127,6 +175,7 @@ export async function getPlanningMonthData(year: number, month: number, version:
   if (materialsRes.error) throw materialsRes.error;
   if (submaterialItemsRes.error) throw submaterialItemsRes.error;
   if (inventoryRes.error) throw inventoryRes.error;
+  if (nearExpiryRes.error) throw nearExpiryRes.error;
   if (profilesRes.error) throw profilesRes.error;
 
   const entries = ((entriesRes.data ?? []) as Record<string, unknown>[]).map((r) => ({
@@ -206,6 +255,25 @@ export async function getPlanningMonthData(year: number, month: number, version:
     unit_weight_g: Number(r.unit_weight_g) || 0,
   })) as PlanningInventoryRow[];
 
+  const nearExpiryRows = ((nearExpiryRes.data ?? []) as Record<string, unknown>[])
+    .map((r) => {
+      const lotNo = String(r.lot_no ?? "").trim();
+      const itemName = String(r.raw_item_name ?? "").trim();
+      const lotDate = parseLotDate(lotNo);
+      if (!lotDate || shouldExcludeNearExpiryName(itemName)) return null;
+      const dDay = daysDiffFromToday(lotDate);
+      if (dDay < 0 || dDay > 30) return null;
+      return {
+        item_code: String(r.item_code ?? ""),
+        item_name: itemName,
+        lot_no: lotNo,
+        qty: Number(r.qty) || 0,
+        d_day: dDay,
+      } satisfies PlanningNearExpiryRow;
+    })
+    .filter((row): row is PlanningNearExpiryRow => row != null)
+    .sort((a, b) => (a.d_day !== b.d_day ? a.d_day - b.d_day : b.qty - a.qty));
+
   const products = Array.from(new Set(bomRows.map((r) => r.product_name).filter((s) => s.trim().length > 0))).sort((a, b) =>
     a.localeCompare(b)
   );
@@ -253,6 +321,7 @@ export async function getPlanningMonthData(year: number, month: number, version:
     bomRows,
     submaterialRows,
     inventoryRows,
+    nearExpiryRows,
     totalMembers: fieldHeadcountProfiles.length,
   };
 }

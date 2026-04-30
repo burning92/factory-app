@@ -26,6 +26,8 @@ const TAB_HARANG_INBOUND = { href: "/harang/inbound", label: "입고", Icon: Inb
 const TAB_HARANG_OUTBOUND = { href: "/harang/outbound", label: "출고", Icon: Inbox };
 const TAB_HARANG_PRODUCTION = { href: "/harang/production-input", label: "생산", Icon: Factory };
 const TAB_HARANG_INVENTORY = { href: "/harang/inventory", label: "재고", Icon: Layers };
+const ECOUNT_NEAR_EXPIRY_SEEN_STORAGE_KEY = "ecount-near-expiry-alert-seen-key";
+const PLANNING_NEAR_EXPIRY_SEEN_STORAGE_KEY = "planning-near-expiry-alert-seen";
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
@@ -52,6 +54,23 @@ export default function MobileTabBar() {
       ? [TAB_HOME, TAB_PRODUCTION, TAB_MATERIALS, TAB_EXECUTIVE, TAB_ACCOUNT]
       : [TAB_HOME, TAB_PRODUCTION, TAB_MATERIALS, TAB_DAILY, TAB_EXECUTIVE, TAB_ACCOUNT];
 
+  const handleNavClickCapture = (event: React.MouseEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement | null;
+    const anchor = target?.closest("a[href]") as HTMLAnchorElement | null;
+    if (!anchor) return;
+    const href = anchor.getAttribute("href") ?? "";
+    try {
+      if (!href.startsWith("/inventory/ecount")) {
+        window.sessionStorage.removeItem(ECOUNT_NEAR_EXPIRY_SEEN_STORAGE_KEY);
+      }
+      if (!href.startsWith("/production/planning")) {
+        window.sessionStorage.removeItem(PLANNING_NEAR_EXPIRY_SEEN_STORAGE_KEY);
+      }
+    } catch {
+      // no-op
+    }
+  };
+
   return (
     <nav
       className={
@@ -62,6 +81,7 @@ export default function MobileTabBar() {
       style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom, 0px))" }}
       role="navigation"
       aria-label="하단 메뉴"
+      onClickCapture={handleNavClickCapture}
     >
       {tabs.map(({ href, label, Icon }) => {
         const active = isActive(pathname, href);

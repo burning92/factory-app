@@ -3,14 +3,56 @@ import { formatDateTimeKorea } from "@/lib/formatDateTimeKorea";
 import { getEcountInventoryPageData } from "@/features/ecount/inventory/getEcountInventoryPageData";
 import { INVENTORY_TABS, INVENTORY_SORT_OPTIONS } from "@/features/ecount/inventory/types";
 import type { InventorySort } from "@/features/ecount/inventory/types";
+import NearExpiryAlertModal from "./NearExpiryAlertModal";
 
 const TAB_PARAM = "tab";
 const Q_PARAM = "q";
 const SORT_PARAM = "sort";
+const NEAR_EXPIRY_EXCLUDE_KEYWORDS = [
+  "설탕",
+  "소금",
+  "천일염",
+  "요거트향",
+  "피자박스",
+  "진공봉투",
+  "배송박스",
+  "무지봉투",
+  "아이마크",
+  "포장재",
+  "박스",
+  "스티커",
+  "상자",
+  "필름",
+  "세척사과",
+  "플래터",
+  "가지",
+  "지퍼백",
+];
 
 function formatNumber(n: number): string {
   if (!Number.isFinite(n)) return "0";
   return n.toLocaleString("ko-KR");
+}
+
+function parseLotDate(lotNo: string): Date | null {
+  const m = /^(\d{4})[.-](\d{2})[.-](\d{2})$/.exec(lotNo.trim());
+  if (!m) return null;
+  const date = new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00+09:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
+function diffDaysFromToday(target: Date): number {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.floor((target.getTime() - today.getTime()) / 86400000);
+}
+
+function isExcludedName(itemName: string): boolean {
+  const trimmed = itemName.trim();
+  if (!trimmed) return true;
+  if (trimmed === "바질") return true;
+  return NEAR_EXPIRY_EXCLUDE_KEYWORDS.some((kw) => trimmed.includes(kw));
 }
 
 type PageProps = {
@@ -48,6 +90,23 @@ export default async function InventoryEcountPage({ searchParams }: PageProps) {
   }
 
   const basePath = "/inventory/ecount";
+  const nearExpiryAlertKey = `${data.lastSyncedAt ?? "none"}|${data.sourceRefreshedAt ?? "none"}`;
+  const nearExpiryRows = data.rows
+    .map((row) => {
+      const lotDate = parseLotDate(row.lot_no);
+      if (!lotDate || isExcludedName(row.display_item_name)) return null;
+      const dDay = diffDaysFromToday(lotDate);
+      if (dDay < 0 || dDay > 30) return null;
+      return {
+        item_code: row.item_code,
+        item_name: row.display_item_name,
+        lot_no: row.lot_no,
+        qty: row.qty,
+        d_day: dDay,
+      };
+    })
+    .filter((row): row is { item_code: string; item_name: string; lot_no: string; qty: number; d_day: number } => row != null)
+    .sort((a, b) => (a.d_day !== b.d_day ? a.d_day - b.d_day : b.qty - a.qty));
 
   function buildQuery(t: string, searchQ: string, s: InventorySort) {
     const sp = new URLSearchParams();
@@ -60,6 +119,7 @@ export default async function InventoryEcountPage({ searchParams }: PageProps) {
 
   return (
     <div className="min-h-[calc(100vh-3.5rem)] flex flex-col p-4 sm:p-6 max-w-6xl mx-auto">
+      <NearExpiryAlertModal rows={nearExpiryRows} alertKey={nearExpiryAlertKey} />
       <h1 className="text-lg font-semibold text-slate-100 mb-4">
         이카운트 재고현황
       </h1>

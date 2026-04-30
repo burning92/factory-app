@@ -108,6 +108,14 @@ export interface PlanningSubmaterialRow {
   active: boolean;
 }
 
+export interface PlanningNearExpiryRow {
+  item_code: string;
+  item_name: string;
+  lot_no: string;
+  qty: number;
+  d_day: number;
+}
+
 export interface MaterialRequirementRow {
   material_name: string;
   required_g: number;
@@ -131,6 +139,7 @@ export interface PlanningMonthData {
   bomRows: PlanningBomRow[];
   submaterialRows: PlanningSubmaterialRow[];
   inventoryRows: PlanningInventoryRow[];
+  nearExpiryRows: PlanningNearExpiryRow[];
   totalMembers: number;
 }
 

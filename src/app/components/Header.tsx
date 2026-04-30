@@ -9,6 +9,8 @@ import { SHOW_ORGANIZATION_VIEW_SWITCHER } from "@/lib/featureFlags";
 
 const HARANG_PEOPLE_ICON_SRC = "/harang/people-icon.png";
 const ARMORED_LOGO_SRC = "/apple-icon.png";
+const ECOUNT_NEAR_EXPIRY_SEEN_STORAGE_KEY = "ecount-near-expiry-alert-seen-key";
+const PLANNING_NEAR_EXPIRY_SEEN_STORAGE_KEY = "planning-near-expiry-alert-seen";
 
 const HARANG_INVENTORY_SUBMENU = [
   { href: "/harang/inventory", label: "원부자재 재고현황" },
@@ -209,10 +211,28 @@ export default function Header() {
     router.replace("/");
   };
 
+  const handleHeaderNavClickCapture = (event: React.MouseEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement | null;
+    const anchor = target?.closest("a[href]") as HTMLAnchorElement | null;
+    if (!anchor) return;
+    const href = anchor.getAttribute("href") ?? "";
+    try {
+      if (!href.startsWith("/inventory/ecount")) {
+        window.sessionStorage.removeItem(ECOUNT_NEAR_EXPIRY_SEEN_STORAGE_KEY);
+      }
+      if (!href.startsWith("/production/planning")) {
+        window.sessionStorage.removeItem(PLANNING_NEAR_EXPIRY_SEEN_STORAGE_KEY);
+      }
+    } catch {
+      // no-op
+    }
+  };
+
   return (
     <header
       className={headerClassName}
       style={{ ["--header-primary" as string]: primaryColor }}
+      onClickCapture={handleHeaderNavClickCapture}
     >
       <div className="flex min-w-0 flex-1 items-center gap-2 md:flex-none md:min-w-0">
         <Link
