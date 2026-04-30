@@ -51,6 +51,19 @@ export interface PlanningLeaveRow {
   profile_id: string | null;
 }
 
+export interface PlanningRangeEntryRow {
+  id: string;
+  person_name: string;
+  entry_type: "annual" | "half" | "other";
+  reason: string | null;
+  start_date: string;
+  end_date: string;
+  apply_mode: "all_days" | "weekdays_only";
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface PlanningDayEntryInput {
   product_name_snapshot: string;
   qty: number;
@@ -110,6 +123,7 @@ export interface PlanningMonthData {
   notes: PlanningNoteRow[];
   manpower: PlanningManpowerRow[];
   leaves: PlanningLeaveRow[];
+  rangeEntries?: PlanningRangeEntryRow[];
   products: string[];
   people: { id: string; name: string }[];
   versions: PlanningVersionType[];

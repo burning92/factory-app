@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { CalendarDays, Save, Copy, Plus, Trash2, Download, X } from "lucide-react";
+import { CalendarDays, Save, Copy, Plus, Trash2, Download, X, CalendarRange } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   computeActualManpower,
@@ -40,6 +40,19 @@ type DayDraft = {
   otherItems: { person_name: string; detail: string }[];
   notes: string[];
   noteInput: string;
+};
+
+type RangeEntryType = "annual" | "half" | "other";
+type RangeApplyMode = "all_days" | "weekdays_only";
+type ConflictStrategy = "overwrite" | "skip";
+
+type RangeDraft = {
+  person_name: string;
+  entry_type: RangeEntryType;
+  reason: string;
+  start_date: string;
+  end_date: string;
+  apply_mode: RangeApplyMode;
 };
 
 const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"] as const;
@@ -95,6 +108,19 @@ function parseOtherNoteText(noteText: string): { detail: string; person_name: st
   return { detail, person_name };
 }
 
+function enumerateRangeDates(startDate: string, endDate: string, applyMode: RangeApplyMode): string[] {
+  if (!startDate || !endDate || endDate < startDate) return [];
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+  const out: string[] = [];
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const weekday = d.getDay();
+    if (applyMode === "weekdays_only" && (weekday === 0 || weekday === 6)) continue;
+    out.push(ymd(d.getFullYear(), d.getMonth() + 1, d.getDate()));
+  }
+  return out;
+}
+
 export default function PlanningBoardClient() {
   const router = useRouter();
   const now = new Date();
@@ -124,6 +150,18 @@ export default function PlanningBoardClient() {
   const [showNoteInput, setShowNoteInput] = useState(false);
   const [baselineSaving, setBaselineSaving] = useState(false);
   const [baselineInput, setBaselineInput] = useState("");
+  const [rangeModalOpen, setRangeModalOpen] = useState(false);
+  const [rangeSaving, setRangeSaving] = useState(false);
+  const [rangeError, setRangeError] = useState<string | null>(null);
+  const [rangeConflictDates, setRangeConflictDates] = useState<string[]>([]);
+  const [rangeDraft, setRangeDraft] = useState<RangeDraft>({
+    person_name: "",
+    entry_type: "other",
+    reason: "",
+    start_date: selectedDate,
+    end_date: selectedDate,
+    apply_mode: "weekdays_only",
+  });
 
   const { profile, loading: authLoading } = useAuth();
   const canView =
@@ -250,6 +288,15 @@ export default function PlanningBoardClient() {
     setProductPlanExpanded(false);
     setMaterialViewMode("shortage");
   }, [year, month]);
+
+  useEffect(() => {
+    if (rangeModalOpen) return;
+    setRangeDraft((prev) => ({
+      ...prev,
+      start_date: selectedDate,
+      end_date: selectedDate,
+    }));
+  }, [rangeModalOpen, selectedDate]);
 
   useEffect(() => {
     if (!dayDrawerOpen) return;
@@ -460,6 +507,14 @@ export default function PlanningBoardClient() {
     halfCount,
     draft.otherItems.filter((x) => x.person_name.trim() && x.detail.trim()).length
   );
+  const rangePreviewDates = useMemo(
+    () => enumerateRangeDates(rangeDraft.start_date, rangeDraft.end_date, rangeDraft.apply_mode),
+    [rangeDraft.apply_mode, rangeDraft.end_date, rangeDraft.start_date]
+  );
+  const activeRangeEntries = useMemo(() => {
+    const today = ymd(now.getFullYear(), now.getMonth() + 1, now.getDate());
+    return (data?.rangeEntries ?? []).filter((r) => r.start_date <= today && r.end_date >= today);
+  }, [data?.rangeEntries, now]);
 
   const saveDay = async () => {
     if (!data || !canEdit) return;
@@ -510,6 +565,103 @@ export default function PlanningBoardClient() {
     setSaving(false);
     if (!res.ok) {
       setError(json.message ?? json.error ?? "저장 실패");
+      return;
+    }
+    await loadMonth();
+  };
+
+  const applyRange = async (strategy?: ConflictStrategy) => {
+    if (!canEdit || !data) return;
+    setRangeError(null);
+    const person = rangeDraft.person_name.trim();
+    if (!person) {
+      setRangeError("이름을 입력해 주세요.");
+      return;
+    }
+    if (!rangeDraft.start_date || !rangeDraft.end_date) {
+      setRangeError("시작일/종료일을 입력해 주세요.");
+      return;
+    }
+    if (rangeDraft.end_date < rangeDraft.start_date) {
+      setRangeError("종료일이 시작일보다 빠를 수 없습니다.");
+      return;
+    }
+    if (rangeDraft.entry_type === "other" && !rangeDraft.reason.trim()) {
+      setRangeError("기타 유형은 사유를 입력해 주세요.");
+      return;
+    }
+    if (rangePreviewDates.length === 0) {
+      setRangeError("적용 대상 날짜가 없습니다.");
+      return;
+    }
+
+    setRangeSaving(true);
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session?.access_token || !session?.refresh_token) {
+      setRangeSaving(false);
+      setRangeError("로그인 세션이 없습니다.");
+      return;
+    }
+
+    const res = await fetch("/api/production/planning/range", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+        payload: {
+          person_name: person,
+          entry_type: rangeDraft.entry_type,
+          reason: rangeDraft.reason.trim(),
+          start_date: rangeDraft.start_date,
+          end_date: rangeDraft.end_date,
+          apply_mode: rangeDraft.apply_mode,
+          conflict_strategy: strategy,
+        },
+      }),
+    });
+    const json = (await res.json()) as {
+      ok?: boolean;
+      error?: string;
+      message?: string;
+      needs_confirmation?: boolean;
+      conflict_dates?: string[];
+    };
+    setRangeSaving(false);
+    if (res.status === 409 && json.needs_confirmation) {
+      setRangeConflictDates(json.conflict_dates ?? []);
+      return;
+    }
+    if (!res.ok || !json.ok) {
+      setRangeError(json.message ?? json.error ?? "장기 일정 저장 실패");
+      return;
+    }
+    setRangeConflictDates([]);
+    setRangeModalOpen(false);
+    await loadMonth();
+  };
+
+  const deleteRangeEntry = async (id: string) => {
+    if (!canEdit || !id) return;
+    const confirmed = window.confirm("장기 일정 원본 1건을 삭제합니다. 이미 전개된 일자 데이터는 유지됩니다. 삭제할까요?");
+    if (!confirmed) return;
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session?.access_token || !session?.refresh_token) {
+      setError("로그인 세션이 없습니다.");
+      return;
+    }
+    const qs = new URLSearchParams({
+      id,
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+    });
+    const res = await fetch(`/api/production/planning/range?${qs.toString()}`, { method: "DELETE" });
+    if (!res.ok) {
+      setError("장기 일정 삭제 실패");
       return;
     }
     await loadMonth();
@@ -1365,9 +1517,44 @@ export default function PlanningBoardClient() {
                             >
                               <Plus className="h-4 w-4" /> 기타
                             </button>
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 rounded-md border border-slate-600/80 px-2 py-0.5 text-xs text-slate-300 hover:border-cyan-500/50 hover:text-cyan-200"
+                              onClick={() => {
+                                setRangeError(null);
+                                setRangeConflictDates([]);
+                                setRangeModalOpen(true);
+                              }}
+                            >
+                              <CalendarRange className="h-3.5 w-3.5" /> 기간 입력
+                            </button>
                           </div>
                         ) : null}
                       </div>
+                      {(activeRangeEntries.length > 0 || (data.rangeEntries?.length ?? 0) > 0) && detailMode === "leave" ? (
+                        <div className="rounded-lg border border-cyan-600/30 bg-cyan-950/20 px-3 py-2">
+                          <p className="text-xs text-cyan-200">장기 일정 {activeRangeEntries.length}건 적용중</p>
+                          <div className="mt-1 space-y-1">
+                            {(data.rangeEntries ?? []).slice(0, 3).map((r) => (
+                              <div key={r.id} className="flex items-center justify-between gap-2 text-[11px] text-slate-300">
+                                <span className="truncate">
+                                  {r.person_name} · {r.entry_type === "annual" ? "연차" : r.entry_type === "half" ? "반차" : `기타(${r.reason ?? "-"})`} ·{" "}
+                                  {r.start_date.slice(5)}~{r.end_date.slice(5)}
+                                </span>
+                                {canEdit ? (
+                                  <button
+                                    type="button"
+                                    className="shrink-0 rounded border border-slate-600 px-1.5 py-0.5 text-[10px] text-slate-300 hover:text-rose-200"
+                                    onClick={() => void deleteRangeEntry(r.id)}
+                                  >
+                                    삭제
+                                  </button>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
                       <div className="max-h-[min(34vh,300px)] space-y-2 overflow-y-auto">
                         {draft.leaves.map((leave, idx) => (
                           <div key={`leave-${idx}`} className="grid grid-cols-[5rem_1fr_2rem] items-center gap-2">
@@ -1613,6 +1800,156 @@ export default function PlanningBoardClient() {
                 </div>
               </div>
             </>,
+                document.body
+              )
+            : null}
+          {rangeModalOpen
+            ? createPortal(
+                <>
+                  <button
+                    type="button"
+                    aria-label="장기 일정 입력 닫기"
+                    className="fixed inset-0 z-[340] bg-black/55"
+                    onClick={() => setRangeModalOpen(false)}
+                  />
+                  <div className="fixed left-1/2 top-1/2 z-[350] w-[min(94vw,34rem)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-slate-600 bg-space-900 p-4 shadow-2xl shadow-black/50 sm:p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs text-slate-500">숨김형 보조 기능</p>
+                        <h3 className="text-lg font-semibold text-cyan-100">장기 일정(기간 입력)</h3>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setRangeModalOpen(false)}
+                        className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <label className="space-y-1 text-sm">
+                        <span className="text-slate-300">이름</span>
+                        <input
+                          list="planning-people-drawer"
+                          value={rangeDraft.person_name}
+                          onChange={(e) => setRangeDraft((prev) => ({ ...prev, person_name: e.target.value }))}
+                          className="w-full rounded-lg border border-slate-600 bg-space-800 px-3 py-2 text-sm text-slate-100"
+                          placeholder="이름"
+                        />
+                      </label>
+                      <label className="space-y-1 text-sm">
+                        <span className="text-slate-300">유형</span>
+                        <select
+                          value={rangeDraft.entry_type}
+                          onChange={(e) =>
+                            setRangeDraft((prev) => ({ ...prev, entry_type: e.target.value === "half" ? "half" : e.target.value === "other" ? "other" : "annual" }))
+                          }
+                          className="w-full rounded-lg border border-slate-600 bg-space-800 px-3 py-2 text-sm text-slate-100"
+                        >
+                          <option value="annual">연차</option>
+                          <option value="half">반차</option>
+                          <option value="other">기타</option>
+                        </select>
+                      </label>
+                      <label className="space-y-1 text-sm sm:col-span-2">
+                        <span className="text-slate-300">사유 {rangeDraft.entry_type === "other" ? "(필수)" : "(선택)"}</span>
+                        <input
+                          value={rangeDraft.reason}
+                          onChange={(e) => setRangeDraft((prev) => ({ ...prev, reason: e.target.value }))}
+                          className="w-full rounded-lg border border-slate-600 bg-space-800 px-3 py-2 text-sm text-slate-100"
+                          placeholder={rangeDraft.entry_type === "other" ? "예: 병가, 교육, 출장" : "선택 입력"}
+                        />
+                      </label>
+                      <label className="space-y-1 text-sm">
+                        <span className="text-slate-300">시작일</span>
+                        <input
+                          type="date"
+                          value={rangeDraft.start_date}
+                          onChange={(e) => setRangeDraft((prev) => ({ ...prev, start_date: e.target.value }))}
+                          className="w-full rounded-lg border border-slate-600 bg-space-800 px-3 py-2 text-sm text-slate-100"
+                        />
+                      </label>
+                      <label className="space-y-1 text-sm">
+                        <span className="text-slate-300">종료일</span>
+                        <input
+                          type="date"
+                          value={rangeDraft.end_date}
+                          onChange={(e) => setRangeDraft((prev) => ({ ...prev, end_date: e.target.value }))}
+                          className="w-full rounded-lg border border-slate-600 bg-space-800 px-3 py-2 text-sm text-slate-100"
+                        />
+                      </label>
+                      <label className="space-y-1 text-sm sm:col-span-2">
+                        <span className="text-slate-300">적용 옵션</span>
+                        <select
+                          value={rangeDraft.apply_mode}
+                          onChange={(e) => setRangeDraft((prev) => ({ ...prev, apply_mode: e.target.value === "weekdays_only" ? "weekdays_only" : "all_days" }))}
+                          className="w-full rounded-lg border border-slate-600 bg-space-800 px-3 py-2 text-sm text-slate-100"
+                        >
+                          <option value="all_days">전체 날짜</option>
+                          <option value="weekdays_only">평일만</option>
+                        </select>
+                      </label>
+                    </div>
+
+                    <div className="mt-3 rounded-lg border border-slate-700 bg-space-800/60 p-3 text-xs text-slate-300">
+                      <p>
+                        미리보기: 총 <span className="font-semibold text-cyan-200">{rangePreviewDates.length}</span>일 적용
+                      </p>
+                      <p className="mt-1 break-words text-slate-400">{rangePreviewDates.slice(0, 10).join(", ")}{rangePreviewDates.length > 10 ? " ..." : ""}</p>
+                    </div>
+
+                    {rangeConflictDates.length > 0 ? (
+                      <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-950/30 p-3 text-xs text-amber-100">
+                        <p className="font-medium">충돌 날짜 {rangeConflictDates.length}건</p>
+                        <p className="mt-1 break-words text-amber-200/90">{rangeConflictDates.join(", ")}</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void applyRange("overwrite")}
+                            className="rounded-md bg-rose-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-rose-500"
+                          >
+                            덮어쓰기
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void applyRange("skip")}
+                            className="rounded-md border border-amber-400/50 px-2.5 py-1.5 text-xs text-amber-100 hover:bg-amber-500/10"
+                          >
+                            충돌일 건너뛰기
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setRangeConflictDates([])}
+                            className="rounded-md border border-slate-600 px-2.5 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
+                          >
+                            취소
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {rangeError ? <p className="mt-3 text-sm text-rose-300">{rangeError}</p> : null}
+
+                    <div className="mt-4 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setRangeModalOpen(false)}
+                        className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
+                      >
+                        닫기
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void applyRange()}
+                        disabled={rangeSaving}
+                        className="rounded-lg bg-cyan-600 px-3 py-2 text-sm font-medium text-white hover:bg-cyan-500 disabled:opacity-60"
+                      >
+                        {rangeSaving ? "적용 중..." : "적용"}
+                      </button>
+                    </div>
+                  </div>
+                </>,
                 document.body
               )
             : null}

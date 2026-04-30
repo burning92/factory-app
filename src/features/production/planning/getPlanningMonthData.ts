@@ -13,6 +13,7 @@ import type {
   PlanningMonthData,
   PlanningMonthRow,
   PlanningNoteRow,
+  PlanningRangeEntryRow,
   PlanningSubmaterialRow,
   PlanningVersionType,
 } from "./types";
@@ -63,8 +64,11 @@ async function ensureMonth(year: number, month: number, version: PlanningVersion
 export async function getPlanningMonthData(year: number, month: number, version: PlanningVersionType): Promise<PlanningMonthData> {
   const supabase = getSupabaseAdmin();
   const monthRow = await ensureMonth(year, month, version);
+  const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
+  const monthEnd = `${year}-${String(month).padStart(2, "0")}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
 
-  const [entriesRes, notesRes, manpowerRes, leavesRes, monthsRes, bomRes, submaterialsRes, materialsRes, submaterialItemsRes, inventoryRes, profilesRes] = await Promise.all([
+  const [entriesRes, notesRes, manpowerRes, leavesRes, rangeEntriesRes, monthsRes, bomRes, submaterialsRes, materialsRes, submaterialItemsRes, inventoryRes, profilesRes] =
+    await Promise.all([
     supabase
       .from("production_plan_entries")
       .select("id,month_id,plan_date,product_name_snapshot,qty,sort_order")
@@ -81,12 +85,18 @@ export async function getPlanningMonthData(year: number, month: number, version:
       .from("production_plan_manpower")
       .select("id,month_id,plan_date,annual_leave_count,half_day_count,other_count,actual_manpower")
       .eq("month_id", monthRow.id),
-    supabase
+      supabase
       .from("production_plan_leaves")
       .select("id,month_id,plan_date,leave_type,person_name,profile_id")
       .eq("month_id", monthRow.id)
       .order("plan_date", { ascending: true })
       .order("id", { ascending: true }),
+      supabase
+        .from("planning_range_entries")
+        .select("id,person_name,entry_type,reason,start_date,end_date,apply_mode,created_by,created_at,updated_at")
+        .gte("end_date", monthStart)
+        .lte("start_date", monthEnd)
+        .order("created_at", { ascending: false }),
     supabase
       .from("production_plan_months")
       .select("version_type")
@@ -110,6 +120,7 @@ export async function getPlanningMonthData(year: number, month: number, version:
   if (entriesRes.error) throw entriesRes.error;
   if (notesRes.error) throw notesRes.error;
   if (manpowerRes.error) throw manpowerRes.error;
+  if (rangeEntriesRes.error) throw rangeEntriesRes.error;
   if (monthsRes.error) throw monthsRes.error;
   if (bomRes.error) throw bomRes.error;
   if (submaterialsRes.error) throw submaterialsRes.error;
@@ -152,6 +163,18 @@ export async function getPlanningMonthData(year: number, month: number, version:
     person_name: String(r.person_name ?? ""),
     profile_id: r.profile_id != null ? String(r.profile_id) : null,
   })) as PlanningLeaveRow[];
+  const rangeEntries = ((rangeEntriesRes.data ?? []) as Record<string, unknown>[]).map((r) => ({
+    id: String(r.id ?? ""),
+    person_name: String(r.person_name ?? ""),
+    entry_type: String(r.entry_type) === "half" ? "half" : String(r.entry_type) === "other" ? "other" : "annual",
+    reason: r.reason != null ? String(r.reason) : null,
+    start_date: String(r.start_date).slice(0, 10),
+    end_date: String(r.end_date).slice(0, 10),
+    apply_mode: String(r.apply_mode) === "weekdays_only" ? "weekdays_only" : "all_days",
+    created_by: r.created_by != null ? String(r.created_by) : null,
+    created_at: String(r.created_at ?? ""),
+    updated_at: String(r.updated_at ?? ""),
+  })) as PlanningRangeEntryRow[];
 
   const bomRows = ((bomRes.data ?? []) as Record<string, unknown>[]).map((r) => ({
     product_name: String(r.product_name ?? ""),
@@ -222,6 +245,7 @@ export async function getPlanningMonthData(year: number, month: number, version:
     notes,
     manpower,
     leaves,
+    rangeEntries,
     products,
     people,
     versions: versions.length > 0 ? versions : [version],
