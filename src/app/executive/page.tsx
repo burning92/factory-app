@@ -54,6 +54,14 @@ function toYmd(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+function lastDayOfMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
+}
+
 function mondayOfWeek(d: Date): Date {
   const copy = new Date(d);
   const day = copy.getDay();
@@ -363,30 +371,71 @@ export default function ExecutiveDashboardPage() {
   const [wasteYoy, setWasteYoy] = useState<WasteYoySamePeriodResult | null>(null);
   const [periodKey, setPeriodKey] = useState<PeriodKey>("ytd");
 
-  const year = useMemo(() => new Date().getFullYear(), []);
-  const calendarMonth = useMemo(() => {
-    const d = new Date();
-    return { y: d.getFullYear(), m: d.getMonth() + 1 };
-  }, []);
+  const clock = useMemo(() => new Date(), []);
+  const [refYear, setRefYear] = useState(() => clock.getFullYear());
+  const [refMonth, setRefMonth] = useState(() => clock.getMonth() + 1);
 
-  const todayYmd = useMemo(() => toYmd(new Date()), []);
   const periodRange = useMemo(() => {
     const today = new Date();
-    const end = toYmd(today);
+    const ty = today.getFullYear();
+    const tm = today.getMonth() + 1;
+    const td = today.getDate();
+    const todayStr = `${ty}-${pad2(tm)}-${pad2(td)}`;
+
     if (periodKey === "week") {
-      return { start: toYmd(mondayOfWeek(today)), end };
+      return { start: toYmd(mondayOfWeek(today)), end: todayStr };
     }
+
+    const monthStart = `${refYear}-${pad2(refMonth)}-01`;
+    const ld = lastDayOfMonth(refYear, refMonth);
+    const monthEnd = `${refYear}-${pad2(refMonth)}-${pad2(ld)}`;
+
     if (periodKey === "month") {
-      return { start: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`, end };
+      const isCurrentMonth = refYear === ty && refMonth === tm;
+      const end = isCurrentMonth ? todayStr : monthEnd;
+      return { start: monthStart, end };
     }
-    return { start: `${today.getFullYear()}-01-01`, end };
-  }, [periodKey]);
+
+    const yStart = `${refYear}-01-01`;
+    const isCurrentRefMonth = refYear === ty && refMonth === tm;
+    const end = isCurrentRefMonth ? todayStr : monthEnd;
+    return { start: yStart, end };
+  }, [periodKey, refYear, refMonth]);
 
   const periodLabel = useMemo(() => {
+    const today = new Date();
+    const ty = today.getFullYear();
+    const tm = today.getMonth() + 1;
+    const isRefCurrentMonth = refYear === ty && refMonth === tm;
+
     if (periodKey === "week") return "이번 주";
-    if (periodKey === "month") return "이번 달";
-    return "올해 누적";
-  }, [periodKey]);
+    if (periodKey === "month") {
+      return isRefCurrentMonth ? "이번 달" : `${refYear}년 ${refMonth}월`;
+    }
+    if (isRefCurrentMonth) return "올해 누적";
+    return `${refYear}년 1~${refMonth}월 누적`;
+  }, [periodKey, refYear, refMonth]);
+
+  /** 생산 번들·폐기 YoY 등 연도 기준 (주간은 항상 당해 연도) */
+  const bundleYear = periodKey === "week" ? new Date().getFullYear() : refYear;
+
+  /** 계획 스파크라인·baseline 월 기준 (주간은 당월 기준) */
+  const metricsYm = useMemo(() => {
+    if (periodKey === "week") {
+      const d = new Date();
+      return { y: d.getFullYear(), m: d.getMonth() + 1 };
+    }
+    return { y: refYear, m: refMonth };
+  }, [periodKey, refYear, refMonth]);
+
+  const headerDisplayYear = periodKey === "week" ? new Date().getFullYear() : refYear;
+
+  const yearSelectOptions = useMemo(() => {
+    const cy = new Date().getFullYear();
+    const out: number[] = [];
+    for (let y = cy - 2; y <= cy + 1; y++) out.push(y);
+    return out;
+  }, []);
 
   const wasteYoyCompareUi = useMemo(() => {
     if (periodKey !== "ytd") return null;
@@ -417,7 +466,7 @@ export default function ExecutiveDashboardPage() {
       setLoadError(null);
       const bomRefs = bomRowsToRefs(bomList);
       const meta = materialsToMeta(materials);
-      const { bundle: b, error: be } = await loadProductionBundle(supabase, year, bomRefs, meta);
+      const { bundle: b, error: be } = await loadProductionBundle(supabase, bundleYear, bomRefs, meta);
       if (cancelled) return;
       if (be) {
         setLoadError(be.message);
@@ -448,9 +497,9 @@ export default function ExecutiveDashboardPage() {
             return normManual((await r.json()) as Partial<ManualWasteImportSeries>);
           };
           const [bPrev, mCur, mPrev] = await Promise.all([
-            loadProductionBundle(supabase, year - 1, bomRefs, meta),
-            fetchManual(year),
-            fetchManual(year - 1),
+            loadProductionBundle(supabase, bundleYear - 1, bomRefs, meta),
+            fetchManual(bundleYear),
+            fetchManual(bundleYear - 1),
           ]);
           if (cancelled) return;
           if (!b?.days) {
@@ -460,7 +509,7 @@ export default function ExecutiveDashboardPage() {
             const rowsCur = mergeBundleDaysWithManualImportsForTable(b.days, mCur).rows;
             setWasteMergedRows(rowsCur);
             const rowsPrev = mergeBundleDaysWithManualImportsForTable(bPrev.bundle?.days ?? [], mPrev).rows;
-            setWasteYoy(computeWasteYoySamePeriod(rowsCur, rowsPrev, year));
+            setWasteYoy(computeWasteYoySamePeriod(rowsCur, rowsPrev, bundleYear));
           }
         } catch {
           if (!cancelled) {
@@ -469,8 +518,8 @@ export default function ExecutiveDashboardPage() {
           }
         }
         const planMetrics = await getPlanningVsActualMetrics(supabase, {
-          year: calendarMonth.y,
-          month: calendarMonth.m,
+          year: metricsYm.y,
+          month: metricsYm.m,
           startDate: periodRange.start,
           endDate: periodRange.end,
           periodLabel,
@@ -480,8 +529,8 @@ export default function ExecutiveDashboardPage() {
         setPlanSparklineAchievementByMonth(planMetrics.sparklineAchievementByMonth);
         setPlanDashboard(planMetrics);
         const mp = await getManpowerKpis(supabase, {
-          year: calendarMonth.y,
-          month: calendarMonth.m,
+          year: metricsYm.y,
+          month: metricsYm.m,
           startDate: periodRange.start,
           endDate: periodRange.end,
           periodLabel,
@@ -508,9 +557,9 @@ export default function ExecutiveDashboardPage() {
     bomLoading,
     materials,
     bomList,
-    year,
-    calendarMonth.y,
-    calendarMonth.m,
+    bundleYear,
+    metricsYm.y,
+    metricsYm.m,
     orgCode,
     periodRange.start,
     periodRange.end,
@@ -573,38 +622,84 @@ export default function ExecutiveDashboardPage() {
   return (
     <div className="mx-auto w-full min-h-[calc(100dvh-3.5rem)] md:min-h-0 max-w-[1800px] px-4 md:px-6 lg:px-8 xl:px-10 pb-24 md:pb-8">
       <header className="mb-6 md:mb-8 lg:mb-10">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-cyan-400/90">
+        <div className="mb-2 flex min-w-0 flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+          <div className="flex shrink-0 items-center gap-2 text-cyan-400/90">
             <LayoutDashboard className="w-6 h-6 md:w-7 md:h-7" strokeWidth={1.8} />
             <span className="text-xs md:text-sm font-semibold uppercase tracking-wide">Dashboard</span>
           </div>
-          <div className="inline-flex shrink-0 items-center rounded-lg border border-slate-700/70 bg-slate-900/60 p-0.5">
-            {([
-              ["week", "이번 주"],
-              ["month", "이번 달"],
-              ["ytd", "올해 누적"],
-            ] as const).map(([key, label]) => {
-              const active = periodKey === key;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setPeriodKey(key)}
-                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                    active ? "bg-cyan-500/20 text-cyan-200" : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
+          <div className="flex min-w-0 shrink-0 flex-nowrap items-center gap-2 sm:gap-2.5">
+            <div className="inline-flex shrink-0 items-center rounded-lg border border-slate-700/70 bg-slate-900/60 p-0.5">
+              {([
+                ["week", "이번 주"],
+                ["month", "이번 달"],
+                ["ytd", "올해 누적"],
+              ] as const).map(([key, label]) => {
+                const active = periodKey === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setPeriodKey(key)}
+                    className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                      active ? "bg-cyan-500/20 text-cyan-200" : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <div
+              className="flex shrink-0 items-center gap-1.5"
+              title={
+                periodKey === "week"
+                  ? "주간 보기는 항상 이번 주(월요일~오늘) 기준이며, 기준 연·월 선택은 월/누적 보기에만 적용됩니다."
+                  : undefined
+              }
+            >
+              <label htmlFor="exec-ref-year" className="sr-only">
+                기준 연도
+              </label>
+              <select
+                id="exec-ref-year"
+                value={refYear}
+                onChange={(e) => setRefYear(Number(e.target.value))}
+                className="max-w-[5.5rem] cursor-pointer rounded-md border border-slate-600/60 bg-slate-900/85 py-1 pl-2 pr-8 text-xs font-medium text-slate-200 focus:border-cyan-500/45 focus:outline-none focus:ring-1 focus:ring-cyan-500/25"
+              >
+                {yearSelectOptions.map((y) => (
+                  <option key={y} value={y}>
+                    {y}년
+                  </option>
+                ))}
+              </select>
+              <label htmlFor="exec-ref-month" className="sr-only">
+                기준 월
+              </label>
+              <select
+                id="exec-ref-month"
+                value={refMonth}
+                onChange={(e) => setRefMonth(Number(e.target.value))}
+                className="max-w-[4.25rem] cursor-pointer rounded-md border border-slate-600/60 bg-slate-900/85 py-1 pl-2 pr-8 text-xs font-medium text-slate-200 focus:border-cyan-500/45 focus:outline-none focus:ring-1 focus:ring-cyan-500/25"
+              >
+                {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                  <option key={m} value={m}>
+                    {m}월
+                  </option>
+                ))}
+              </select>
+            </div>
+            {periodKey === "week" ? (
+              <span className="hidden text-[10px] font-medium text-slate-500 lg:inline whitespace-nowrap">
+                주간은 당주만
+              </span>
+            ) : null}
           </div>
         </div>
         <h1 className="text-2xl md:text-3xl lg:text-4xl font-semibold text-slate-100 tracking-tight">
           대시보드
         </h1>
         <p className="text-slate-400 text-sm md:text-base mt-2 md:mt-3 max-w-4xl leading-relaxed font-medium">
-          {year}년 생산·계획·폐기·환경 지표를 한 화면에서 확인합니다. 현재 표시 기준은 {periodLabel}입니다.
+          {headerDisplayYear}년 생산·계획·폐기·환경 지표를 한 화면에서 확인합니다. 현재 표시 기준은 {periodLabel}입니다.
         </p>
       </header>
 
@@ -633,8 +728,8 @@ export default function ExecutiveDashboardPage() {
                 }
               >
                 <span className="block">
-                  올해 누적 생산량입니다. 일별 생산기록을 기준으로 집계했으며, 일부 누락 구간은 생산실적 자료를
-                  반영했습니다.
+                  {periodLabel} 구간의 생산량입니다. 일별 생산기록을 기준으로 집계했으며, 일부 누락 구간은 생산실적
+                  자료를 반영했습니다.
                 </span>
                 <span className="mt-2 block text-slate-300">상세 페이지에서 일자별 기준을 확인할 수 있습니다.</span>
               </ExecutivePortalTooltip>
@@ -786,8 +881,8 @@ export default function ExecutiveDashboardPage() {
               </div>
               <div className="min-w-0 overflow-visible sm:pl-1 sm:pb-0.5">
                 <PlanActualYtdAchievementMiniBars
-                  year={planDashboard?.year ?? calendarMonth.y}
-                  currentMonth={planDashboard?.month ?? calendarMonth.m}
+                  year={planDashboard?.year ?? metricsYm.y}
+                  currentMonth={planDashboard?.month ?? metricsYm.m}
                   currentMonthAchievementPct={planDashboard?.achievementPct ?? null}
                   achievementPctByMonth={planSparklineAchievementByMonth}
                   title="올해 월별 달성 추이"
@@ -1109,7 +1204,7 @@ export default function ExecutiveDashboardPage() {
 
               <div className="mt-5 border-t border-slate-700/45 pt-4">
                 <p className={`mb-3 ${dashCaption}`}>
-                  {periodKey === "ytd" ? "올해 누적 환경 평균 기준" : `${periodLabel} 환경 평균 기준`}
+                  {`${periodLabel} 환경 평균 기준`}
                 </p>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                   <div className="min-w-0 flex-1">

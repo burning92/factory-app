@@ -118,7 +118,8 @@ export async function getManpowerKpis(
   for (const m of monthRows) baselineByMonthId.set(String(m.id), Math.max(1, Number(m.baseline_headcount ?? 25) || 25));
 
   const periodValues: number[] = [];
-  const ytdValues: number[] = [];
+  const periodDaySet = new Set<string>();
+  const ytdSpanDaySet = new Set<string>();
   const periodUtilValues: number[] = [];
   const monthlyDayCountMap = new Map<number, number>();
 
@@ -126,10 +127,15 @@ export async function getManpowerKpis(
     const date = String(row.plan_date ?? "").slice(0, 10);
     const actual = Number(row.actual_manpower ?? 0);
     if (!date || actual <= 0) continue;
-    ytdValues.push(actual);
     const mm = Number(date.slice(5, 7));
     monthlyDayCountMap.set(mm, (monthlyDayCountMap.get(mm) ?? 0) + 1);
-    if (date >= startDate && date <= endDate) periodValues.push(actual);
+    if (date >= startDate && date <= endDate) {
+      periodValues.push(actual);
+      periodDaySet.add(date);
+    }
+    if (date >= yearStart && date <= endDate) {
+      ytdSpanDaySet.add(date);
+    }
     const perDayBase = baselineByMonthId.get(String(row.month_id ?? "")) ?? baselineHeadcount;
     if (date >= startDate && date <= endDate) periodUtilValues.push((actual / perDayBase) * 100);
   }
@@ -153,8 +159,8 @@ export async function getManpowerKpis(
     periodLabel,
     baselineHeadcount,
     totalMembers,
-    operatingDaysThisMonth: periodValues.length,
-    operatingDaysYearToDate: ytdValues.length,
+    operatingDaysThisMonth: periodDaySet.size,
+    operatingDaysYearToDate: ytdSpanDaySet.size,
     avgActualManpowerThisMonth,
     avgUtilizationThisMonth,
     productivityPerPersonDay,
