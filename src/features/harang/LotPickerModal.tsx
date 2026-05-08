@@ -17,6 +17,10 @@ function roundTo3(n: number): number {
   return Math.round(n * 1000) / 1000;
 }
 
+function formatAmount(n: number): string {
+  return n.toLocaleString("ko-KR", { maximumFractionDigits: 3 });
+}
+
 function isParbakeDoughName(name: string): boolean {
   return name.replace(/\s/g, "").includes("파베이크도우");
 }
@@ -234,6 +238,16 @@ export default function LotPickerModal({
     const fromLot = lots[0]?.unit;
     return fromLot ? String(fromLot) : "";
   }, [bomUnit, lots]);
+  const boxHeaderLabel = useMemo(() => {
+    if (isParbake) return `박스 (1박스=${PARBAKE_BOX_EA}EA)`;
+    if (isRawWeightMode && boxWeightG && boxWeightG > 0) return `박스 (1박스=${formatAmount(boxWeightG)}g)`;
+    return "박스";
+  }, [isParbake, isRawWeightMode, boxWeightG]);
+  const unitHeaderLabel = useMemo(() => {
+    if (isParbake) return "낱개 (1낱개=1EA)";
+    if (isRawWeightMode && unitWeightG && unitWeightG > 0) return `낱개 (1낱개=${formatAmount(unitWeightG)}g)`;
+    return isParbake || isRawWeightMode ? "낱개" : "수량";
+  }, [isParbake, isRawWeightMode, unitWeightG]);
 
   const totalCurrentStock = useMemo(
     () => rows.reduce((s, r) => s + Number(r.lot.current_quantity || 0), 0),
@@ -276,19 +290,21 @@ export default function LotPickerModal({
       <div className="relative z-[301] flex w-full max-w-full sm:max-w-4xl max-h-[min(92dvh,860px)] flex-col overflow-hidden rounded-t-xl border border-slate-300/90 bg-white text-slate-900 shadow-2xl shadow-slate-900/15 sm:max-h-[min(82dvh,780px)] sm:rounded-lg">
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-blue-950/20 bg-gradient-to-b from-blue-900 to-blue-950 px-3 py-2.5 sm:px-4 sm:py-2.5">
           <div className="min-w-0 pr-1">
-            <p className="text-sm font-semibold text-white truncate leading-snug">{materialName}</p>
+            <p className="text-[11px] font-semibold !text-black truncate leading-snug">{materialName || "품목명 없음"}</p>
             <p className="mt-1 text-[11px] leading-relaxed text-blue-100/95">
               LOT별로 박스·수량·잔량을 입력합니다. 1박스 중량이 등록된 원재료는 박스 입력 시 수량(g)이 자동 계산됩니다.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 rounded-md p-1.5 text-white/90 hover:bg-white/10"
-            aria-label="닫기"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="shrink-0 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md p-1.5 text-white/90 hover:bg-white/10"
+              aria-label="닫기"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {bomRequiredQty != null && Number.isFinite(bomRequiredQty) && bomRequiredQty >= 0 && (
@@ -307,7 +323,6 @@ export default function LotPickerModal({
           <Search className="w-4 h-4 shrink-0" />
           <span>목록은 유통기한·제조일자(LOT) 순입니다.</span>
         </div>
-
         <div className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-auto">
           {loading && <p className="p-6 text-center text-sm text-slate-500">불러오는 중…</p>}
           {!loading && lots.length === 0 && (
@@ -321,9 +336,9 @@ export default function LotPickerModal({
                 <tr className="bg-slate-50 text-slate-700 border-b border-slate-200">
                   <th className="px-3 py-2 text-left font-medium">시리얼/로트 No.</th>
                   <th className="px-3 py-2 text-right font-medium">현재고</th>
-                  <th className="px-3 py-2 text-right font-medium">박스</th>
+                  <th className="px-3 py-2 text-right font-medium">{boxHeaderLabel}</th>
                   {isParbake || isRawWeightMode ? (
-                    <th className="px-3 py-2 text-right font-medium">낱개</th>
+                    <th className="px-3 py-2 text-right font-medium">{unitHeaderLabel}</th>
                   ) : (
                     <th className="px-3 py-2 text-right font-medium">수량</th>
                   )}
@@ -441,7 +456,7 @@ export default function LotPickerModal({
             type="button"
             onClick={handleApply}
             disabled={loading || lots.length === 0}
-            className="px-4 py-1.5 rounded text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+            className="px-3 py-1.5 rounded border border-cyan-600 text-sm font-medium text-cyan-700 bg-cyan-50 hover:bg-cyan-100 disabled:opacity-50"
           >
             적용
           </button>
