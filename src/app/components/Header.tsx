@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -118,6 +118,13 @@ export default function Header() {
   const desktopMaterialsItems: DropdownItem[] = isRestrictedWorker
     ? WORKER_DESKTOP_MATERIALS
     : DESKTOP_DROPDOWN_MATERIALS;
+  const desktopManagementItems: DropdownItem[] = useMemo(
+    () => [
+      ...DESKTOP_DROPDOWN_MANAGEMENT,
+      { href: "/admin/material-stock-lab", label: "재고 장부 테스트(Lab)" },
+    ],
+    []
+  );
   const desktopNavDropdownKeys: DropdownKey[] = isRestrictedWorker
     ? ["production", "materials"]
     : ["production", "materials", "daily", ...(isAdmin ? (["management"] as const) : [])];
@@ -367,7 +374,7 @@ export default function Header() {
                     ? desktopMaterialsItems
                     : key === "daily"
                       ? null
-                      : DESKTOP_DROPDOWN_MANAGEMENT;
+                      : desktopManagementItems;
               const isActive = pathname === href || pathname.startsWith(href + "/");
               const isOpen = activeDropdown === key;
               return (
