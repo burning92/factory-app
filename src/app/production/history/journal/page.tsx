@@ -224,6 +224,18 @@ function JournalPageContent() {
     });
   }, [stored, breadDerived?.applicable]);
 
+  const breadIngredientUsageRows = useMemo((): BreadIngredientUsageRow[] => {
+    if (!breadDerived?.applicable) return [];
+    return breadDerived.products.flatMap((p) => p.ingredientUsageRows);
+  }, [breadDerived]);
+
+  const parbakeIngredientUsageRows = useMemo(() => {
+    if (!parbakeProductWasteDerived?.applicable) return [];
+    return parbakeProductWasteDerived.products.flatMap(
+      (p) => p.ingredientUsageRows
+    );
+  }, [parbakeProductWasteDerived]);
+
   const backToHistory = useCallback(() => {
     const returnTo = searchParams.get("returnTo");
     if (returnTo) {
@@ -303,17 +315,6 @@ function JournalPageContent() {
   const hasParbakeProductWaste =
     parbakeProductWasteDerived?.applicable === true;
 
-  const breadIngredientUsageRows: BreadIngredientUsageRow[] = useMemo(() => {
-    if (!breadDerived?.applicable) return [];
-    return breadDerived.products.flatMap((p) => p.ingredientUsageRows);
-  }, [breadDerived]);
-
-  const parbakeIngredientUsageRows = useMemo(() => {
-    if (!parbakeProductWasteDerived?.applicable) return [];
-    return parbakeProductWasteDerived.products.flatMap(
-      (p) => p.ingredientUsageRows
-    );
-  }, [parbakeProductWasteDerived]);
   const baseWasteRows = comp.baseWasteRows?.length ? comp.baseWasteRows : (comp.baseWaste?.resolved && comp.baseWaste?.baseSauceMaterialName ? [{
     resolved: true,
     parbakeName: comp.baseWaste.parbakeName,
