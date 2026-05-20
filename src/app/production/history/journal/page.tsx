@@ -60,12 +60,21 @@ import {
 } from "@/features/production/history/journalAllocation";
 import { getDateParbakeTypes } from "@/features/production/history/calculations";
 import { mapTechnicalWarningsToOperatorMessages } from "@/features/production/history/operatorWarnings";
-import { calculatePonoBreadDerived } from "@/features/production/history/ponoBreadDerived";
+import { calculateBreadDerived } from "@/features/production/history/breadDerived";
+import { calculateParbakeProductWasteDerived } from "@/features/production/history/parbakeProductWasteDerived";
+import {
+  findBreadProductDerived,
+  type BreadDerived,
+} from "@/features/production/history/breadDerived";
+import {
+  findParbakeProductDerived,
+  type ParbakeProductWasteDerived,
+} from "@/features/production/history/parbakeProductWasteDerived";
 import type {
   ProductUsagePage,
   ProductUsageRow,
 } from "@/features/production/history/journalTypes";
-import type { PonoBreadDerived } from "@/features/production/history/ponoBreadDerived";
+import type { BreadIngredientUsageRow } from "@/features/production/history/breadDerived";
 
 type StoredJournal = {
   date: string;
@@ -172,14 +181,24 @@ function JournalPageContent() {
     );
   }, [stored, bomRefsEffective]);
 
-  const ponoBreadDerived = useMemo((): PonoBreadDerived | null => {
+  const breadDerived = useMemo((): BreadDerived | null => {
     if (!stored) return null;
-    return calculatePonoBreadDerived(
+    return calculateBreadDerived(
       stored.dateGroup,
       stored.computedResult,
       bomRefsEffective,
     );
   }, [stored, bomRefsEffective]);
+
+  const parbakeProductWasteDerived =
+    useMemo((): ParbakeProductWasteDerived | null => {
+      if (!stored) return null;
+      return calculateParbakeProductWasteDerived(
+        stored.dateGroup,
+        stored.computedResult,
+        bomRefsEffective,
+      );
+    }, [stored, bomRefsEffective]);
 
   /** 반죽 내역(사용일자=생산일자 기준) 집계. P1 총괄 "반죽 사용량" 블록용. */
   const doughUsageLines = useMemo(
@@ -201,9 +220,9 @@ function JournalPageContent() {
   const operatorMessages = useMemo(() => {
     if (!stored) return [];
     return mapTechnicalWarningsToOperatorMessages(stored.computedResult, {
-      ponoApplicable: ponoBreadDerived?.applicable === true,
+      breadApplicable: breadDerived?.applicable === true,
     });
-  }, [stored, ponoBreadDerived?.applicable]);
+  }, [stored, breadDerived?.applicable]);
 
   const backToHistory = useCallback(() => {
     const returnTo = searchParams.get("returnTo");
@@ -280,7 +299,21 @@ function JournalPageContent() {
     .join(", ");
   const expiryDate = addDays(date, 364);
 
-  const ponoApplicable = ponoBreadDerived?.applicable === true;
+  const hasBreadDerived = breadDerived?.applicable === true;
+  const hasParbakeProductWaste =
+    parbakeProductWasteDerived?.applicable === true;
+
+  const breadIngredientUsageRows: BreadIngredientUsageRow[] = useMemo(() => {
+    if (!breadDerived?.applicable) return [];
+    return breadDerived.products.flatMap((p) => p.ingredientUsageRows);
+  }, [breadDerived]);
+
+  const parbakeIngredientUsageRows = useMemo(() => {
+    if (!parbakeProductWasteDerived?.applicable) return [];
+    return parbakeProductWasteDerived.products.flatMap(
+      (p) => p.ingredientUsageRows
+    );
+  }, [parbakeProductWasteDerived]);
   const baseWasteRows = comp.baseWasteRows?.length ? comp.baseWasteRows : (comp.baseWaste?.resolved && comp.baseWaste?.baseSauceMaterialName ? [{
     resolved: true,
     parbakeName: comp.baseWaste.parbakeName,
@@ -392,32 +425,41 @@ function JournalPageContent() {
                   <div>
                     <span className="text-slate-600 print:text-gray-700 font-medium block mb-0.5">도우 사용량</span>
                     <p className="font-medium text-slate-900 print:text-black">
-                      {ponoApplicable && ponoBreadDerived?.breadDoughUsageQty != null
-                        ? ponoBreadDerived.breadDoughUsageQty.toLocaleString()
-                        : comp.doughUsageQty.toLocaleString()}
-                      개
+                      {comp.doughUsageQty.toLocaleString()}개
                     </p>
                   </div>
                   <div>
                     <span className="text-slate-600 print:text-gray-700 font-medium block mb-0.5">
-                      {ponoApplicable ? "브레드 폐기량" : "파베이크 폐기량"}
+                      {hasBreadDerived ? "브레드 폐기량" : "파베이크 폐기량"}
                     </span>
                     <p className="font-medium text-slate-900 print:text-black">
-                      {ponoApplicable && ponoBreadDerived?.breadWasteQty != null
-                        ? ponoBreadDerived.breadWasteQty.toLocaleString()
-                        : comp.parbakeWasteQty.toLocaleString()}
+                      {(hasBreadDerived
+                        ? (comp.breadWasteQty ?? 0)
+                        : comp.parbakeWasteQty
+                      ).toLocaleString()}
                       개
                     </p>
                   </div>
-                  <div>
-                    <span className="text-slate-600 print:text-gray-700 font-medium block mb-0.5">파베이크 생산량(당일)</span>
-                    <p className="font-medium text-slate-900 print:text-black">
-                      {ponoApplicable && ponoBreadDerived?.breadDoughUsageQty != null
-                        ? ponoBreadDerived.breadDoughUsageQty.toLocaleString()
-                        : comp.sameDayParbakeProductionQty.toLocaleString()}
-                      개
-                    </p>
-                  </div>
+                  {comp.parbakeWasteQty > 0 && hasBreadDerived && (
+                    <div>
+                      <span className="text-slate-600 print:text-gray-700 font-medium block mb-0.5">
+                        파베이크 폐기량
+                      </span>
+                      <p className="font-medium text-slate-900 print:text-black">
+                        {comp.parbakeWasteQty.toLocaleString()}개
+                      </p>
+                    </div>
+                  )}
+                  {!hasBreadDerived && (
+                    <div>
+                      <span className="text-slate-600 print:text-gray-700 font-medium block mb-0.5">
+                        파베이크 생산량(당일)
+                      </span>
+                      <p className="font-medium text-slate-900 print:text-black">
+                        {comp.sameDayParbakeProductionQty.toLocaleString()}개
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="journal-section mt-6">
@@ -437,18 +479,36 @@ function JournalPageContent() {
                   </div>
                 </div>
 
-                {ponoApplicable &&
-                ponoBreadDerived?.ingredientUsageRows &&
-                ponoBreadDerived.ingredientUsageRows.length > 0 ? (
+                {(breadIngredientUsageRows.some((r) =>
+                  (r.lots ?? []).some((lot) => lot.wasteDeductedQty > 0)
+                ) ||
+                  parbakeIngredientUsageRows.some((r) =>
+                    (r.lots ?? []).some((lot) => lot.wasteDeductedQty > 0)
+                  )) ? (
                   <div className="journal-section">
                     <p className="journal-section-title">원료 폐기량</p>
                     <ul className="journal-section-body journal-section-list list-none pl-0 space-y-1">
-                      {ponoBreadDerived.ingredientUsageRows.flatMap((r) =>
-                        (r.lots ?? []).filter((lot) => lot.wasteDeductedQty > 0).map((lot) => (
-                          <li key={`${r.materialName}-${lot.expiryDate}-waste`}>
-                            {r.materialName} {lot.wasteDeductedQty.toLocaleString()}g ({lot.expiryDate || "—"})
-                          </li>
-                        ))
+                      {breadIngredientUsageRows.flatMap((r) =>
+                        (r.lots ?? [])
+                          .filter((lot) => lot.wasteDeductedQty > 0)
+                          .map((lot) => (
+                            <li key={`bread-w-${r.materialName}-${lot.expiryDate}`}>
+                              {r.materialName}{" "}
+                              {lot.wasteDeductedQty.toLocaleString()}g (
+                              {lot.expiryDate || "—"})
+                            </li>
+                          ))
+                      )}
+                      {parbakeIngredientUsageRows.flatMap((r) =>
+                        (r.lots ?? [])
+                          .filter((lot) => lot.wasteDeductedQty > 0)
+                          .map((lot) => (
+                            <li key={`pb-w-${r.materialName}-${lot.expiryDate}`}>
+                              {r.materialName}{" "}
+                              {lot.wasteDeductedQty.toLocaleString()}g (
+                              {lot.expiryDate || "—"})
+                            </li>
+                          ))
                       )}
                     </ul>
                   </div>
@@ -497,16 +557,26 @@ function JournalPageContent() {
                   return null;
                 })()}
 
-                {ponoApplicable &&
-                ponoBreadDerived?.ingredientUsageRows &&
-                ponoBreadDerived.ingredientUsageRows.length > 0 ? (
+                {(breadIngredientUsageRows.length > 0 ||
+                  parbakeIngredientUsageRows.length > 0) ? (
                   <div className="journal-section">
-                    <p className="journal-section-title">원료 사용량</p>
+                    <p className="journal-section-title">원료 사용량 (폐기 반영)</p>
                     <ul className="journal-section-body journal-section-list list-none pl-0 space-y-1">
-                      {ponoBreadDerived.ingredientUsageRows.flatMap((r) =>
+                      {breadIngredientUsageRows.flatMap((r) =>
                         (r.lots ?? []).map((lot) => (
-                          <li key={`${r.materialName}-${lot.expiryDate}-usage`}>
-                            {r.materialName} {lot.finalUsageQty.toLocaleString()}g ({lot.expiryDate || "—"})
+                          <li key={`bread-u-${r.materialName}-${lot.expiryDate}`}>
+                            {r.materialName}{" "}
+                            {lot.finalUsageQty.toLocaleString()}g (
+                            {lot.expiryDate || "—"})
+                          </li>
+                        ))
+                      )}
+                      {parbakeIngredientUsageRows.flatMap((r) =>
+                        (r.lots ?? []).map((lot) => (
+                          <li key={`pb-u-${r.materialName}-${lot.expiryDate}`}>
+                            {r.materialName}{" "}
+                            {lot.finalUsageQty.toLocaleString()}g (
+                            {lot.expiryDate || "—"})
                           </li>
                         ))
                       )}
@@ -727,111 +797,90 @@ function JournalPageContent() {
                 </table>
               </div>
 
-              {/* 포노브레드 전용 계산: 해당 제품이 포노브레드이고 적용 가능할 때만 */}
-              {ponoBreadDerived &&
-                ponoBreadDerived.breadProductKey === product.productKey && (
+              {(() => {
+                const breadProduct = findBreadProductDerived(
+                  breadDerived,
+                  product.productKey
+                );
+                const parbakeProduct = findParbakeProductDerived(
+                  parbakeProductWasteDerived,
+                  product.productKey
+                );
+                if (!breadProduct && !parbakeProduct) return null;
+                const ingredientRows =
+                  breadProduct?.ingredientUsageRows ??
+                  parbakeProduct?.ingredientUsageRows ??
+                  [];
+                return (
                   <div className="mt-6 pt-4 border-t border-slate-300">
                     <h3 className="text-sm font-semibold text-slate-700 mb-3">
-                      포노브레드 전용 계산
+                      {breadProduct ? "브레드 도우 폐기 계산" : "파베이크 폐기 계산"}
                     </h3>
-                    {!ponoBreadDerived.applicable ? (
-                      <p className="text-sm text-slate-600">
-                        {ponoBreadDerived.reason}
-                      </p>
-                    ) : (
-                      <>
-                        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-                          <dt className="text-slate-600">도우 사용량</dt>
-                          <dd>
-                            {ponoBreadDerived.breadDoughUsageQty?.toLocaleString() ??
-                              "—"}
-                            개
-                          </dd>
+                    <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+                      {breadProduct && (
+                        <>
+                          <dt className="text-slate-600">브레드 도우 사용량</dt>
+                          <dd>{breadProduct.breadDoughUsageQty.toLocaleString()}개</dd>
                           <dt className="text-slate-600">브레드 폐기량</dt>
-                          <dd>
-                            {ponoBreadDerived.breadWasteQty?.toLocaleString() ??
-                              "—"}
-                            개
-                          </dd>
-                        </dl>
-                        {ponoBreadDerived.reason && (
-                          <p className="mt-1 text-xs text-amber-600">
-                            {ponoBreadDerived.reason}
-                          </p>
-                        )}
-                        {ponoBreadDerived.ingredientUsageRows &&
-                          ponoBreadDerived.ingredientUsageRows.some(
-                            (r) => (r.lots ?? []).some((lot) => lot.wasteDeductedQty > 0)
-                          ) && (
-                            <div className="mt-4">
-                              <h4 className="text-xs font-semibold text-slate-600 mb-2">
-                                원료 폐기량
-                              </h4>
-                              <ul className="text-sm space-y-0.5">
-                                {ponoBreadDerived.ingredientUsageRows.flatMap(
-                                  (r) =>
-                                    (r.lots ?? [])
-                                      .filter((lot) => lot.wasteDeductedQty > 0)
-                                      .map((lot) => (
-                                        <li
-                                          key={`${r.materialName}-${lot.expiryDate}-waste`}
-                                        >
-                                          {r.materialName}{" "}
-                                          {lot.wasteDeductedQty.toLocaleString()}
-                                          g ({lot.expiryDate || "—"})
-                                        </li>
-                                      ))
-                                )}
-                              </ul>
-                            </div>
+                          <dd>{breadProduct.breadWasteQty.toLocaleString()}개</dd>
+                        </>
+                      )}
+                      {parbakeProduct && (
+                        <>
+                          <dt className="text-slate-600">파베이크 폐기량(배분)</dt>
+                          <dd>{parbakeProduct.parbakeWasteQty.toLocaleString()}개</dd>
+                        </>
+                      )}
+                    </dl>
+                    {breadDerived?.breadWasteNegative && (
+                      <p className="mt-1 text-xs text-amber-600">{breadDerived.reason}</p>
+                    )}
+                    {ingredientRows.some((r) =>
+                      (r.lots ?? []).some((lot) => lot.wasteDeductedQty > 0)
+                    ) && (
+                      <div className="mt-4">
+                        <h4 className="text-xs font-semibold text-slate-600 mb-2">원료 폐기량</h4>
+                        <ul className="text-sm space-y-0.5">
+                          {ingredientRows.flatMap((r) =>
+                            (r.lots ?? [])
+                              .filter((lot) => lot.wasteDeductedQty > 0)
+                              .map((lot) => (
+                                <li key={`${r.materialName}-${lot.expiryDate}-waste`}>
+                                  {r.materialName} {lot.wasteDeductedQty.toLocaleString()}g ({lot.expiryDate || "—"})
+                                </li>
+                              ))
                           )}
-                        {ponoBreadDerived.ingredientUsageRows &&
-                          ponoBreadDerived.ingredientUsageRows.length > 0 && (
-                            <div className="mt-4">
-                              <h4 className="text-xs font-semibold text-slate-600 mb-2">
-                                최종 원료 사용량
-                              </h4>
-                              <table className="w-full text-sm border border-slate-300 border-collapse">
-                                <thead>
-                                  <tr className="bg-slate-100">
-                                    <th className="border border-slate-300 px-2 py-1 text-left">
-                                      원료명
-                                    </th>
-                                    <th className="border border-slate-300 px-2 py-1 text-left">
-                                      LOT(소비기한)
-                                    </th>
-                                    <th className="border border-slate-300 px-2 py-1 text-right">
-                                      최종 사용량
-                                    </th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {ponoBreadDerived.ingredientUsageRows.flatMap(
-                                    (r) =>
-                                      (r.lots ?? []).map((lot) => (
-                                        <tr
-                                          key={`${r.materialName}-${lot.expiryDate}-${lot.lotRowId}`}
-                                        >
-                                          <td className="border border-slate-300 px-2 py-1">
-                                            {r.materialName}
-                                          </td>
-                                          <td className="border border-slate-300 px-2 py-1">
-                                            {lot.expiryDate || "—"}
-                                          </td>
-                                          <td className="border border-slate-300 px-2 py-1 text-right">
-                                            {lot.finalUsageQty.toLocaleString()}g
-                                          </td>
-                                        </tr>
-                                      ))
-                                  )}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
-                      </>
+                        </ul>
+                      </div>
+                    )}
+                    {ingredientRows.length > 0 && (
+                      <div className="mt-4">
+                        <h4 className="text-xs font-semibold text-slate-600 mb-2">최종 원료 사용량</h4>
+                        <table className="w-full text-sm border border-slate-300 border-collapse">
+                          <thead>
+                            <tr className="bg-slate-100">
+                              <th className="border border-slate-300 px-2 py-1 text-left">원료명</th>
+                              <th className="border border-slate-300 px-2 py-1 text-left">LOT(소비기한)</th>
+                              <th className="border border-slate-300 px-2 py-1 text-right">최종 사용량</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {ingredientRows.flatMap((r) =>
+                              (r.lots ?? []).map((lot) => (
+                                <tr key={`${r.materialName}-${lot.expiryDate}-${lot.lotRowId}`}>
+                                  <td className="border border-slate-300 px-2 py-1">{r.materialName}</td>
+                                  <td className="border border-slate-300 px-2 py-1">{lot.expiryDate || "—"}</td>
+                                  <td className="border border-slate-300 px-2 py-1 text-right">{lot.finalUsageQty.toLocaleString()}g</td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
                     )}
                   </div>
-                )}
+                );
+              })()}
             </section>
           );
         })}

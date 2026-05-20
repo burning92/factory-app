@@ -1,6 +1,41 @@
 import { create } from "zustand";
 import type { Material, BomRow, PlanningSubmaterialRow, PlanningSubmaterialItem } from "@/lib/mockData";
+import { computeOutboundTotalG } from "@/features/production/outbound/computeOutboundTotalG";
+import { requestProductionOutboundLabSync } from "@/lib/materialStockLab/clientSyncProductionOutbound";
+import { requestSecondCloseLabSync } from "@/lib/materialStockLab/clientSyncFirstCloseReturn";
 import { supabase } from "@/lib/supabase";
+
+function materialWeightForName(materialName: string, materials: Material[]): Material | undefined {
+  const name = String(materialName ?? "").trim();
+  return materials.find((m) => m.materialName === name);
+}
+
+function totalOutboundGFromLines(원료명: string, lines: OutboundLine[], materials: Material[]): number {
+  const mat = materialWeightForName(원료명, materials);
+  return computeOutboundTotalG(lines, mat);
+}
+
+/** Lab 1단계: production_logs 출고 → material_stock_movements (실패해도 출고 저장은 유지) */
+function labSyncOutboundUpsert(log: {
+  id: string;
+  생산일자: string;
+  원료명: string;
+  제품명: string;
+  출고_g: number;
+}) {
+  void requestProductionOutboundLabSync({
+    action: "upsert",
+    production_log_id: log.id,
+    production_date: log.생산일자,
+    material_name: log.원료명,
+    outbound_g: log.출고_g,
+    product_name: log.제품명,
+  });
+}
+
+function labSyncOutboundVoid(productionLogId: string) {
+  void requestProductionOutboundLabSync({ action: "void", production_log_id: productionLogId });
+}
 
 /** Supabase/PostgrestError 등에서 사용자에게 보여줄 에러 문구 추출 (message / details / hint 또는 JSON) */
 function getErrorMessage(err: unknown): string {
@@ -1373,6 +1408,7 @@ export const useMasterStore = create<MasterState>((set, get) => ({
         delete next[dateKey];
         return { productionHistoryDateStates: next };
       });
+      void requestSecondCloseLabSync({ action: "void", production_date: dateKey });
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : "마감 상태 초기화에 실패했습니다.",
@@ -1592,7 +1628,7 @@ export const useMasterStore = create<MasterState>((set, get) => ({
       }));
       const 출고_박스 = 출고_라인.reduce((s, r) => s + r.박스, 0);
       const 출고_낱개 = 출고_라인.reduce((s, r) => s + r.낱개, 0);
-      const 출고_g = 출고_라인.reduce((s, r) => s + r.g, 0);
+      const 출고_g = totalOutboundGFromLines(log.원료명 ?? "", 출고_라인, get().materials);
       const 소비기한 = log.소비기한 ?? addDays(log.생산일자, 364);
 
       const insertPayload = {
@@ -1620,10 +1656,12 @@ export const useMasterStore = create<MasterState>((set, get) => ({
         .select("id, production_date, product_name, material_name, outbound_lines, outbound_box, outbound_bag, outbound_g, actual_usage_g, status, preparer_name, preparer_name_2, approver_name, expiry_date, dough_qty, dough_waste_qty, operator_name, finished_qty_expected")
         .single();
       if (e) throw e;
+      const mapped = mapProductionLogFromDb(data);
       set((state) => ({
-        productionLogs: [mapProductionLogFromDb(data), ...state.productionLogs],
+        productionLogs: [mapped, ...state.productionLogs],
         saving: "",
       }));
+      labSyncOutboundUpsert(mapped);
     } catch (err) {
       set({
         saving: "",
@@ -1658,26 +1696,35 @@ export const useMasterStore = create<MasterState>((set, get) => ({
         .update(updatePayload)
         .eq("id", id);
       if (e) throw e;
+      let synced: ProductionLog | null = null;
       set((state) => ({
-        productionLogs: state.productionLogs.map((x) =>
-          x.id === id
-            ? {
-                ...x,
-                일차사용량_g: patch.실사용량_g,
-                실사용량_g: patch.실사용량_g,
-                상태: patch.상태,
-                작업자: patch.작업자,
-                작성자2: patch.작성자2 ?? x.작성자2,
-                반죽량: patch.반죽량 ?? x.반죽량,
-                반죽폐기량: patch.반죽폐기량 ?? x.반죽폐기량,
-                전일재고_g: patch.전일재고_g ?? x.전일재고_g,
-                당일잔량_g: patch.당일잔량_g ?? x.당일잔량_g,
-                출고_라인: patch.출고_라인 ?? x.출고_라인,
-              }
-            : x
-        ),
+        productionLogs: state.productionLogs.map((x) => {
+          if (x.id !== id) return x;
+          const 출고_라인 = patch.출고_라인 ?? x.출고_라인;
+          const 출고_g =
+            Array.isArray(출고_라인) && 출고_라인.length > 0
+              ? totalOutboundGFromLines(x.원료명, 출고_라인, get().materials)
+              : x.출고_g;
+          const next = {
+            ...x,
+            일차사용량_g: patch.실사용량_g,
+            실사용량_g: patch.실사용량_g,
+            상태: patch.상태,
+            작업자: patch.작업자,
+            작성자2: patch.작성자2 ?? x.작성자2,
+            반죽량: patch.반죽량 ?? x.반죽량,
+            반죽폐기량: patch.반죽폐기량 ?? x.반죽폐기량,
+            전일재고_g: patch.전일재고_g ?? x.전일재고_g,
+            당일잔량_g: patch.당일잔량_g ?? x.당일잔량_g,
+            출고_라인,
+            출고_g,
+          };
+          synced = next;
+          return next;
+        }),
         saving: "",
       }));
+      if (synced && (patch.출고_라인?.length ?? 0) > 0) labSyncOutboundUpsert(synced);
     } catch (err) {
       set({
         saving: "",
@@ -1710,7 +1757,7 @@ export const useMasterStore = create<MasterState>((set, get) => ({
       const nextLines = [...current, normalized];
       const 출고_박스 = nextLines.reduce((s, r) => s + r.박스, 0);
       const 출고_낱개 = nextLines.reduce((s, r) => s + r.낱개, 0);
-      const 출고_g = nextLines.reduce((s, r) => s + r.g, 0);
+      const 출고_g = totalOutboundGFromLines(log.원료명, nextLines, get().materials);
       const { error: e } = await supabase
         .from("production_logs")
         .update({
@@ -1721,20 +1768,23 @@ export const useMasterStore = create<MasterState>((set, get) => ({
         })
         .eq("id", logId);
       if (e) throw e;
+      let synced: ProductionLog | null = null;
       set((state) => ({
-        productionLogs: state.productionLogs.map((x) =>
-          x.id === logId
-            ? {
-                ...x,
-                출고_라인: nextLines,
-                출고_박스,
-                출고_낱개,
-                출고_g,
-              }
-            : x
-        ),
+        productionLogs: state.productionLogs.map((x) => {
+          if (x.id !== logId) return x;
+          const next = {
+            ...x,
+            출고_라인: nextLines,
+            출고_박스,
+            출고_낱개,
+            출고_g,
+          };
+          synced = next;
+          return next;
+        }),
         saving: "",
       }));
+      if (synced) labSyncOutboundUpsert(synced);
     } catch (err) {
       set({
         saving: "",
@@ -1978,6 +2028,9 @@ export const useMasterStore = create<MasterState>((set, get) => ({
 
   deleteProductionLogsByGroup: async (생산일자, 제품명) => {
     set({ saving: "logs", error: null });
+    const logIdsToVoid = get()
+      .productionLogs.filter((log) => log.생산일자 === 생산일자 && log.제품명 === 제품명)
+      .map((log) => log.id);
     try {
       const [usageResult, logsResult] = await Promise.all([
         supabase
@@ -2002,6 +2055,7 @@ export const useMasterStore = create<MasterState>((set, get) => ({
         ),
         saving: "",
       }));
+      for (const id of logIdsToVoid) labSyncOutboundVoid(id);
     } catch (err) {
       set({
         saving: "",
@@ -2030,20 +2084,23 @@ export const useMasterStore = create<MasterState>((set, get) => ({
         })
         .in("id", ids);
       if (e) throw e;
+      const updated: ProductionLog[] = [];
       set((state) => ({
-        productionLogs: state.productionLogs.map((x) =>
-          x.생산일자 === 생산일자 && x.제품명 === 제품명
-            ? {
-                ...x,
-                출고_라인: newLine,
-                출고_박스: 0,
-                출고_낱개: 0,
-                출고_g: safeG,
-              }
-            : x
-        ),
+        productionLogs: state.productionLogs.map((x) => {
+          if (x.생산일자 !== 생산일자 || x.제품명 !== 제품명) return x;
+          const next = {
+            ...x,
+            출고_라인: newLine,
+            출고_박스: 0,
+            출고_낱개: 0,
+            출고_g: safeG,
+          };
+          updated.push(next);
+          return next;
+        }),
         saving: "",
       }));
+      for (const log of updated) labSyncOutboundUpsert(log);
     } catch (err) {
       set({
         saving: "",
@@ -2074,7 +2131,7 @@ export const useMasterStore = create<MasterState>((set, get) => ({
       );
       const 출고_박스 = nextLines.reduce((s, r) => s + r.박스, 0);
       const 출고_낱개 = nextLines.reduce((s, r) => s + r.낱개, 0);
-      const 출고_g = nextLines.reduce((s, r) => s + r.g, 0);
+      const 출고_g = totalOutboundGFromLines(log.원료명, nextLines, get().materials);
       const { error: e } = await supabase
         .from("production_logs")
         .update({
@@ -2085,12 +2142,17 @@ export const useMasterStore = create<MasterState>((set, get) => ({
         })
         .eq("id", logId);
       if (e) throw e;
+      let synced: ProductionLog | null = null;
       set((s) => ({
-        productionLogs: s.productionLogs.map((x) =>
-          x.id === logId ? { ...x, 출고_라인: nextLines, 출고_박스: 출고_박스, 출고_낱개: 출고_낱개, 출고_g: 출고_g } : x
-        ),
+        productionLogs: s.productionLogs.map((x) => {
+          if (x.id !== logId) return x;
+          const next = { ...x, 출고_라인: nextLines, 출고_박스, 출고_낱개, 출고_g };
+          synced = next;
+          return next;
+        }),
         saving: "",
       }));
+      if (synced) labSyncOutboundUpsert(synced);
     } catch (err) {
       set({
         saving: "",
@@ -2115,10 +2177,11 @@ export const useMasterStore = create<MasterState>((set, get) => ({
         const { error: e } = await supabase.from("production_logs").delete().eq("id", logId);
         if (e) throw e;
         set((s) => ({ productionLogs: s.productionLogs.filter((x) => x.id !== logId), saving: "" }));
+        labSyncOutboundVoid(logId);
       } else {
         const 출고_박스 = nextLines.reduce((s, r) => s + r.박스, 0);
         const 출고_낱개 = nextLines.reduce((s, r) => s + r.낱개, 0);
-        const 출고_g = nextLines.reduce((s, r) => s + r.g, 0);
+        const 출고_g = totalOutboundGFromLines(log.원료명, nextLines, get().materials);
         const { error: e } = await supabase
           .from("production_logs")
           .update({
@@ -2129,12 +2192,17 @@ export const useMasterStore = create<MasterState>((set, get) => ({
           })
           .eq("id", logId);
         if (e) throw e;
+        let synced: ProductionLog | null = null;
         set((s) => ({
-          productionLogs: s.productionLogs.map((x) =>
-            x.id === logId ? { ...x, 출고_라인: nextLines, 출고_박스: 출고_박스, 출고_낱개: 출고_낱개, 출고_g: 출고_g } : x
-          ),
+          productionLogs: s.productionLogs.map((x) => {
+            if (x.id !== logId) return x;
+            const next = { ...x, 출고_라인: nextLines, 출고_박스, 출고_낱개, 출고_g };
+            synced = next;
+            return next;
+          }),
           saving: "",
         }));
+        if (synced) labSyncOutboundUpsert(synced);
       }
     } catch (err) {
       set({
@@ -2154,6 +2222,7 @@ export const useMasterStore = create<MasterState>((set, get) => ({
         productionLogs: state.productionLogs.filter((x) => x.id !== logId),
         saving: "",
       }));
+      labSyncOutboundVoid(logId);
     } catch (err) {
       set({
         saving: "",

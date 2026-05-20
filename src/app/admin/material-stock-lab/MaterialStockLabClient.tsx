@@ -5,7 +5,51 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
-import type { MaterialStockLabOverviewRow } from "@/app/api/admin/material-stock-lab/overview/route";
+import type {
+  MaterialStockLabMappingStatus,
+  MaterialStockLabOverviewRow,
+} from "@/app/api/admin/material-stock-lab/overview/route";
+
+type MappingFilter = "all" | MaterialStockLabMappingStatus;
+
+const MAPPING_FILTER_OPTIONS: { value: MappingFilter; label: string }[] = [
+  { value: "all", label: "전체" },
+  { value: "mapped", label: "매핑됨" },
+  { value: "unmapped", label: "미매핑" },
+  { value: "duplicate", label: "동일코드 다중매핑" },
+];
+
+function MappingStatusBadge({ status, mappingCount }: { status: MaterialStockLabMappingStatus; mappingCount: number }) {
+  if (status === "mapped") {
+    return (
+      <span
+        title="materials에 1건 매핑됨"
+        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-200"
+      >
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" aria-hidden />
+        매핑
+      </span>
+    );
+  }
+  if (status === "unmapped") {
+    return (
+      <span
+        title="materials에 매핑 없음"
+        className="inline-flex whitespace-nowrap rounded-full bg-slate-700/80 px-2.5 py-1 text-xs font-medium text-slate-400"
+      >
+        미매핑
+      </span>
+    );
+  }
+  return (
+    <span
+      title={`materials에 동일 코드 ${mappingCount}건 매핑`}
+      className="inline-flex whitespace-nowrap rounded-full bg-amber-500/20 px-2.5 py-1 text-xs font-medium text-amber-200"
+    >
+      다중 {mappingCount}건
+    </span>
+  );
+}
 
 type MovementRow = {
   id: string;
@@ -30,6 +74,34 @@ const MOVEMENT_TYPES: { value: string; label: string; hint: string }[] = [
   { value: "ecount_reconcile", label: "이카운트 보정 (ecount_reconcile)", hint: "부호 포함 직접 입력" },
   { value: "adjustment", label: "실사조정 (adjustment)", hint: "부호 포함 직접 입력" },
 ];
+
+const MOVEMENT_TYPE_DISPLAY: Record<string, { label: string; badgeClass: string }> = {
+  production_outbound: { label: "출고 차감", badgeClass: "bg-rose-500/20 text-rose-200" },
+  production_usage: { label: "생산 사용", badgeClass: "bg-orange-500/20 text-orange-200" },
+  production_reserved: { label: "생산 예약", badgeClass: "bg-amber-500/20 text-amber-200" },
+  receipt: { label: "입고", badgeClass: "bg-emerald-500/20 text-emerald-200" },
+  return_unused: { label: "잔량 반납", badgeClass: "bg-cyan-500/20 text-cyan-200" },
+  waste: { label: "마감 폐기", badgeClass: "bg-orange-500/20 text-orange-200" },
+  adjustment: { label: "실사 조정", badgeClass: "bg-slate-600/80 text-slate-200" },
+  ecount_reconcile: { label: "이카운트 보정", badgeClass: "bg-violet-500/20 text-violet-200" },
+};
+
+function movementTypeDisplay(type: string) {
+  return (
+    MOVEMENT_TYPE_DISPLAY[type] ?? {
+      label: type,
+      badgeClass: "bg-slate-700/80 text-slate-300",
+    }
+  );
+}
+
+function formatMovementQty(qty: number): string {
+  const n = Number(qty) || 0;
+  const abs = fmtNum(Math.abs(n));
+  if (n > 0) return `+${abs} g`;
+  if (n < 0) return `−${abs} g`;
+  return `0 g`;
+}
 
 function fmtNum(n: number): string {
   return Number(n || 0).toLocaleString("ko-KR", { maximumFractionDigits: 2 });
@@ -62,6 +134,7 @@ export default function MaterialStockLabClient() {
   const [rows, setRows] = useState<MaterialStockLabOverviewRow[]>([]);
   const [globalSyncAt, setGlobalSyncAt] = useState<string | null>(null);
   const [onlyDiff, setOnlyDiff] = useState(false);
+  const [mappingFilter, setMappingFilter] = useState<MappingFilter>("all");
   const [search, setSearch] = useState("");
 
   const [movements, setMovements] = useState<MovementRow[]>([]);
@@ -148,15 +221,20 @@ export default function MaterialStockLabClient() {
     void loadMovements();
   }, [authLoading, isAdmin, loadMovements]);
 
+  const displayRows = useMemo(() => {
+    if (mappingFilter === "all") return rows;
+    return rows.filter((r) => r.mapping_status === mappingFilter);
+  }, [rows, mappingFilter]);
+
   const codeOptions = useMemo(() => {
-    const list = rows.map((r) => ({
+    const list = displayRows.map((r) => ({
       code: r.inventory_item_code,
-      label: `${r.inventory_item_code} — ${r.material_names.length ? r.material_names.join(", ") : "(원료 미매핑)"}`,
+      label: `${r.inventory_item_code} — ${r.ecount_item_name}${r.mapping_count > 0 ? ` · ${r.app_material_display}` : ""}`,
       candidates: r.material_candidates,
       warn: r.mapping_count > 1,
     }));
     return list.sort((a, b) => a.code.localeCompare(b.code));
-  }, [rows]);
+  }, [displayRows]);
 
   useEffect(() => {
     if (!formCode && codeOptions.length > 0) {
@@ -164,7 +242,10 @@ export default function MaterialStockLabClient() {
     }
   }, [codeOptions, formCode]);
 
-  const selectedFormRow = useMemo(() => rows.find((r) => r.inventory_item_code === formCode), [rows, formCode]);
+  const selectedFormRow = useMemo(
+    () => displayRows.find((r) => r.inventory_item_code === formCode) ?? rows.find((r) => r.inventory_item_code === formCode),
+    [displayRows, rows, formCode]
+  );
 
   useEffect(() => {
     const cands = selectedFormRow?.material_candidates ?? [];
@@ -174,7 +255,14 @@ export default function MaterialStockLabClient() {
 
   const captureBaseline = async () => {
     if (!isAdmin) return;
-    if (!window.confirm("현재 이카운트 재고 스냅샷을 기준재고로 저장합니다. 계속할까요?")) return;
+    if (
+      !window.confirm(
+        "싱크된 이카운트 현재고를 기준재고로 저장하고, 지금까지의 장부 이력(movement)은 모두 취소 처리합니다.\n\n" +
+          "이 시점부터 출고·마감 연동만 다시 쌓입니다. 계속할까요?"
+      )
+    ) {
+      return;
+    }
     setSavingBaseline(true);
     setError(null);
     const headers = await authHeaders();
@@ -184,14 +272,27 @@ export default function MaterialStockLabClient() {
       return;
     }
     const res = await fetch("/api/admin/material-stock-lab/baseline", { method: "POST", headers });
-    const json = (await res.json()) as { ok?: boolean; error?: string; message?: string; inserted?: number };
+    const json = (await res.json()) as {
+      ok?: boolean;
+      error?: string;
+      message?: string;
+      inserted?: number;
+      movements_voided?: number;
+    };
     setSavingBaseline(false);
     if (!res.ok || !json.ok) {
       setError(json.message ?? json.error ?? "기준재고 저장 실패");
       return;
     }
+    const voided = json.movements_voided ?? 0;
     await loadOverview();
     await loadMovements();
+    if (typeof window !== "undefined" && (json.inserted ?? 0) > 0) {
+      window.alert(
+        `기준재고 ${json.inserted?.toLocaleString("ko-KR")}품목 저장.\n` +
+          `이전 장부 이력 ${voided.toLocaleString("ko-KR")}건 취소 처리했습니다.`
+      );
+    }
   };
 
   const submitMovement = async (e: React.FormEvent) => {
@@ -318,13 +419,27 @@ export default function MaterialStockLabClient() {
 
       <div className="flex flex-wrap items-end gap-4">
         <label className="flex flex-col gap-1 text-xs text-slate-400">
-          검색 (코드·원료명)
+          검색 (코드·이카운트명·원료명)
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && void loadOverview()}
             className="w-56 rounded border border-slate-600 bg-slate-900 px-2 py-2 text-sm text-slate-100"
           />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-slate-400">
+          매핑 상태
+          <select
+            value={mappingFilter}
+            onChange={(e) => setMappingFilter(e.target.value as MappingFilter)}
+            className="rounded border border-slate-600 bg-slate-900 px-2 py-2 text-sm text-slate-100"
+          >
+            {MAPPING_FILTER_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
         </label>
         <label className="flex items-center gap-2 text-sm text-slate-300">
           <input type="checkbox" checked={onlyDiff} onChange={(e) => setOnlyDiff(e.target.checked)} />
@@ -342,12 +457,14 @@ export default function MaterialStockLabClient() {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-700/80">
-        <table className="min-w-full text-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-700/80 lg:overflow-x-visible">
+        <table className="w-full text-sm">
           <thead className="bg-slate-900/90 text-left text-xs uppercase tracking-wide text-slate-400">
             <tr>
-              <th className="px-3 py-2">품목코드</th>
-              <th className="px-3 py-2">원료명(보조)</th>
+              <th className="px-3 py-2 whitespace-nowrap">품목코드</th>
+              <th className="px-3 py-2 min-w-[10rem] lg:min-w-[14rem]">이카운트 품목명</th>
+              <th className="px-3 py-2 min-w-[8rem] lg:min-w-[10rem]">앱 원료명</th>
+              <th className="px-3 py-2 w-28 whitespace-nowrap">매핑</th>
               <th className="px-3 py-2 text-right">이카운트</th>
               <th className="px-3 py-2 text-right">기준재고</th>
               <th className="px-3 py-2 text-right">movement 합</th>
@@ -361,18 +478,18 @@ export default function MaterialStockLabClient() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={10} className="px-3 py-6 text-center text-slate-500">
+                <td colSpan={12} className="px-3 py-6 text-center text-slate-500">
                   불러오는 중…
                 </td>
               </tr>
-            ) : rows.length === 0 ? (
+            ) : displayRows.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-3 py-6 text-center text-slate-500">
+                <td colSpan={12} className="px-3 py-6 text-center text-slate-500">
                   표시할 행이 없습니다.
                 </td>
               </tr>
             ) : (
-              rows.map((r) => {
+              displayRows.map((r) => {
                 const diffPct =
                   Math.abs(r.ecount_stock_g) < 1e-9
                     ? r.diff_g === 0
@@ -382,15 +499,18 @@ export default function MaterialStockLabClient() {
                 return (
                   <tr key={r.inventory_item_code} className="border-t border-slate-800 hover:bg-slate-900/50">
                     <td className="px-3 py-2 font-mono text-xs text-cyan-200/90">{r.inventory_item_code}</td>
-                    <td className="px-3 py-2 text-slate-300">
-                      <div className="flex flex-wrap items-center gap-1">
-                        <span>{r.material_names.length ? r.material_names.join(", ") : "—"}</span>
-                        {r.mapping_count > 1 && (
-                          <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-200">
-                            동일 코드 {r.mapping_count}건
-                          </span>
-                        )}
-                      </div>
+                    <td className="px-3 py-2 min-w-[10rem] lg:min-w-[14rem] text-slate-200">{r.ecount_item_name}</td>
+                    <td className="px-3 py-2 min-w-[8rem] lg:min-w-[10rem] text-slate-300">
+                      {r.mapping_status === "duplicate" ? (
+                        <span className="text-amber-200">{r.app_material_display}</span>
+                      ) : r.mapping_status === "unmapped" ? (
+                        <span className="text-slate-500">—</span>
+                      ) : (
+                        r.app_material_display
+                      )}
+                    </td>
+                    <td className="px-3 py-2 w-28 whitespace-nowrap">
+                      <MappingStatusBadge status={r.mapping_status} mappingCount={r.mapping_count} />
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">{fmtNum(r.ecount_stock_g)}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{fmtNum(r.lab_baseline_qty_g)}</td>
@@ -509,7 +629,7 @@ export default function MaterialStockLabClient() {
 
         <div className="rounded-xl border border-slate-700/80 p-4 space-y-3">
           <div className="flex flex-wrap items-end justify-between gap-2">
-            <h2 className="text-base font-semibold text-slate-100">최근 movement</h2>
+            <h2 className="text-base font-semibold text-slate-100">최근 장부 이력</h2>
             <div className="flex gap-2 items-center">
               <input
                 placeholder="코드 필터"
@@ -528,14 +648,39 @@ export default function MaterialStockLabClient() {
           </div>
           <ul className="max-h-80 overflow-auto divide-y divide-slate-800 text-sm">
             {movements.map((m) => (
-              <li key={m.id} className="py-2 flex flex-wrap justify-between gap-2">
-                <div>
+              <li
+                key={m.id}
+                className={`py-2.5 flex flex-wrap justify-between gap-2 ${m.voided_at ? "opacity-60" : ""}`}
+              >
+                <div className="min-w-0 flex-1 space-y-1">
                   <div className="font-mono text-xs text-cyan-200/90">{m.inventory_item_code}</div>
-                  <div className="text-slate-400 text-xs">
-                    {m.movement_type} · {fmtNum(m.qty_g)} g · {fmtTs(m.effective_at)}
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span
+                      className={`rounded-full px-2 py-0.5 font-medium ${
+                        movementTypeDisplay(m.movement_type).badgeClass
+                      }`}
+                    >
+                      {movementTypeDisplay(m.movement_type).label}
+                    </span>
+                    <span
+                      className={`tabular-nums font-medium ${
+                        m.qty_g > 0 ? "text-emerald-300" : m.qty_g < 0 ? "text-rose-300" : "text-slate-400"
+                      }`}
+                    >
+                      {formatMovementQty(m.qty_g)}
+                    </span>
+                    <span className="text-slate-500">{fmtTs(m.effective_at)}</span>
                   </div>
+                  {m.memo ? (
+                    <p className="text-[11px] text-slate-500 truncate" title={m.memo}>
+                      {m.memo}
+                    </p>
+                  ) : null}
                   {m.voided_at ? (
-                    <div className="text-rose-300 text-xs mt-0.5">void {fmtTs(m.voided_at)}</div>
+                    <p className="text-rose-300/90 text-[11px] mt-0.5">
+                      취소됨 · {fmtTs(m.voided_at)}
+                      {m.void_reason ? ` · ${m.void_reason}` : ""}
+                    </p>
                   ) : null}
                 </div>
                 {!m.voided_at && (
@@ -547,7 +692,7 @@ export default function MaterialStockLabClient() {
                     }}
                     className="shrink-0 rounded border border-rose-500/50 px-2 py-1 text-xs text-rose-200 hover:bg-rose-950/40"
                   >
-                    void
+                    취소
                   </button>
                 )}
               </li>
@@ -559,7 +704,7 @@ export default function MaterialStockLabClient() {
       {voidTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <form onSubmit={submitVoid} className="w-full max-w-md rounded-xl border border-slate-600 bg-slate-900 p-4 space-y-3">
-            <h3 className="font-semibold text-slate-100">movement void</h3>
+            <h3 className="font-semibold text-slate-100">장부 이력 취소</h3>
             <p className="text-xs text-slate-400 font-mono">{voidTarget.id}</p>
             <label className="block text-xs text-slate-400">
               사유 (필수)

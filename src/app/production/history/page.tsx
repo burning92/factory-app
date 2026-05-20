@@ -17,6 +17,7 @@ import DateWheelPicker from "@/components/DateWheelPicker";
 import { getAppRecentValue, setAppRecentValue } from "@/lib/appRecentValues";
 import { createSafeId } from "@/lib/createSafeId";
 import { useAuth } from "@/contexts/AuthContext";
+import { requestSecondCloseLabSync } from "@/lib/materialStockLab/clientSyncFirstCloseReturn";
 
 const HISTORY_GROUP_STATE_KEY = "production-history:group-state";
 /** 1차 마감 전용 최근 작성자명 (출고 입력과 분리). Supabase 우선, localStorage는 보조 fallback */
@@ -1787,6 +1788,11 @@ function UsageCalculationPageContent() {
         setToast({ message: "2차 마감이 저장되었습니다." });
         setExpandedDate(null);
         setExpandedSecondDate(null);
+        void requestSecondCloseLabSync({
+          action: "upsert",
+          production_date: date,
+          state_snapshot: { ...s, isSecondClosed: true, status: "2차마감완료" },
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : "2차 마감 저장에 실패했습니다.";
         setToast({ message: msg });

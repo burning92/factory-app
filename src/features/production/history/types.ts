@@ -201,6 +201,10 @@ export type ComputedResult = {
   doughUsageQty: number;
   sameDayParbakeProductionQty: number;
   parbakeWasteQty: number;
+  /** 기준 브레드 완제품 합계만 반영한 도우 폐기(개) */
+  breadWasteQty: number;
+  /** 당일 도우 사용·브레드가 아닌 완제품 합계 (일반 피자 등) */
+  generalDoughFinishedQty: number;
 
   astronautParbakeQty: number;
   saleParbakeQty: number;

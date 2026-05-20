@@ -79,18 +79,20 @@ function mapOneMessage(msg: string): string {
  * - 기술 수식/변수명 숨기고 짧은 문장으로 변환
  * - 중복 제거
  * @param computedResult 계산 결과
- * @param options.ponoApplicable true이면 도우 불일치·베이스 폐기>사용 경고 제외 (혼합 생산일에서 오해 방지)
+ * @param options.breadApplicable true이면 도우 불일치·베이스 폐기>사용 경고 제외 (브레드 혼합 생산일)
  */
 export function mapTechnicalWarningsToOperatorMessages(
   computedResult: ComputedResult,
-  options?: { ponoApplicable?: boolean }
+  options?: { breadApplicable?: boolean; ponoApplicable?: boolean }
 ): string[] {
   const raw = computedResult.warnings ?? [];
   const filtered = filterZeroQtyMessages(raw);
   let mapped = filtered
     .map(mapOneMessage)
     .filter((s) => s.length > 0);
-  if (options?.ponoApplicable) {
+  const breadApplicable =
+    options?.breadApplicable === true || options?.ponoApplicable === true;
+  if (breadApplicable) {
     mapped = mapped.filter(
       (m) =>
         m !== "입력한 도우 수량과 생산 수량이 맞지 않습니다. 1차/2차 마감 입력값을 다시 확인해 주세요." &&

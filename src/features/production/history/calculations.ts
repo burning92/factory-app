@@ -239,9 +239,12 @@ function calculateTotals(state: DateGroupInput) {
 /** 파베이크 폐기량 / 도우 사용량 / 당일 파베이크 생산량 (개수 기준) */
 function calculateParbakeAndDough(
   state: DateGroupInput,
-  totals: ReturnType<typeof calculateTotals>
+  totals: ReturnType<typeof calculateTotals>,
+  productSummaries: ProductSummary[]
 ): {
   parbakeWasteQty: number;
+  breadWasteQty: number;
+  generalDoughFinishedQty: number;
   doughUsageQty: number;
   sameDayParbakeProductionQty: number;
   doughMixQty: number;
@@ -251,14 +254,49 @@ function calculateParbakeAndDough(
   const warnings: string[] = [];
   const doughMixQty = toNum(state.doughMixQty);
   const doughWasteQty = toNum(state.doughWasteQty);
-  const { totalFinishedQty, totalExtraParbakeQty, astronautParbakeQty, saleParbakeQty } = totals;
+  const { totalExtraParbakeQty, astronautParbakeQty, saleParbakeQty } = totals;
 
-  const parbakeWasteQty =
-    doughMixQty +
-    totalExtraParbakeQty -
-    totalFinishedQty -
-    (astronautParbakeQty + saleParbakeQty) -
-    doughWasteQty;
+  const breadFinishedQty = productSummaries
+    .filter((p) => p.isBreadProduct)
+    .reduce((s, p) => s + (p.finishedQty ?? 0), 0);
+  const generalDoughFinishedQty = productSummaries
+    .filter((p) => p.usesTodayDough && !p.isBreadProduct)
+    .reduce((s, p) => s + (p.finishedQty ?? 0), 0);
+  const storedParbakeFinishedQty = productSummaries
+    .filter((p) => p.usesStoredParbake)
+    .reduce((s, p) => s + (p.finishedQty ?? 0), 0);
+  const hasBread = productSummaries.some((p) => p.isBreadProduct);
+
+  const rawBreadWaste =
+    doughMixQty - doughWasteQty - breadFinishedQty - generalDoughFinishedQty;
+  const breadWasteQty = hasBread ? Math.max(0, rawBreadWaste) : 0;
+  if (hasBread && rawBreadWaste < 0) {
+    warnings.push(
+      `브레드 도우 폐기량이 음수입니다 (${rawBreadWaste}). 입력값을 확인해 주세요.`
+    );
+  }
+
+  let parbakeWasteQty: number;
+  if (hasBread && generalDoughFinishedQty === 0) {
+    /** 브레드 + 파베이크사용만: 반죽은 브레드 라인, 파베이크 개수 폐기는 도우 잔량식에 넣지 않음 */
+    parbakeWasteQty = 0;
+  } else if (!hasBread) {
+    parbakeWasteQty =
+      doughMixQty +
+      totalExtraParbakeQty -
+      totals.totalFinishedQty -
+      (astronautParbakeQty + saleParbakeQty) -
+      doughWasteQty;
+  } else {
+    parbakeWasteQty =
+      doughMixQty +
+      totalExtraParbakeQty -
+      generalDoughFinishedQty -
+      storedParbakeFinishedQty -
+      (astronautParbakeQty + saleParbakeQty) -
+      doughWasteQty -
+      breadFinishedQty;
+  }
 
   if (parbakeWasteQty < 0) {
     warnings.push(
@@ -266,7 +304,8 @@ function calculateParbakeAndDough(
     );
   }
 
-  const doughUsageQty = doughMixQty - (parbakeWasteQty + doughWasteQty);
+  const doughUsageQty =
+    doughMixQty - doughWasteQty - breadWasteQty - Math.max(0, parbakeWasteQty);
   if (doughUsageQty < 0) {
     warnings.push(
       `도우 사용량이 음수입니다 (${doughUsageQty}). 입력값을 확인해 주세요.`
@@ -277,6 +316,8 @@ function calculateParbakeAndDough(
 
   return {
     parbakeWasteQty,
+    breadWasteQty,
+    generalDoughFinishedQty,
     doughUsageQty,
     sameDayParbakeProductionQty,
     doughMixQty,
@@ -732,7 +773,11 @@ export function calculateUsageSummary(
   );
 
   const totals = calculateTotals(dateGroup);
-  const parbakeDough = calculateParbakeAndDough(dateGroup, totals);
+  const parbakeDough = calculateParbakeAndDough(
+    dateGroup,
+    totals,
+    productSummaries
+  );
   allWarnings.push(...parbakeDough.warnings);
 
   const directDoughFinishedQty = productSummaries
@@ -860,6 +905,8 @@ export function calculateUsageSummary(
     doughUsageQty: parbakeDough.doughUsageQty,
     sameDayParbakeProductionQty: parbakeDough.sameDayParbakeProductionQty,
     parbakeWasteQty: parbakeDough.parbakeWasteQty,
+    breadWasteQty: parbakeDough.breadWasteQty,
+    generalDoughFinishedQty: parbakeDough.generalDoughFinishedQty,
 
     astronautParbakeQty: totals.astronautParbakeQty,
     saleParbakeQty: totals.saleParbakeQty,

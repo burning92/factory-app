@@ -19,6 +19,7 @@ import {
   type EcountMaterialPickerOption,
   type ReceivingStorageCategory,
 } from "@/features/daily/materialReceivingInspection";
+import { requestMaterialReceiptLabSync } from "@/lib/materialStockLab/clientSyncMaterialReceipt";
 
 type LogStatus = "draft" | "submitted" | "approved" | "rejected";
 
@@ -70,6 +71,31 @@ function localDatetimeToIso(localStr: string): string {
   if (!t) return new Date().toISOString();
   const d = new Date(t);
   return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+}
+
+function linesToReceiptLabPayload(lines: LineState[]) {
+  return lines
+    .filter((l) => l.item_name.trim())
+    .map((line, i) => {
+      const bw = parseOptionalNum(line.box_weight_g) ?? 0;
+      const uw = parseOptionalNum(line.unit_weight_g) ?? 0;
+      const hasBoxWeight = bw > 0;
+      const hasUnitWeight = uw > 0;
+      const total = calcTotalWeightG(
+        hasBoxWeight ? line.box_qty : "",
+        hasUnitWeight ? line.unit_qty : "",
+        line.remainder_g,
+        bw,
+        uw
+      );
+      const conformity = line.conformity === "X" ? "X" : "O";
+      return {
+        line_index: i + 1,
+        item_name: line.item_name.trim(),
+        total_weight_g: total,
+        conformity,
+      };
+    });
 }
 
 function emptyLine(): LineState {
@@ -487,6 +513,12 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
         logId = String((inserted as { id: string }).id);
       }
       await persistItems(logId, effectiveLines);
+      void requestMaterialReceiptLabSync({
+        action: "upsert",
+        inspection_log_id: logId,
+        received_at: localDatetimeToIso(receivedAtLocal),
+        lines: linesToReceiptLabPayload(effectiveLines),
+      });
       setToast({ message: "저장되었습니다." });
       setCurrentLogId(logId);
       setCurrentLogStatus(mode === "edit" ? currentLogStatus : "draft");
@@ -504,6 +536,7 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
     persistItems,
     effectiveLines,
     currentLogStatus,
+    receivedAtLocal,
   ]);
 
   const handleSubmit = useCallback(async () => {
@@ -535,6 +568,12 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
         .eq("id", logId);
       if (patchErr) throw patchErr;
       await persistItems(logId, effectiveLines);
+      void requestMaterialReceiptLabSync({
+        action: "upsert",
+        inspection_log_id: logId,
+        received_at: localDatetimeToIso(receivedAtLocal),
+        lines: linesToReceiptLabPayload(effectiveLines),
+      });
 
       const { error: submitErr } = await supabase
         .from("daily_material_receiving_inspection_logs")
@@ -554,7 +593,7 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [validateLinesForSave, currentLogId, baseHeaderFields, user?.id, persistItems, effectiveLines]);
+  }, [validateLinesForSave, currentLogId, baseHeaderFields, user?.id, persistItems, effectiveLines, receivedAtLocal]);
 
   const updateLine = useCallback((clientId: string, patch: Partial<LineState>) => {
     setLines((prev) => prev.map((l) => (l.clientId === clientId ? { ...l, ...patch } : l)));

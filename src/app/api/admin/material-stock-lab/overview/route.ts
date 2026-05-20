@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { normalizeInventoryItemCode } from "@/lib/inventoryItemCodeNormalize";
 import { requireAdminMaterialStockLab } from "../_requireAdmin";
 
+export type MaterialStockLabMappingStatus = "mapped" | "unmapped" | "duplicate";
+
 export type MaterialStockLabOverviewRow = {
   inventory_item_code: string;
+  ecount_item_name: string;
+  app_material_display: string;
+  mapping_status: MaterialStockLabMappingStatus;
   material_names: string[];
   material_candidates: { id: string; material_name: string }[];
   mapping_count: number;
@@ -18,6 +23,33 @@ export type MaterialStockLabOverviewRow = {
   diff_g: number;
 };
 
+function resolveEcountItemName(
+  code: string,
+  masterItemName: string | null | undefined,
+  inventoryDisplayName: string | null | undefined,
+  inventoryRawName: string | null | undefined
+): string {
+  const fromMaster = String(masterItemName ?? "").trim();
+  if (fromMaster) return fromMaster;
+  const fromDisplay = String(inventoryDisplayName ?? "").trim();
+  if (fromDisplay) return fromDisplay;
+  const fromRaw = String(inventoryRawName ?? "").trim();
+  if (fromRaw) return fromRaw;
+  return code;
+}
+
+function appMaterialDisplay(materialNames: string[], mappingCount: number): string {
+  if (mappingCount === 0) return "미매핑";
+  if (mappingCount === 1) return materialNames[0] ?? "—";
+  return `동일 코드 ${mappingCount}건`;
+}
+
+function mappingStatus(mappingCount: number): MaterialStockLabMappingStatus {
+  if (mappingCount === 0) return "unmapped";
+  if (mappingCount === 1) return "mapped";
+  return "duplicate";
+}
+
 export async function GET(req: NextRequest) {
   const auth = await requireAdminMaterialStockLab(req);
   if (!auth.ok) return auth.response;
@@ -26,11 +58,14 @@ export async function GET(req: NextRequest) {
   const onlyDiff = req.nextUrl.searchParams.get("onlyDiff") === "1";
   const q = (req.nextUrl.searchParams.get("q") ?? "").trim().toLowerCase();
 
-  const [invRes, matsRes, viewRes, syncRes] = await Promise.all([
-    supabase.from("ecount_inventory_current").select("item_code, qty, synced_at"),
+  const [invRes, matsRes, viewRes, syncRes, masterRes] = await Promise.all([
+    supabase
+      .from("ecount_inventory_current")
+      .select("item_code, qty, synced_at, display_item_name, raw_item_name"),
     supabase.from("materials").select("id, material_name, inventory_item_code").not("inventory_item_code", "is", null),
     supabase.from("material_stock_current_v").select("*"),
     supabase.from("ecount_sync_status").select("last_synced_at, source_refreshed_at").eq("sync_name", "ecount_inventory").maybeSingle(),
+    supabase.from("ecount_item_master").select("item_code, item_name"),
   ]);
 
   if (invRes.error) {
@@ -42,19 +77,45 @@ export async function GET(req: NextRequest) {
   if (viewRes.error) {
     return NextResponse.json({ error: "lab_view_failed", message: viewRes.error.message }, { status: 500 });
   }
+  if (masterRes.error) {
+    return NextResponse.json({ error: "ecount_master_load_failed", message: masterRes.error.message }, { status: 500 });
+  }
 
-  const ecountByCode = new Map<string, { qty: number; lastSynced: string | null }>();
-  for (const row of invRes.data ?? []) {
-    const code = normalizeInventoryItemCode((row as { item_code?: string }).item_code);
+  const masterNameByCode = new Map<string, string>();
+  for (const row of masterRes.data ?? []) {
+    const r = row as { item_code?: string; item_name?: string };
+    const code = normalizeInventoryItemCode(r.item_code);
     if (!code) continue;
-    const qty = Number((row as { qty?: unknown }).qty) || 0;
-    const syncedAt = (row as { synced_at?: string | null }).synced_at ?? null;
+    const name = String(r.item_name ?? "").trim();
+    if (name) masterNameByCode.set(code, name);
+  }
+
+  const ecountByCode = new Map<
+    string,
+    { qty: number; lastSynced: string | null; displayItemName: string | null; rawItemName: string | null }
+  >();
+  for (const row of invRes.data ?? []) {
+    const r = row as {
+      item_code?: string;
+      qty?: unknown;
+      synced_at?: string | null;
+      display_item_name?: string | null;
+      raw_item_name?: string | null;
+    };
+    const code = normalizeInventoryItemCode(r.item_code);
+    if (!code) continue;
+    const qty = Number(r.qty) || 0;
+    const syncedAt = r.synced_at ?? null;
+    const display = String(r.display_item_name ?? "").trim() || null;
+    const raw = String(r.raw_item_name ?? "").trim() || null;
     const cur = ecountByCode.get(code);
     if (!cur) {
-      ecountByCode.set(code, { qty, lastSynced: syncedAt });
+      ecountByCode.set(code, { qty, lastSynced: syncedAt, displayItemName: display, rawItemName: raw });
     } else {
       cur.qty += qty;
       if (syncedAt && (!cur.lastSynced || syncedAt > cur.lastSynced)) cur.lastSynced = syncedAt;
+      if (display && !cur.displayItemName) cur.displayItemName = display;
+      if (raw && !cur.rawItemName) cur.rawItemName = raw;
     }
   }
 
@@ -111,18 +172,27 @@ export async function GET(req: NextRequest) {
     const material_names = namesByCode.get(code) ?? [];
     const material_candidates = candidatesByCode.get(code) ?? [];
     const mapping_count = material_candidates.length;
+    const ecount_item_name = resolveEcountItemName(
+      code,
+      masterNameByCode.get(code),
+      e?.displayItemName,
+      e?.rawItemName
+    );
 
     const diff_g = Number((ecount_stock_g - lab_current_stock_g).toFixed(4));
 
     if (onlyDiff && Math.abs(diff_g) < 1e-6) continue;
 
     if (q) {
-      const hay = `${code} ${material_names.join(" ")}`.toLowerCase();
+      const hay = `${code} ${ecount_item_name} ${material_names.join(" ")}`.toLowerCase();
       if (!hay.includes(q)) continue;
     }
 
     rows.push({
       inventory_item_code: code,
+      ecount_item_name,
+      app_material_display: appMaterialDisplay(material_names, mapping_count),
+      mapping_status: mappingStatus(mapping_count),
       material_names,
       material_candidates,
       mapping_count,

@@ -7,6 +7,7 @@ import { getAppRecentValue, setAppRecentValue } from "@/lib/appRecentValues";
 import { createSafeId } from "@/lib/createSafeId";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { computeOutboundTotalG } from "@/features/production/outbound/computeOutboundTotalG";
 
 /** 출고 입력 전용 최근 작성자명 (1차 마감과 분리). Supabase 우선, localStorage는 보조 fallback */
 const OUTBOUND_LAST_AUTHOR_KEY = "outbound-last-author-name";
@@ -198,20 +199,10 @@ function calcActualOutboundG(
   entries: { boxQty: number; bagQty: number; remainderG: number }[],
   material: { boxWeightG: number; unitWeightG: number } | undefined
 ): number {
-  if (!material) return 0;
-  const boxG = material.boxWeightG ?? 0;
-  const unitG = material.unitWeightG ?? 0;
-  const isGOnly = boxG === 0 && unitG === 0;
-  let total = 0;
-  for (const e of entries) {
-    if (isGOnly) {
-      total += e.remainderG ?? 0;
-    } else {
-      const unitW = unitG > 0 ? unitG : boxG;
-      total += (e.boxQty ?? 0) * boxG + (e.bagQty ?? 0) * unitW + (e.remainderG ?? 0);
-    }
-  }
-  return total;
+  return computeOutboundTotalG(
+    entries.map((e) => ({ 박스: e.boxQty, 낱개: e.bagQty, g: e.remainderG })),
+    material
+  );
 }
 
 function sumPendingBoxBagG(

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { normalizeInventoryItemCode } from "@/lib/inventoryItemCodeNormalize";
+import { voidAllActiveLabMovements } from "@/lib/materialStockLab/voidAllActiveLabMovements";
 import { requireAdminMaterialStockLab } from "../_requireAdmin";
 
 export async function POST(req: NextRequest) {
@@ -55,5 +56,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "baseline_insert_failed", message: insErr.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, inserted: inserts.length, baseline_at: nowIso, source_synced_at });
+  const movements_voided = await voidAllActiveLabMovements(
+    supabase,
+    userId,
+    "이카운트 기준재고 저장(장부 기준점 갱신)"
+  );
+
+  return NextResponse.json({
+    ok: true,
+    inserted: inserts.length,
+    baseline_at: nowIso,
+    source_synced_at,
+    movements_voided,
+  });
 }
