@@ -8,7 +8,10 @@ import type {
   ComputedResult,
   LotUsageRow,
 } from "./types";
-import { getBomRowsForProductAndStandard } from "./bomAdapter";
+import {
+  bomProductMatchesBaseProduct,
+  getBomRowsForProductAndStandard,
+} from "./bomAdapter";
 import {
   allocateIntByWeight,
   applyIngredientWasteFifo,
@@ -72,14 +75,34 @@ function buildIngredientUsageRows(
   });
 }
 
+/** 브레드 폐기 g 환산용 BOM — 도우(베이스소스) 행 제외 */
+function excludeDoughBasisRows(rows: BomRowRef[]): BomRowRef[] {
+  return rows.filter((r) => (r.basis ?? "").trim() !== "도우");
+}
+
+/**
+ * 브레드 BOM 조회: "브레드" 기준 → 레거시 "일반" 완제품 → 제품명 접두 일치.
+ * (브레드 기준 도입 전 포노 시그니처 등 "제품명 - 일반" BOM 호환)
+ */
 export function getBreadBomRows(
   baseProductName: string,
   bomList: BomRowRef[]
 ): BomRowRef[] {
-  return getBomRowsForProductAndStandard(
-    baseProductName,
-    BREAD_STANDARD,
-    bomList
+  const base = (baseProductName ?? "").trim();
+  if (!base) return [];
+
+  const fromBread = excludeDoughBasisRows(
+    getBomRowsForProductAndStandard(base, BREAD_STANDARD, bomList)
+  );
+  if (fromBread.length > 0) return fromBread;
+
+  const fromGeneral = excludeDoughBasisRows(
+    getBomRowsForProductAndStandard(base, "일반", bomList)
+  );
+  if (fromGeneral.length > 0) return fromGeneral;
+
+  return excludeDoughBasisRows(
+    bomList.filter((b) => bomProductMatchesBaseProduct(b.productName, base))
   );
 }
 

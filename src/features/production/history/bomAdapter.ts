@@ -16,6 +16,17 @@ function bomProductMatchesBase(
   return b === base || b === `${base} - 일반`;
 }
 
+/** 제품명이 base 또는 "base - 기준" 형태인지 (브레드 레거시 BOM 포함) */
+export function bomProductMatchesBaseProduct(
+  bomProductName: string,
+  baseProductName: string
+): boolean {
+  const b = (bomProductName ?? "").trim();
+  const base = (baseProductName ?? "").trim();
+  if (!base) return false;
+  return b === base || b.startsWith(`${base} -`);
+}
+
 /**
  * 제품명 = baseProductName, 제품 기준 = "일반", 하위원료 기준 = "도우" 인 BOM 행만 반환.
  * (실제 DB에 product_standard 컬럼이 없으면 product_name이 "baseProductName" 또는 "baseProductName - 일반" 인 행 중 basis === "도우" 만 사용)

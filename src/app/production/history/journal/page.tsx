@@ -90,6 +90,68 @@ function addDays(isoDate: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+type JournalGramLine = {
+  key: string;
+  materialName: string;
+  grams: number;
+  expiryDate: string;
+};
+
+/** LOT FIFO 없을 때도 BOM×폐기 합계(g)는 총괄에 표시 */
+function journalWasteGramLines(
+  rows: BreadIngredientUsageRow[]
+): JournalGramLine[] {
+  const out: JournalGramLine[] = [];
+  for (const r of rows) {
+    const lots = (r.lots ?? []).filter((lot) => lot.wasteDeductedQty > 0);
+    if (lots.length > 0) {
+      for (const lot of lots) {
+        out.push({
+          key: `w-${r.materialName}-${lot.expiryDate}-${lot.lotRowId}`,
+          materialName: r.materialName,
+          grams: lot.wasteDeductedQty,
+          expiryDate: lot.expiryDate || "—",
+        });
+      }
+    } else if ((r.wasteQty ?? 0) > 0) {
+      out.push({
+        key: `w-${r.materialName}-total`,
+        materialName: r.materialName,
+        grams: r.wasteQty,
+        expiryDate: "—",
+      });
+    }
+  }
+  return out;
+}
+
+function journalUsageGramLines(
+  rows: BreadIngredientUsageRow[]
+): JournalGramLine[] {
+  const out: JournalGramLine[] = [];
+  for (const r of rows) {
+    const lots = (r.lots ?? []).filter((lot) => lot.actualUsageQty > 0);
+    if (lots.length > 0) {
+      for (const lot of lots) {
+        out.push({
+          key: `u-${r.materialName}-${lot.expiryDate}-${lot.lotRowId}`,
+          materialName: r.materialName,
+          grams: lot.actualUsageQty,
+          expiryDate: lot.expiryDate || "—",
+        });
+      }
+    } else if ((r.actualUsageQty ?? 0) > 0) {
+      out.push({
+        key: `u-${r.materialName}-total`,
+        materialName: r.materialName,
+        grams: r.actualUsageQty,
+        expiryDate: "—",
+      });
+    }
+  }
+  return out;
+}
+
 function JournalPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -487,72 +549,65 @@ function JournalPageContent() {
                   </div>
                 </div>
 
-                {(breadIngredientUsageRows.some((r) =>
-                  (r.lots ?? []).some((lot) => lot.wasteDeductedQty > 0)
-                ) ||
-                  parbakeIngredientUsageRows.some((r) =>
-                    (r.lots ?? []).some((lot) => lot.wasteDeductedQty > 0)
-                  )) ? (
-                  <div className="journal-section">
-                    <p className="journal-section-title">원료 폐기량</p>
-                    <ul className="journal-section-body journal-section-list list-none pl-0 space-y-1">
-                      {breadIngredientUsageRows.flatMap((r) =>
-                        (r.lots ?? [])
-                          .filter((lot) => lot.wasteDeductedQty > 0)
-                          .map((lot) => (
-                            <li key={`bread-w-${r.materialName}-${lot.expiryDate}`}>
-                              {r.materialName}{" "}
-                              {lot.wasteDeductedQty.toLocaleString()}g (
-                              {lot.expiryDate || "—"})
+                {(() => {
+                  const wasteLines = [
+                    ...journalWasteGramLines(breadIngredientUsageRows),
+                    ...journalWasteGramLines(parbakeIngredientUsageRows),
+                  ];
+                  if (wasteLines.length > 0) {
+                    return (
+                      <div className="journal-section">
+                        <p className="journal-section-title">원료 폐기량</p>
+                        <ul className="journal-section-body journal-section-list list-none pl-0 space-y-1">
+                          {wasteLines.map((line) => (
+                            <li key={line.key}>
+                              {line.materialName}{" "}
+                              {line.grams.toLocaleString()}g ({line.expiryDate})
                             </li>
-                          ))
-                      )}
-                      {parbakeIngredientUsageRows.flatMap((r) =>
-                        (r.lots ?? [])
-                          .filter((lot) => lot.wasteDeductedQty > 0)
-                          .map((lot) => (
-                            <li key={`pb-w-${r.materialName}-${lot.expiryDate}`}>
-                              {r.materialName}{" "}
-                              {lot.wasteDeductedQty.toLocaleString()}g (
-                              {lot.expiryDate || "—"})
-                            </li>
-                          ))
-                      )}
-                    </ul>
-                  </div>
-                ) : showBaseOnSummary &&
-                  baseWasteRows.some((r) => r.resolved && (r.baseWasteQty ?? 0) > 0) ? (
-                  <div className="journal-section">
-                    <p className="journal-section-title">베이스 폐기량</p>
-                    <div className="journal-section-body journal-section-list">
-                      <ul className="list-none pl-0 space-y-1">
-                        {baseWasteRows.map((wasteRow, i) => {
-                          if (!wasteRow.resolved || !wasteRow.baseSauceMaterialName) return null;
-                          const qty = wasteRow.baseWasteQty ?? 0;
-                          if (qty <= 0) return null;
-                          const usageRow = baseUsageRows[i];
-                          const wasteLotRows = usageRow?.fifoLots?.filter((l) => l.fifoDeductedWasteQty > 0) ?? [];
-                          if (wasteLotRows.length > 0) {
-                            return wasteLotRows.map((lot) => (
-                              <li key={`${wasteRow.baseSauceMaterialName}-${lot.lotRowId}`}>
-                                {wasteRow.baseSauceMaterialName} {lot.fifoDeductedWasteQty.toLocaleString()}g ({lot.expiryDate || "—"})
-                              </li>
-                            ));
-                          }
-                          return (
-                            <li key={wasteRow.baseSauceMaterialName ?? wasteRow.parbakeName ?? i}>
-                              {wasteRow.baseSauceMaterialName} {qty.toLocaleString()}g ({date})
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
-                  </div>
-                ) : (() => {
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  }
+                  if (
+                    showBaseOnSummary &&
+                    baseWasteRows.some((r) => r.resolved && (r.baseWasteQty ?? 0) > 0)
+                  ) {
+                    return (
+                      <div className="journal-section">
+                        <p className="journal-section-title">베이스 폐기량</p>
+                        <div className="journal-section-body journal-section-list">
+                          <ul className="list-none pl-0 space-y-1">
+                            {baseWasteRows.map((wasteRow, i) => {
+                              if (!wasteRow.resolved || !wasteRow.baseSauceMaterialName) return null;
+                              const qty = wasteRow.baseWasteQty ?? 0;
+                              if (qty <= 0) return null;
+                              const usageRow = baseUsageRows[i];
+                              const wasteLotRows =
+                                usageRow?.fifoLots?.filter((l) => l.fifoDeductedWasteQty > 0) ?? [];
+                              if (wasteLotRows.length > 0) {
+                                return wasteLotRows.map((lot) => (
+                                  <li key={`${wasteRow.baseSauceMaterialName}-${lot.lotRowId}`}>
+                                    {wasteRow.baseSauceMaterialName}{" "}
+                                    {lot.fifoDeductedWasteQty.toLocaleString()}g (
+                                    {lot.expiryDate || "—"})
+                                  </li>
+                                ));
+                              }
+                              return (
+                                <li key={wasteRow.baseSauceMaterialName ?? wasteRow.parbakeName ?? i}>
+                                  {wasteRow.baseSauceMaterialName} {qty.toLocaleString()}g ({date})
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      </div>
+                    );
+                  }
                   const dateParbakeTypes = comp.productSummaries
                     ? getDateParbakeTypes(comp.productSummaries)
                     : [];
-
                   if (showBaseOnSummary && dateParbakeTypes.length > 1) {
                     return (
                       <div className="journal-section">
@@ -566,40 +621,26 @@ function JournalPageContent() {
                   return null;
                 })()}
 
-                {(breadIngredientUsageRows.some((r) =>
-                  (r.lots ?? []).some((lot) => lot.actualUsageQty > 0)
-                ) ||
-                  parbakeIngredientUsageRows.some((r) =>
-                    (r.lots ?? []).some((lot) => lot.actualUsageQty > 0)
-                  )) && (
-                  <div className="journal-section">
-                    <p className="journal-section-title">원료 사용량</p>
-                    <ul className="journal-section-body journal-section-list list-none pl-0 space-y-1">
-                      {breadIngredientUsageRows.flatMap((r) =>
-                        (r.lots ?? [])
-                          .filter((lot) => lot.actualUsageQty > 0)
-                          .map((lot) => (
-                            <li key={`bread-u-${r.materialName}-${lot.expiryDate}`}>
-                              {r.materialName}{" "}
-                              {lot.actualUsageQty.toLocaleString()}g (
-                              {lot.expiryDate || "—"})
-                            </li>
-                          ))
-                      )}
-                      {parbakeIngredientUsageRows.flatMap((r) =>
-                        (r.lots ?? [])
-                          .filter((lot) => lot.actualUsageQty > 0)
-                          .map((lot) => (
-                            <li key={`pb-u-${r.materialName}-${lot.expiryDate}`}>
-                              {r.materialName}{" "}
-                              {lot.actualUsageQty.toLocaleString()}g (
-                              {lot.expiryDate || "—"})
-                            </li>
-                          ))
-                      )}
-                    </ul>
-                  </div>
-                )}
+                {(() => {
+                  const usageLines = [
+                    ...journalUsageGramLines(breadIngredientUsageRows),
+                    ...journalUsageGramLines(parbakeIngredientUsageRows),
+                  ];
+                  if (usageLines.length === 0) return null;
+                  return (
+                    <div className="journal-section">
+                      <p className="journal-section-title">원료 사용량</p>
+                      <ul className="journal-section-body journal-section-list list-none pl-0 space-y-1">
+                        {usageLines.map((line) => (
+                          <li key={line.key}>
+                            {line.materialName}{" "}
+                            {line.grams.toLocaleString()}g ({line.expiryDate})
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })()}
 
                 {showBaseOnSummary &&
                 baseUsageRows.some((r) => {
