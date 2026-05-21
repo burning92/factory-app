@@ -558,57 +558,6 @@ function JournalPageContent() {
                   return null;
                 })()}
 
-                {(breadIngredientUsageRows.length > 0 ||
-                  parbakeIngredientUsageRows.length > 0) ? (
-                  <div className="journal-section">
-                    <p className="journal-section-title">원료 사용량 (폐기 반영)</p>
-                    <ul className="journal-section-body journal-section-list list-none pl-0 space-y-1">
-                      {breadIngredientUsageRows.flatMap((r) =>
-                        (r.lots ?? []).map((lot) => (
-                          <li key={`bread-u-${r.materialName}-${lot.expiryDate}`}>
-                            {r.materialName}{" "}
-                            {lot.finalUsageQty.toLocaleString()}g (
-                            {lot.expiryDate || "—"})
-                          </li>
-                        ))
-                      )}
-                      {parbakeIngredientUsageRows.flatMap((r) =>
-                        (r.lots ?? []).map((lot) => (
-                          <li key={`pb-u-${r.materialName}-${lot.expiryDate}`}>
-                            {r.materialName}{" "}
-                            {lot.finalUsageQty.toLocaleString()}g (
-                            {lot.expiryDate || "—"})
-                          </li>
-                        ))
-                      )}
-                    </ul>
-                  </div>
-                ) : baseUsageRows.some((r) => r.resolved) ? (
-                  <div className="journal-section">
-                    <p className="journal-section-title">베이스 사용량</p>
-                    <div className="journal-section-body journal-section-list">
-                      <ul className="list-none pl-0 space-y-1">
-                        {baseUsageRows.map((usageRow, i) => {
-                          if (!usageRow.resolved || !usageRow.baseSauceMaterialName) return null;
-                          const lotRows = usageRow.fifoLots?.filter((l) => l.effectiveUsageAfterWasteQty > 0) ?? [];
-                          if (lotRows.length > 0) {
-                            return lotRows.map((lot) => (
-                              <li key={`${usageRow.baseSauceMaterialName}-${lot.lotRowId}`}>
-                                {usageRow.baseSauceMaterialName} {lot.effectiveUsageAfterWasteQty.toLocaleString()}g ({lot.expiryDate || "—"})
-                              </li>
-                            ));
-                          }
-                          return (
-                            <li key={usageRow.baseSauceMaterialName ?? i}>
-                              {usageRow.displayLabel ?? `${usageRow.baseSauceMaterialName} ${(usageRow.totalBaseUsageAfterWasteQty ?? 0).toLocaleString()}g`}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
-                  </div>
-                ) : null}
-
                 <div className="journal-section">
                   <p className="journal-section-title">파베이크 목적별 생산량</p>
                   <ul className="journal-section-body journal-section-list list-none pl-0 space-y-1">
@@ -852,31 +801,6 @@ function JournalPageContent() {
                               ))
                           )}
                         </ul>
-                      </div>
-                    )}
-                    {ingredientRows.length > 0 && (
-                      <div className="mt-4">
-                        <h4 className="text-xs font-semibold text-slate-600 mb-2">최종 원료 사용량</h4>
-                        <table className="w-full text-sm border border-slate-300 border-collapse">
-                          <thead>
-                            <tr className="bg-slate-100">
-                              <th className="border border-slate-300 px-2 py-1 text-left">원료명</th>
-                              <th className="border border-slate-300 px-2 py-1 text-left">LOT(소비기한)</th>
-                              <th className="border border-slate-300 px-2 py-1 text-right">최종 사용량</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {ingredientRows.flatMap((r) =>
-                              (r.lots ?? []).map((lot) => (
-                                <tr key={`${r.materialName}-${lot.expiryDate}-${lot.lotRowId}`}>
-                                  <td className="border border-slate-300 px-2 py-1">{r.materialName}</td>
-                                  <td className="border border-slate-300 px-2 py-1">{lot.expiryDate || "—"}</td>
-                                  <td className="border border-slate-300 px-2 py-1 text-right">{lot.finalUsageQty.toLocaleString()}g</td>
-                                </tr>
-                              ))
-                            )}
-                          </tbody>
-                        </table>
                       </div>
                     )}
                   </div>
