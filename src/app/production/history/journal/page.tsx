@@ -125,26 +125,27 @@ function journalWasteGramLines(
   return out;
 }
 
+/** 1차 실사 LOT에서 브레드 폐기 FIFO 차감 후 잔량 (피자 베이스 사용량과 동일 개념) */
 function journalUsageGramLines(
   rows: BreadIngredientUsageRow[]
 ): JournalGramLine[] {
   const out: JournalGramLine[] = [];
   for (const r of rows) {
-    const lots = (r.lots ?? []).filter((lot) => lot.actualUsageQty > 0);
+    const lots = (r.lots ?? []).filter((lot) => lot.finalUsageQty > 0);
     if (lots.length > 0) {
       for (const lot of lots) {
         out.push({
           key: `u-${r.materialName}-${lot.expiryDate}-${lot.lotRowId}`,
           materialName: r.materialName,
-          grams: lot.actualUsageQty,
+          grams: lot.finalUsageQty,
           expiryDate: lot.expiryDate || "—",
         });
       }
-    } else if ((r.actualUsageQty ?? 0) > 0) {
+    } else if ((r.finalUsageQty ?? 0) > 0) {
       out.push({
         key: `u-${r.materialName}-total`,
         materialName: r.materialName,
-        grams: r.actualUsageQty,
+        grams: r.finalUsageQty,
         expiryDate: "—",
       });
     }
@@ -629,7 +630,7 @@ function JournalPageContent() {
                   if (usageLines.length === 0) return null;
                   return (
                     <div className="journal-section">
-                      <p className="journal-section-title">원료 사용량</p>
+                      <p className="journal-section-title">원료 사용량 (폐기 반영)</p>
                       <ul className="journal-section-body journal-section-list list-none pl-0 space-y-1">
                         {usageLines.map((line) => (
                           <li key={line.key}>
