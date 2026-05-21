@@ -20,6 +20,27 @@ import {
 
 const BREAD_STANDARD = "브레드";
 
+/**
+ * BOM 원료명 ↔ 1차 마감 레거시 원료명 (재고연동 코드 동일 계열)
+ * @see 원료 마스터: 그라나파다노파우더 캔 / 브레드 그라나파다노캔 (yy2030) 등
+ */
+export const BREAD_MATERIAL_LOT_ALIASES: Record<string, string[]> = {
+  "브레드 그라나파다노캔": ["그라나파다노파우더 캔", "그라나파다노파우더 팩"],
+  "브레드 그라나파다노파우더": ["그라나파다노파우더 팩", "그라나파다노파우더 캔"],
+  "브레드 리코타치즈": ["리코타치즈"],
+  "브레드 잡화맛청": ["잡화맛청"],
+  "브레드 바질소스": ["바질소스WB-1", "바질소스"],
+  "그라나파다노파우더 캔": ["브레드 그라나파다노캔"],
+  "그라나파다노파우더 팩": ["브레드 그라나파다노파우더"],
+  "리코타치즈": ["브레드 리코타치즈"],
+  "잡화맛청": ["브레드 잡화맛청"],
+  "바질소스WB-1": ["브레드 바질소스"],
+};
+
+export function getBreadMaterialLotAliases(materialName: string): string[] {
+  return BREAD_MATERIAL_LOT_ALIASES[(materialName ?? "").trim()] ?? [];
+}
+
 export type BreadIngredientWasteRow = {
   materialName: string;
   wasteQty: number;
@@ -62,7 +83,8 @@ function buildIngredientUsageRows(
     const lots = applyIngredientWasteFifo(
       lotUsages,
       w.materialName,
-      w.wasteQty
+      w.wasteQty,
+      getBreadMaterialLotAliases(w.materialName)
     );
     const actualUsageQty = lots.reduce((s, l) => s + l.actualUsageQty, 0);
     return {
@@ -80,9 +102,22 @@ function excludeDoughBasisRows(rows: BomRowRef[]): BomRowRef[] {
   return rows.filter((r) => (r.basis ?? "").trim() !== "도우");
 }
 
+/** materialName 기준 병합 — 뒤에 오는 행이 같은 원료명이면 덮어씀 */
+function mergeBomRowsByMaterial(...groups: BomRowRef[][]): BomRowRef[] {
+  const map = new Map<string, BomRowRef>();
+  for (const group of groups) {
+    for (const r of group) {
+      const name = (r.materialName ?? "").trim();
+      if (!name) continue;
+      map.set(name, r);
+    }
+  }
+  return Array.from(map.values());
+}
+
 /**
- * 브레드 BOM 조회: "브레드" 기준 → 레거시 "일반" 완제품 → 제품명 접두 일치.
- * (브레드 기준 도입 전 포노 시그니처 등 "제품명 - 일반" BOM 호환)
+ * 브레드 BOM: 레거시 "일반" + 신규 "브레드" 기준을 합침.
+ * (브레드 기준만 일부 등록된 경우에도 예전 일반 완제품 원료가 빠지지 않도록)
  */
 export function getBreadBomRows(
   baseProductName: string,
@@ -91,19 +126,18 @@ export function getBreadBomRows(
   const base = (baseProductName ?? "").trim();
   if (!base) return [];
 
-  const fromBread = excludeDoughBasisRows(
-    getBomRowsForProductAndStandard(base, BREAD_STANDARD, bomList)
-  );
-  if (fromBread.length > 0) return fromBread;
-
   const fromGeneral = excludeDoughBasisRows(
     getBomRowsForProductAndStandard(base, "일반", bomList)
   );
-  if (fromGeneral.length > 0) return fromGeneral;
-
-  return excludeDoughBasisRows(
+  const fromBread = excludeDoughBasisRows(
+    getBomRowsForProductAndStandard(base, BREAD_STANDARD, bomList)
+  );
+  const fromLegacy = excludeDoughBasisRows(
     bomList.filter((b) => bomProductMatchesBaseProduct(b.productName, base))
   );
+
+  const merged = mergeBomRowsByMaterial(fromGeneral, fromLegacy, fromBread);
+  return merged;
 }
 
 export function calculateBreadDerived(

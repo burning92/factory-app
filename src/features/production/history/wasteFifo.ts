@@ -15,10 +15,17 @@ export type IngredientWasteLotRow = {
 export function applyIngredientWasteFifo(
   lotUsages: LotUsageRow[],
   materialName: string,
-  totalWasteQty: number
+  totalWasteQty: number,
+  /** 1차 마감 레거시 원료명 (브레드 접두 전 등) */
+  aliasMaterialNames: string[] = []
 ): IngredientWasteLotRow[] {
+  const names = new Set(
+    [materialName, ...aliasMaterialNames]
+      .map((n) => (n ?? "").trim())
+      .filter(Boolean)
+  );
   const lots = lotUsages
-    .filter((l) => (l.materialName ?? "").trim() === materialName)
+    .filter((l) => names.has((l.materialName ?? "").trim()))
     .map((l) => ({ ...l }))
     .sort((a, b) => (a.expiryDate || "").localeCompare(b.expiryDate || ""));
 
