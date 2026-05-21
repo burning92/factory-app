@@ -62,14 +62,14 @@ import { getDateParbakeTypes } from "@/features/production/history/calculations"
 import { mapTechnicalWarningsToOperatorMessages } from "@/features/production/history/operatorWarnings";
 import { calculateBreadDerived } from "@/features/production/history/breadDerived";
 import { calculateParbakeProductWasteDerived } from "@/features/production/history/parbakeProductWasteDerived";
-import {
-  findBreadProductDerived,
-  type BreadDerived,
-} from "@/features/production/history/breadDerived";
+import type { BreadDerived } from "@/features/production/history/breadDerived";
 import {
   findParbakeProductDerived,
   type ParbakeProductWasteDerived,
 } from "@/features/production/history/parbakeProductWasteDerived";
+
+/** 생산일지 제품별 페이지 생략 — 원료 사용량은 1차 마감·원료 사용량 화면에서 확인 */
+const BREAD_PRODUCT_STANDARD = "브레드";
 import type {
   ProductUsagePage,
   ProductUsageRow,
@@ -206,14 +206,18 @@ function JournalPageContent() {
     [doughLog]
   );
 
-  /** 페이지 배열: 총괄 1 + 제품별 N (빈 페이지 없음). Hook 순서 고정을 위해 항상 호출. */
+  /** 페이지 배열: 총괄 1 + 제품별 N (브레드 제외). Hook 순서 고정을 위해 항상 호출. */
   const journalPages = useMemo(() => {
     if (!usageResult) return [];
     const summary = { type: "summary" as const };
-    const products = usageResult.productUsagePages.map((product) => ({
-      type: "product" as const,
-      product,
-    }));
+    const products = usageResult.productUsagePages
+      .filter(
+        (p) => (p.productStandardName ?? "").trim() !== BREAD_PRODUCT_STANDARD
+      )
+      .map((product) => ({
+        type: "product" as const,
+        product,
+      }));
     return [summary, ...products];
   }, [usageResult]);
 
@@ -748,43 +752,21 @@ function JournalPageContent() {
               </div>
 
               {(() => {
-                const breadProduct = findBreadProductDerived(
-                  breadDerived,
-                  product.productKey
-                );
                 const parbakeProduct = findParbakeProductDerived(
                   parbakeProductWasteDerived,
                   product.productKey
                 );
-                if (!breadProduct && !parbakeProduct) return null;
-                const ingredientRows =
-                  breadProduct?.ingredientUsageRows ??
-                  parbakeProduct?.ingredientUsageRows ??
-                  [];
+                if (!parbakeProduct) return null;
+                const ingredientRows = parbakeProduct.ingredientUsageRows ?? [];
                 return (
                   <div className="mt-6 pt-4 border-t border-slate-300">
                     <h3 className="text-sm font-semibold text-slate-700 mb-3">
-                      {breadProduct ? "브레드 도우 폐기 계산" : "파베이크 폐기 계산"}
+                      파베이크 폐기 계산
                     </h3>
                     <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-                      {breadProduct && (
-                        <>
-                          <dt className="text-slate-600">브레드 도우 사용량</dt>
-                          <dd>{breadProduct.breadDoughUsageQty.toLocaleString()}개</dd>
-                          <dt className="text-slate-600">브레드 폐기량</dt>
-                          <dd>{breadProduct.breadWasteQty.toLocaleString()}개</dd>
-                        </>
-                      )}
-                      {parbakeProduct && (
-                        <>
-                          <dt className="text-slate-600">파베이크 폐기량(배분)</dt>
-                          <dd>{parbakeProduct.parbakeWasteQty.toLocaleString()}개</dd>
-                        </>
-                      )}
+                      <dt className="text-slate-600">파베이크 폐기량(배분)</dt>
+                      <dd>{parbakeProduct.parbakeWasteQty.toLocaleString()}개</dd>
                     </dl>
-                    {breadDerived?.breadWasteNegative && (
-                      <p className="mt-1 text-xs text-amber-600">{breadDerived.reason}</p>
-                    )}
                     {ingredientRows.some((r) =>
                       (r.lots ?? []).some((lot) => lot.wasteDeductedQty > 0)
                     ) && (
