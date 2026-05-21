@@ -24,21 +24,38 @@ const BREAD_STANDARD = "브레드";
  * BOM 원료명 ↔ 1차 마감 레거시 원료명 (재고연동 코드 동일 계열)
  * @see 원료 마스터: 그라나파다노파우더 캔 / 브레드 그라나파다노캔 (yy2030) 등
  */
+/** 브레드 BOM명 → 레거시 1차 카드명 (과거 날짜만; 당일 둘 다 있으면 미사용) */
 export const BREAD_MATERIAL_LOT_ALIASES: Record<string, string[]> = {
   "브레드 그라나파다노캔": ["그라나파다노파우더 캔", "그라나파다노파우더 팩"],
   "브레드 그라나파다노파우더": ["그라나파다노파우더 팩", "그라나파다노파우더 캔"],
   "브레드 리코타치즈": ["리코타치즈"],
   "브레드 잡화맛청": ["잡화맛청"],
   "브레드 바질소스": ["바질소스WB-1", "바질소스"],
-  "그라나파다노파우더 캔": ["브레드 그라나파다노캔"],
-  "그라나파다노파우더 팩": ["브레드 그라나파다노파우더"],
-  "리코타치즈": ["브레드 리코타치즈"],
-  "잡화맛청": ["브레드 잡화맛청"],
-  "바질소스WB-1": ["브레드 바질소스"],
 };
 
-export function getBreadMaterialLotAliases(materialName: string): string[] {
-  return BREAD_MATERIAL_LOT_ALIASES[(materialName ?? "").trim()] ?? [];
+/**
+ * 1차 마감 LOT 매칭용 별칭.
+ * 같은 날 「브레드 리코타치즈」와 「리코타치즈」카드가 둘 다 있으면(혼합 생산) 합치지 않음.
+ */
+export function getBreadMaterialLotAliases(
+  materialName: string,
+  lotUsages: LotUsageRow[]
+): string[] {
+  const primary = (materialName ?? "").trim();
+  if (!primary) return [];
+
+  const aliases = BREAD_MATERIAL_LOT_ALIASES[primary] ?? [];
+  if (aliases.length === 0) return [];
+
+  const namesOnDay = new Set(
+    lotUsages.map((l) => (l.materialName ?? "").trim()).filter(Boolean)
+  );
+
+  if (namesOnDay.has(primary) && aliases.some((a) => namesOnDay.has(a))) {
+    return [];
+  }
+
+  return aliases;
 }
 
 export type BreadIngredientWasteRow = {
@@ -84,7 +101,7 @@ function buildIngredientUsageRows(
       lotUsages,
       w.materialName,
       w.wasteQty,
-      getBreadMaterialLotAliases(w.materialName)
+      getBreadMaterialLotAliases(w.materialName, lotUsages)
     );
     const actualUsageQty = lots.reduce((s, l) => s + l.actualUsageQty, 0);
     return {
