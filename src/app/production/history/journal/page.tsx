@@ -318,6 +318,9 @@ function JournalPageContent() {
   const hasBreadDerived = breadDerived?.applicable === true;
   const hasParbakeProductWaste =
     parbakeProductWasteDerived?.applicable === true;
+  /** 브레드+보관 파베이크만이면 당일 도우소스(베이스) 없음 → 총괄에 베이스 블록 생략 */
+  const showBaseOnSummary =
+    !hasBreadDerived || (comp.generalDoughFinishedQty ?? 0) > 0;
 
   const baseWasteRows = comp.baseWasteRows?.length ? comp.baseWasteRows : (comp.baseWaste?.resolved && comp.baseWaste?.baseSauceMaterialName ? [{
     resolved: true,
@@ -517,7 +520,8 @@ function JournalPageContent() {
                       )}
                     </ul>
                   </div>
-                ) : baseWasteRows.some((r) => r.resolved && (r.baseWasteQty ?? 0) > 0) ? (
+                ) : showBaseOnSummary &&
+                  baseWasteRows.some((r) => r.resolved && (r.baseWasteQty ?? 0) > 0) ? (
                   <div className="journal-section">
                     <p className="journal-section-title">베이스 폐기량</p>
                     <div className="journal-section-body journal-section-list">
@@ -549,7 +553,7 @@ function JournalPageContent() {
                     ? getDateParbakeTypes(comp.productSummaries)
                     : [];
 
-                  if (dateParbakeTypes.length > 1) {
+                  if (showBaseOnSummary && dateParbakeTypes.length > 1) {
                     return (
                       <div className="journal-section">
                         <p className="journal-section-title">베이스 폐기량</p>
@@ -597,7 +601,14 @@ function JournalPageContent() {
                   </div>
                 )}
 
-                {baseUsageRows.some((r) => r.resolved) ? (
+                {showBaseOnSummary &&
+                baseUsageRows.some((r) => {
+                  if (!r.resolved || !r.baseSauceMaterialName) return false;
+                  const lotRows =
+                    r.fifoLots?.filter((l) => l.effectiveUsageAfterWasteQty > 0) ?? [];
+                  if (lotRows.length > 0) return true;
+                  return (r.totalBaseUsageAfterWasteQty ?? 0) > 0;
+                }) ? (
                   <div className="journal-section">
                     <p className="journal-section-title">베이스 사용량</p>
                     <div className="journal-section-body journal-section-list">
@@ -612,9 +623,11 @@ function JournalPageContent() {
                               </li>
                             ));
                           }
+                          const total = usageRow.totalBaseUsageAfterWasteQty ?? 0;
+                          if (total <= 0) return null;
                           return (
                             <li key={usageRow.baseSauceMaterialName ?? i}>
-                              {usageRow.displayLabel ?? `${usageRow.baseSauceMaterialName} ${(usageRow.totalBaseUsageAfterWasteQty ?? 0).toLocaleString()}g`}
+                              {usageRow.displayLabel ?? `${usageRow.baseSauceMaterialName} ${total.toLocaleString()}g`}
                             </li>
                           );
                         })}
