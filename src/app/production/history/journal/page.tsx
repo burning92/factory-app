@@ -562,6 +562,67 @@ function JournalPageContent() {
                   return null;
                 })()}
 
+                {(breadIngredientUsageRows.some((r) =>
+                  (r.lots ?? []).some((lot) => lot.actualUsageQty > 0)
+                ) ||
+                  parbakeIngredientUsageRows.some((r) =>
+                    (r.lots ?? []).some((lot) => lot.actualUsageQty > 0)
+                  )) && (
+                  <div className="journal-section">
+                    <p className="journal-section-title">원료 사용량</p>
+                    <ul className="journal-section-body journal-section-list list-none pl-0 space-y-1">
+                      {breadIngredientUsageRows.flatMap((r) =>
+                        (r.lots ?? [])
+                          .filter((lot) => lot.actualUsageQty > 0)
+                          .map((lot) => (
+                            <li key={`bread-u-${r.materialName}-${lot.expiryDate}`}>
+                              {r.materialName}{" "}
+                              {lot.actualUsageQty.toLocaleString()}g (
+                              {lot.expiryDate || "—"})
+                            </li>
+                          ))
+                      )}
+                      {parbakeIngredientUsageRows.flatMap((r) =>
+                        (r.lots ?? [])
+                          .filter((lot) => lot.actualUsageQty > 0)
+                          .map((lot) => (
+                            <li key={`pb-u-${r.materialName}-${lot.expiryDate}`}>
+                              {r.materialName}{" "}
+                              {lot.actualUsageQty.toLocaleString()}g (
+                              {lot.expiryDate || "—"})
+                            </li>
+                          ))
+                      )}
+                    </ul>
+                  </div>
+                )}
+
+                {baseUsageRows.some((r) => r.resolved) ? (
+                  <div className="journal-section">
+                    <p className="journal-section-title">베이스 사용량</p>
+                    <div className="journal-section-body journal-section-list">
+                      <ul className="list-none pl-0 space-y-1">
+                        {baseUsageRows.map((usageRow, i) => {
+                          if (!usageRow.resolved || !usageRow.baseSauceMaterialName) return null;
+                          const lotRows = usageRow.fifoLots?.filter((l) => l.effectiveUsageAfterWasteQty > 0) ?? [];
+                          if (lotRows.length > 0) {
+                            return lotRows.map((lot) => (
+                              <li key={`${usageRow.baseSauceMaterialName}-${lot.lotRowId}`}>
+                                {usageRow.baseSauceMaterialName} {lot.effectiveUsageAfterWasteQty.toLocaleString()}g ({lot.expiryDate || "—"})
+                              </li>
+                            ));
+                          }
+                          return (
+                            <li key={usageRow.baseSauceMaterialName ?? i}>
+                              {usageRow.displayLabel ?? `${usageRow.baseSauceMaterialName} ${(usageRow.totalBaseUsageAfterWasteQty ?? 0).toLocaleString()}g`}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  </div>
+                ) : null}
+
                 <div className="journal-section">
                   <p className="journal-section-title">파베이크 목적별 생산량</p>
                   <ul className="journal-section-body journal-section-list list-none pl-0 space-y-1">
