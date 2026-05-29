@@ -35,7 +35,14 @@ export const MANUFACTURING_EQUIPMENT_CHECKLIST: ManufacturingEquipmentCategory[]
   },
   {
     title: "내포장실",
-    questions: ["진공포장기1", "진공포장기2", "금속검출기1", "금속검출기2", "나무솔"],
+    questions: [
+      "진공포장기1",
+      "진공포장기2",
+      "삼면포장기",
+      "금속검출기1",
+      "금속검출기2",
+      "나무솔",
+    ],
   },
   {
     title: "외포장실",
