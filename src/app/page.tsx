@@ -3,7 +3,6 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Factory, Inbox, Layers, ListOrdered, Settings, User } from "lucide-react";
-import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 
 const HARANG_PEOPLE_ICON_SRC = "/harang/people-icon.png";
@@ -58,13 +57,6 @@ export default function DashboardPage() {
   const { viewOrganizationCode, profile } = useAuth();
   const isHarang = viewOrganizationCode === "200";
   const isHarangAdmin = profile?.role === "admin";
-  const [homeSeason, setHomeSeason] = useState<HomeSeason>("spring");
-
-  useEffect(() => {
-    setHomeSeason(homeSeasonForKorea(new Date()));
-  }, []);
-
-  const homeHero = HOME_SEASON_ASSETS[homeSeason];
 
   if (isHarang) {
     const quickLinks: {
@@ -147,11 +139,15 @@ export default function DashboardPage() {
     );
   }
 
+  const homeSeason = homeSeasonForKorea(new Date());
+  const homeHero = HOME_SEASON_ASSETS[homeSeason];
+
   return (
     <div className={`relative -mt-14 w-full overflow-hidden bg-black ${homeHeroHeightClass()}`}>
       {/* 모션 줄이기: 영상 대신 포스터만 (데이터·배터리 부담 완화) */}
       <div className="motion-reduce:flex hidden absolute inset-0 items-center justify-center">
         <Image
+          key={homeSeason}
           src={homeHero.poster}
           alt=""
           fill
@@ -161,6 +157,7 @@ export default function DashboardPage() {
         />
       </div>
       <video
+        key={homeSeason}
         className={`motion-reduce:hidden absolute inset-0 h-full w-full ${HOME_MEDIA_MOBILE}`}
         poster={homeHero.poster}
         autoPlay
