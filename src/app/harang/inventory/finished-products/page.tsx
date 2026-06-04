@@ -33,6 +33,12 @@ function finishedDisplayName(productName: string): string {
   return `[하랑]${displayHarangProductName(productName)}`;
 }
 
+function lotExpiryYmd(row: FinishedStockRow): string {
+  const lot = (row.finished_product_lot_date ?? "").slice(0, 10);
+  if (lot) return lot;
+  return harangProductExpiryFromProductionDate(row.production_date);
+}
+
 function groupRowsByProduct(rows: FinishedStockRow[]): ProductStockGroup[] {
   const byProduct = new Map<string, FinishedStockRow[]>();
   for (const row of rows) {
@@ -61,6 +67,7 @@ function groupRowsByProduct(rows: FinishedStockRow[]): ProductStockGroup[] {
 export default function HarangFinishedProductInventoryPage() {
   const [rows, setRows] = useState<FinishedStockRow[]>([]);
   const [keyword, setKeyword] = useState("");
+  const [showDepleted, setShowDepleted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
 
@@ -95,7 +102,7 @@ export default function HarangFinishedProductInventoryPage() {
       const remain = Math.max(0, Number(r.finished_qty) - used);
       return { ...r, used_qty: used, remain_qty: remain };
     });
-    setRows(merged.filter((r) => r.remain_qty > 0));
+    setRows(merged);
   }, []);
 
   useEffect(() => {
@@ -103,17 +110,39 @@ export default function HarangFinishedProductInventoryPage() {
   }, [loadRows]);
 
   const filtered = useMemo(() => {
+    const q = keyword.trim().toLowerCase();
+    const searchMatchedProducts = q
+      ? new Set(
+          rows
+            .filter(
+              (row) =>
+                row.production_no.toLowerCase().includes(q) ||
+                finishedDisplayName(row.product_name).toLowerCase().includes(q),
+            )
+            .map((row) => row.product_name),
+        )
+      : null;
+
     return rows.filter((row) => {
-      if (!keyword.trim()) return true;
-      const q = keyword.trim().toLowerCase();
+      if (searchMatchedProducts?.has(row.product_name)) return true;
+      if (!showDepleted && row.remain_qty <= 0) return false;
+      return true;
+    });
+  }, [rows, showDepleted, keyword]);
+
+  const productGroups = useMemo(() => {
+    const q = keyword.trim().toLowerCase();
+    const groups = groupRowsByProduct(filtered);
+    if (showDepleted) return groups;
+    return groups.filter((group) => {
+      if (group.total_remain_qty > 0) return true;
+      if (!q) return false;
       return (
-        row.production_no.toLowerCase().includes(q) ||
-        finishedDisplayName(row.product_name).toLowerCase().includes(q)
+        group.display_name.toLowerCase().includes(q) ||
+        group.lots.some((lot) => lot.production_no.toLowerCase().includes(q))
       );
     });
-  }, [rows, keyword]);
-
-  const productGroups = useMemo(() => groupRowsByProduct(filtered), [filtered]);
+  }, [filtered, showDepleted, keyword]);
 
   const toggleProduct = (productName: string) => {
     setExpandedProducts((prev) => {
@@ -130,7 +159,7 @@ export default function HarangFinishedProductInventoryPage() {
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">완제품 재고현황</h1>
           <p className="mt-1 text-sm text-slate-600">
-            잔량이 있는 제품·LOT만 표시합니다. 소진된 생산입고는 출고내역에서 추적할 수 있습니다.
+            기본적으로 잔량이 있는 생산입고·LOT만 표시합니다. 소진 LOT는 「소진 LOT 포함」 또는 검색으로 확인할 수 있으며, 출고내역에서 이력을 추적할 수 있습니다.
           </p>
         </div>
 
@@ -139,16 +168,30 @@ export default function HarangFinishedProductInventoryPage() {
             <input
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
-              placeholder="제품명/생산입고 No. 검색"
+              placeholder="제품명/생산입고 No. 검색 (소진 LOT 포함)"
               className="px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 text-sm md:col-span-2"
             />
-            <button
-              type="button"
-              onClick={() => setKeyword("")}
-              className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm"
-            >
-              검색 초기화
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showDepleted}
+                  onChange={(e) => setShowDepleted(e.target.checked)}
+                  className="rounded border-slate-300"
+                />
+                소진 LOT 포함
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setKeyword("");
+                  setShowDepleted(false);
+                }}
+                className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm"
+              >
+                검색 초기화
+              </button>
+            </div>
           </div>
         </section>
 
@@ -192,7 +235,14 @@ export default function HarangFinishedProductInventoryPage() {
                               ▶
                             </span>
                           </td>
-                          <td className="px-3 py-2.5 font-medium">{group.display_name}</td>
+                          <td className="px-3 py-2.5 font-medium">
+                            {group.display_name}
+                            {group.total_remain_qty <= 0 && (
+                              <span className="ml-2 px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 text-xs font-normal">
+                                소진
+                              </span>
+                            )}
+                          </td>
                           <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">
                             {group.lot_count.toLocaleString("ko-KR")}개
                           </td>
@@ -224,11 +274,22 @@ export default function HarangFinishedProductInventoryPage() {
                                 <tbody>
                                   {group.lots.map((row) => {
                                     const lotYmd = (row.finished_product_lot_date ?? row.production_date).slice(0, 10);
-                                    const expiryYmd = harangProductExpiryFromProductionDate(row.production_date);
+                                    const expiryYmd = lotExpiryYmd(row);
+                                    const isDepleted = row.remain_qty <= 0;
                                     return (
-                                      <tr key={row.id} className="border-b border-slate-50 text-slate-800 last:border-b-0">
+                                      <tr
+                                        key={row.id}
+                                        className={`border-b border-slate-50 last:border-b-0 ${isDepleted ? "bg-slate-50/60 text-slate-500" : "text-slate-800"}`}
+                                      >
                                         <td className="px-3 py-2 pl-10 font-mono text-xs">{row.production_no}</td>
-                                        <td className="px-3 py-2 tabular-nums">{formatYmdDot(lotYmd)}</td>
+                                        <td className="px-3 py-2 tabular-nums">
+                                          {formatYmdDot(lotYmd)}
+                                          {isDepleted && (
+                                            <span className="ml-2 px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 text-xs">
+                                              소진
+                                            </span>
+                                          )}
+                                        </td>
                                         <td className="px-3 py-2 tabular-nums">{formatYmdDot(expiryYmd)}</td>
                                         <td className="px-3 py-2 text-right tabular-nums font-medium">
                                           {Number(row.remain_qty).toLocaleString("ko-KR")}

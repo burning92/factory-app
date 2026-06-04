@@ -238,7 +238,12 @@ export default function HarangProductionInputDetailPage() {
                 <div>
                   <p className="text-slate-500 text-xs">제품 소비기한</p>
                   <p className="mt-1 text-slate-900 tabular-nums">
-                    {formatYmdDot(harangProductExpiryFromProductionDate(header.production_date))}
+                    {formatYmdDot(
+                      (header.finished_product_lot_date ?? harangProductExpiryFromProductionDate(header.production_date)).slice(
+                        0,
+                        10,
+                      ),
+                    )}
                   </p>
                 </div>
               </div>
