@@ -87,7 +87,9 @@ export default function HarangInventoryItemDetailPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">{itemName}</h1>
-            <p className="text-sm text-slate-600 mt-1">품목 상세 재고 / LOT / 입출고 이력</p>
+            <p className="text-sm text-slate-600 mt-1">
+              품목 상세 재고 / LOT / 입출고 이력 (소진 LOT 포함)
+            </p>
           </div>
           <Link href="/harang/inventory" className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm bg-white">
             목록으로
@@ -133,9 +135,18 @@ export default function HarangInventoryItemDetailPage() {
                 {!loading &&
                   visibleLots.map((lot) => {
                     const headerInboundNo = (lot as HarangInventoryLot & { headers?: { inbound_no?: string } | null }).headers?.inbound_no;
+                    const isDepleted = Number(lot.current_quantity ?? 0) <= 0;
                     return (
-                      <tr key={lot.id} className="border-b border-slate-100 text-slate-900">
-                        <td className="px-3 py-2">{lot.lot_date}</td>
+                      <tr
+                        key={lot.id}
+                        className={`border-b border-slate-100 ${isDepleted ? "bg-slate-50 text-slate-500" : "text-slate-900"}`}
+                      >
+                        <td className="px-3 py-2">
+                          {lot.lot_date}
+                          {isDepleted && (
+                            <span className="ml-2 px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 text-xs">소진</span>
+                          )}
+                        </td>
                         <td className="px-3 py-2">{lot.inbound_date}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{Number(lot.initial_quantity).toLocaleString()}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{Number(lot.current_quantity).toLocaleString()}</td>

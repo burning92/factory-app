@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { HarangCategory, HarangInventoryLot, HarangInventoryTransaction } from "@/features/harang/types";
 
 type StockRow = {
   lot_id: string;
+  lot_date: string;
   category: HarangCategory;
   item_id: string;
   item_code: string;
@@ -15,6 +16,20 @@ type StockRow = {
   current_qty: number;
   inbound_date: string | null;
   recent_usage_date: string | null;
+};
+
+type ItemStockGroup = {
+  group_key: string;
+  category: HarangCategory;
+  view_category: InventoryViewCategory;
+  item_id: string;
+  item_name: string;
+  unit: string;
+  total_qty: number;
+  lot_count: number;
+  latest_inbound_date: string | null;
+  latest_usage_date: string | null;
+  lots: StockRow[];
 };
 
 type InventoryViewCategory = "parbake" | HarangCategory;
@@ -38,12 +53,62 @@ function displayUnit(category: HarangCategory, itemName: string): "EA" | "g" {
   return isParbakeDoughName(itemName) ? "EA" : "g";
 }
 
+const VIEW_CATEGORY_ORDER: InventoryViewCategory[] = ["parbake", "raw_material", "packaging_material"];
+
+function itemGroupKey(row: Pick<StockRow, "category" | "item_id">): string {
+  return `${row.category}:${row.item_id}`;
+}
+
+function latestDate(values: (string | null | undefined)[]): string | null {
+  let latest: string | null = null;
+  for (const value of values) {
+    if (!value) continue;
+    if (!latest || value > latest) latest = value;
+  }
+  return latest;
+}
+
+function groupRowsByItem(rows: StockRow[]): ItemStockGroup[] {
+  const byItem = new Map<string, StockRow[]>();
+  for (const row of rows) {
+    const key = itemGroupKey(row);
+    const list = byItem.get(key) ?? [];
+    list.push(row);
+    byItem.set(key, list);
+  }
+  return Array.from(byItem.values())
+    .map((lots) => {
+      const sortedLots = [...lots].sort((a, b) => a.lot_date.localeCompare(b.lot_date) || a.lot_id.localeCompare(b.lot_id));
+      const first = sortedLots[0];
+      return {
+        group_key: itemGroupKey(first),
+        category: first.category,
+        view_category: viewCategoryOf(first),
+        item_id: first.item_id,
+        item_name: first.item_name,
+        unit: first.unit,
+        total_qty: sortedLots.reduce((sum, lot) => sum + lot.current_qty, 0),
+        lot_count: sortedLots.length,
+        latest_inbound_date: latestDate(sortedLots.map((lot) => lot.inbound_date)),
+        latest_usage_date: latestDate(sortedLots.map((lot) => lot.recent_usage_date)),
+        lots: sortedLots,
+      };
+    })
+    .sort((a, b) => {
+      const categoryDiff =
+        VIEW_CATEGORY_ORDER.indexOf(a.view_category) - VIEW_CATEGORY_ORDER.indexOf(b.view_category);
+      if (categoryDiff !== 0) return categoryDiff;
+      return a.item_name.localeCompare(b.item_name, "ko-KR");
+    });
+}
+
 export default function HarangInventoryPage() {
   const [rows, setRows] = useState<StockRow[]>([]);
   const [category, setCategory] = useState<"" | InventoryViewCategory>("");
   const [keyword, setKeyword] = useState("");
-  const [hasStock, setHasStock] = useState("");
+  const [showDepleted, setShowDepleted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -78,6 +143,7 @@ export default function HarangInventoryPage() {
       const shownUnit = displayUnit(lot.category, lot.item_name);
       return {
         lot_id: lot.id,
+        lot_date: lot.lot_date,
         category: lot.category,
         item_id: lot.item_id,
         item_code: lot.item_code,
@@ -96,24 +162,57 @@ export default function HarangInventoryPage() {
   }, [loadData]);
 
   const filtered = useMemo(() => {
+    const q = keyword.trim().toLowerCase();
+    const searchMatchedKeys = q
+      ? new Set(
+          rows
+            .filter(
+              (row) =>
+                row.item_name.toLowerCase().includes(q) || row.item_code.toLowerCase().includes(q)
+            )
+            .map(itemGroupKey)
+        )
+      : null;
+
     return rows.filter((row) => {
       if (category && viewCategoryOf(row) !== category) return false;
-      if (hasStock === "yes" && row.current_qty <= 0) return false;
-      if (hasStock === "no" && row.current_qty > 0) return false;
-      if (keyword.trim()) {
-        const q = keyword.trim().toLowerCase();
-        if (!row.item_name.toLowerCase().includes(q) && !row.item_code.toLowerCase().includes(q)) return false;
-      }
+      if (searchMatchedKeys?.has(itemGroupKey(row))) return true;
+      if (!showDepleted && row.current_qty <= 0) return false;
       return true;
     });
-  }, [rows, category, hasStock, keyword]);
+  }, [rows, category, showDepleted, keyword]);
+
+  const itemGroups = useMemo(() => {
+    const q = keyword.trim().toLowerCase();
+    const groups = groupRowsByItem(filtered);
+    if (showDepleted) return groups;
+    return groups.filter((group) => {
+      if (group.total_qty > 0) return true;
+      if (!q) return false;
+      return (
+        group.item_name.toLowerCase().includes(q) ||
+        group.lots.some((lot) => lot.item_code.toLowerCase().includes(q))
+      );
+    });
+  }, [filtered, showDepleted, keyword]);
+
+  const toggleItem = (groupKey: string) => {
+    setExpandedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) next.delete(groupKey);
+      else next.add(groupKey);
+      return next;
+    });
+  };
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8">
       <div className="max-w-7xl mx-auto space-y-5">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">원부자재 재고현황</h1>
-          <p className="mt-1 text-sm text-slate-600">원재료/부자재 LOT별 현재고와 이력을 조회합니다.</p>
+          <p className="mt-1 text-sm text-slate-600">
+            기본적으로 잔량이 있는 품목·LOT만 표시합니다. 소진된 LOT는 품목 상세에서 입출고 이력을 확인할 수 있습니다.
+          </p>
         </div>
 
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -128,13 +227,32 @@ export default function HarangInventoryPage() {
               <option value="raw_material">원재료</option>
               <option value="packaging_material">부자재</option>
             </select>
-            <input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="품목명/코드 검색" className="px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 text-sm" />
-            <select value={hasStock} onChange={(e) => setHasStock(e.target.value)} className="px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 text-sm">
-              <option value="">재고 상태 전체</option>
-              <option value="yes">재고 있음</option>
-              <option value="no">재고 없음</option>
-            </select>
-            <button type="button" onClick={() => { setCategory(""); setKeyword(""); setHasStock(""); }} className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm">필터 초기화</button>
+            <input
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              placeholder="품목명/코드 검색 (소진 품목 포함)"
+              className="px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 text-sm"
+            />
+            <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showDepleted}
+                onChange={(e) => setShowDepleted(e.target.checked)}
+                className="rounded border-slate-300"
+              />
+              소진 LOT 포함
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                setCategory("");
+                setKeyword("");
+                setShowDepleted(false);
+              }}
+              className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm"
+            >
+              필터 초기화
+            </button>
           </div>
         </section>
 
@@ -143,37 +261,124 @@ export default function HarangInventoryPage() {
             <table className="w-full min-w-[980px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-slate-600">
+                  <th className="px-3 py-2 w-8" aria-label="펼치기" />
                   <th className="px-3 py-2 text-left">분류</th>
                   <th className="px-3 py-2 text-left">품목명</th>
-                  <th className="px-3 py-2 text-right">재고수량</th>
+                  <th className="px-3 py-2 text-right">LOT 수</th>
+                  <th className="px-3 py-2 text-right">총 재고수량</th>
                   <th className="px-3 py-2 text-left">최근 입고일</th>
                   <th className="px-3 py-2 text-left">최근 사용일</th>
                   <th className="px-3 py-2 text-left">상세보기</th>
                 </tr>
               </thead>
               <tbody>
-                {loading && <tr><td colSpan={6} className="px-3 py-6 text-center text-slate-500">불러오는 중...</td></tr>}
-                {!loading && filtered.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-slate-500">재고 데이터가 없습니다.</td></tr>}
+                {loading && (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-6 text-center text-slate-500">불러오는 중...</td>
+                  </tr>
+                )}
+                {!loading && itemGroups.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-6 text-center text-slate-500">재고 데이터가 없습니다.</td>
+                  </tr>
+                )}
                 {!loading &&
-                  filtered.map((row) => (
-                    <tr key={row.lot_id} className="border-b border-slate-100 text-slate-900">
-                      <td className="px-3 py-2">{categoryLabel(viewCategoryOf(row))}</td>
-                      <td className="px-3 py-2">{row.item_name}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {row.current_qty.toLocaleString("ko-KR")} {row.unit}
-                      </td>
-                      <td className="px-3 py-2">{row.inbound_date ?? "-"}</td>
-                      <td className="px-3 py-2">{row.recent_usage_date ?? "-"}</td>
-                      <td className="px-3 py-2">
-                        <Link
-                          href={`/harang/inventory/${row.category}/${row.item_id}?itemName=${encodeURIComponent(row.item_name)}&lotId=${encodeURIComponent(row.lot_id)}`}
-                          className="px-3 py-1.5 rounded border border-cyan-700/70 text-cyan-300 text-xs"
+                  itemGroups.map((group) => {
+                    const isExpanded = expandedItems.has(group.group_key);
+                    const detailHref = `/harang/inventory/${group.category}/${group.item_id}?itemName=${encodeURIComponent(group.item_name)}`;
+                    return (
+                      <Fragment key={group.group_key}>
+                        <tr
+                          className="border-b border-slate-200 text-slate-900 bg-slate-50/80 hover:bg-slate-100/80 cursor-pointer"
+                          onClick={() => toggleItem(group.group_key)}
                         >
-                          보기
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
+                          <td className="px-3 py-2.5 text-slate-500">
+                            <span
+                              className={`inline-block transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                              aria-hidden
+                            >
+                              ▶
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5">{categoryLabel(group.view_category)}</td>
+                          <td className="px-3 py-2.5 font-medium">
+                            {group.item_name}
+                            {group.total_qty <= 0 && (
+                              <span className="ml-2 px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 text-xs font-normal">
+                                소진
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">
+                            {group.lot_count.toLocaleString("ko-KR")}개
+                          </td>
+                          <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-cyan-800">
+                            {group.total_qty.toLocaleString("ko-KR")} {group.unit}
+                          </td>
+                          <td className="px-3 py-2.5">{group.latest_inbound_date ?? "-"}</td>
+                          <td className="px-3 py-2.5">{group.latest_usage_date ?? "-"}</td>
+                          <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                            <Link
+                              href={detailHref}
+                              className="px-2.5 py-1.5 rounded border border-cyan-300 text-cyan-800 bg-cyan-50 text-xs"
+                            >
+                              보기
+                            </Link>
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr>
+                            <td colSpan={8} className="px-0 py-0 border-b border-slate-200 bg-white">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="border-b border-slate-100 text-slate-500 text-xs">
+                                    <th className="px-3 py-2 pl-10 text-left font-normal">LOT</th>
+                                    <th className="px-3 py-2 text-right font-normal">재고수량</th>
+                                    <th className="px-3 py-2 text-left font-normal">입고일</th>
+                                    <th className="px-3 py-2 text-left font-normal">최근 사용일</th>
+                                    <th className="px-3 py-2 text-left font-normal">상세보기</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {group.lots.map((lot) => {
+                                    const isDepleted = lot.current_qty <= 0;
+                                    return (
+                                    <tr
+                                      key={lot.lot_id}
+                                      className={`border-b border-slate-50 text-slate-800 last:border-b-0 ${isDepleted ? "bg-slate-50/60 text-slate-500" : ""}`}
+                                    >
+                                      <td className="px-3 py-2 pl-10 tabular-nums">
+                                        {lot.lot_date}
+                                        {isDepleted && (
+                                          <span className="ml-2 px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 text-xs">
+                                            소진
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                        {lot.current_qty.toLocaleString("ko-KR")} {lot.unit}
+                                      </td>
+                                      <td className="px-3 py-2">{lot.inbound_date ?? "-"}</td>
+                                      <td className="px-3 py-2">{lot.recent_usage_date ?? "-"}</td>
+                                      <td className="px-3 py-2">
+                                        <Link
+                                          href={`${detailHref}&lotId=${encodeURIComponent(lot.lot_id)}`}
+                                          className="px-2.5 py-1.5 rounded border border-cyan-300 text-cyan-800 bg-cyan-50 text-xs"
+                                        >
+                                          보기
+                                        </Link>
+                                      </td>
+                                    </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
               </tbody>
             </table>
           </div>
