@@ -48,13 +48,59 @@ type LotRow = {
     | null;
 };
 
-type PrintBaseRow = {
+type SpecRow = {
   key: string;
   product: string;
   lot: string;
-  productionNo: string;
+  lotYmd: string;
   qty: number;
+  unit: string;
 };
+
+function buildGroupedSpecRows(
+  lines: LineRow[],
+  lotMap: Map<string, LotRow[]>,
+): SpecRow[] {
+  const grouped = new Map<string, SpecRow>();
+  for (const line of lines) {
+    const product = `[하랑]${displayHarangProductName(line.product_name)}`;
+    const ls = lotMap.get(line.id) ?? [];
+    if (ls.length === 0) {
+      const key = `${line.product_name}:none`;
+      grouped.set(key, {
+        key,
+        product,
+        lot: "-",
+        lotYmd: "",
+        qty: Number(line.outbound_qty ?? 0),
+        unit: line.unit,
+      });
+      continue;
+    }
+    for (const lot of ls) {
+      const head = Array.isArray(lot.production_headers) ? lot.production_headers[0] : lot.production_headers;
+      const lotYmd = String(head?.finished_product_lot_date ?? head?.production_date ?? "").slice(0, 10);
+      const groupKey = `${line.product_name}|${lotYmd || "-"}`;
+      const qty = Number(lot.quantity_used ?? 0);
+      const existing = grouped.get(groupKey);
+      if (existing) {
+        existing.qty += qty;
+      } else {
+        grouped.set(groupKey, {
+          key: groupKey,
+          product,
+          lot: lotYmd ? formatYmdDot(lotYmd) : "-",
+          lotYmd,
+          qty,
+          unit: line.unit,
+        });
+      }
+    }
+  }
+  return Array.from(grouped.values()).sort(
+    (a, b) => a.product.localeCompare(b.product, "ko-KR") || a.lotYmd.localeCompare(b.lotYmd),
+  );
+}
 
 type PrintEditRow = {
   pallet: string;
@@ -145,34 +191,8 @@ export default function HarangOutboundDetailPage() {
     return map;
   }, [lots]);
 
-  const printBaseRows = useMemo<PrintBaseRow[]>(() => {
-    const out: PrintBaseRow[] = [];
-    for (const line of lines) {
-      const ls = lotMap.get(line.id) ?? [];
-      if (ls.length === 0) {
-        out.push({
-          key: `${line.id}:0`,
-          product: `[하랑]${displayHarangProductName(line.product_name)}`,
-          lot: "-",
-          productionNo: "-",
-          qty: Number(line.outbound_qty ?? 0),
-        });
-        continue;
-      }
-      ls.forEach((lot, idx) => {
-        const head = Array.isArray(lot.production_headers) ? lot.production_headers[0] : lot.production_headers;
-        const lotYmd = String(head?.finished_product_lot_date ?? head?.production_date ?? "").slice(0, 10);
-        out.push({
-          key: `${line.id}:${idx}`,
-          product: `[하랑]${displayHarangProductName(line.product_name)}`,
-          lot: lotYmd ? formatYmdDot(lotYmd) : "-",
-          productionNo: head?.production_no ?? "-",
-          qty: Number(lot.quantity_used ?? 0),
-        });
-      });
-    }
-    return out;
-  }, [lines, lotMap]);
+  const specRows = useMemo(() => buildGroupedSpecRows(lines, lotMap), [lines, lotMap]);
+  const printBaseRows = specRows;
 
   useEffect(() => {
     setPrintRowsEdit((prev) => {
@@ -362,41 +382,21 @@ export default function HarangOutboundDetailPage() {
                 <tr className="border-b border-slate-300 bg-slate-50 text-slate-700">
                   <th className="px-3 py-2 text-left border-r border-slate-300">완제품명</th>
                   <th className="px-3 py-2 text-left border-r border-slate-300">소비기한 LOT</th>
-                  <th className="px-3 py-2 text-left border-r border-slate-300">원본 생산입고 No.</th>
                   <th className="px-3 py-2 text-right border-r border-slate-300">출고수량</th>
                   <th className="px-3 py-2 text-left">비고</th>
                 </tr>
               </thead>
               <tbody>
-                {lines.map((line) => {
-                  const ls = lotMap.get(line.id) ?? [];
-                  return ls.length > 0 ? (
-                    ls.map((lot, idx) => {
-                      const head = Array.isArray(lot.production_headers)
-                        ? lot.production_headers[0]
-                        : lot.production_headers;
-                      const lotYmd = String(head?.finished_product_lot_date ?? head?.production_date ?? "").slice(0, 10);
-                      return (
-                        <tr key={`${line.id}:${idx}`} className="border-b border-slate-200 text-slate-900">
-                          <td className="px-3 py-2 border-r border-slate-200">{idx === 0 ? `[하랑]${displayHarangProductName(line.product_name)}` : ""}</td>
-                          <td className="px-3 py-2 tabular-nums border-r border-slate-200">{lotYmd ? formatYmdDot(lotYmd) : "-"}</td>
-                          <td className="px-3 py-2 font-mono text-xs border-r border-slate-200">{head?.production_no ?? "-"}</td>
-                          <td className="px-3 py-2 text-right tabular-nums border-r border-slate-200">
-                            {Number(lot.quantity_used).toLocaleString("ko-KR")} {line.unit}
-                          </td>
-                          <td className="px-3 py-2 text-slate-600">{idx === 0 ? header.note || "-" : ""}</td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr key={line.id} className="border-b border-slate-200 text-slate-900">
-                      <td className="px-3 py-2 border-r border-slate-200">[하랑]{displayHarangProductName(line.product_name)}</td>
-                      <td className="px-3 py-2 border-r border-slate-200">-</td>
-                      <td className="px-3 py-2 border-r border-slate-200">-</td>
+                {specRows.map((row, idx) => {
+                  const showProduct = idx === 0 || specRows[idx - 1].product !== row.product;
+                  return (
+                    <tr key={row.key} className="border-b border-slate-200 text-slate-900">
+                      <td className="px-3 py-2 border-r border-slate-200">{showProduct ? row.product : ""}</td>
+                      <td className="px-3 py-2 tabular-nums border-r border-slate-200">{row.lot}</td>
                       <td className="px-3 py-2 text-right tabular-nums border-r border-slate-200">
-                        {Number(line.outbound_qty).toLocaleString("ko-KR")} {line.unit}
+                        {Number(row.qty).toLocaleString("ko-KR")} {row.unit}
                       </td>
-                      <td className="px-3 py-2 text-slate-600">{header.note || "-"}</td>
+                      <td className="px-3 py-2 text-slate-600">{showProduct ? header.note || "-" : ""}</td>
                     </tr>
                   );
                 })}
