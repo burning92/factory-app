@@ -252,6 +252,12 @@ export default function HarangOutboundDetailPage() {
               size: A4 landscape;
               margin: 10mm;
             }
+            .harang-outbound-print-items th,
+            .harang-outbound-print-items td {
+              padding: 4px 8px !important;
+              font-size: 13px !important;
+              line-height: 1.4 !important;
+            }
           }
         `}</style>
 
@@ -426,17 +432,17 @@ export default function HarangOutboundDetailPage() {
                       <td className="border border-black px-2 py-1.5 text-center font-semibold">배송기사</td>
                     </tr>
                     <tr>
-                      <td className="border border-black px-2 py-6 text-center align-middle">{header.supplier_manager_name || ""}</td>
-                      <td className="border border-black px-2 py-6">&nbsp;</td>
-                      <td className="border border-black px-2 py-6">&nbsp;</td>
+                      <td className="border border-black px-2 py-4.5 text-center align-middle">{header.supplier_manager_name || ""}</td>
+                      <td className="border border-black px-2 py-4.5">&nbsp;</td>
+                      <td className="border border-black px-2 py-4.5">&nbsp;</td>
                     </tr>
                     <tr>
-                      <td className="border border-black px-2 py-2 text-center font-semibold">기사님</td>
-                      <td className="border border-black px-2 py-2" colSpan={2}>&nbsp;</td>
+                      <td className="border border-black px-2 py-2.5 text-center font-semibold">기사님</td>
+                      <td className="border border-black px-2 py-2.5" colSpan={2}>&nbsp;</td>
                     </tr>
                     <tr>
-                      <td className="border border-black px-2 py-2 text-center font-semibold">연락처</td>
-                      <td className="border border-black px-2 py-2" colSpan={2}>&nbsp;</td>
+                      <td className="border border-black px-2 py-2.5 text-center font-semibold">연락처</td>
+                      <td className="border border-black px-2 py-2.5" colSpan={2}>&nbsp;</td>
                     </tr>
                   </tbody>
                 </table>
@@ -501,8 +507,8 @@ export default function HarangOutboundDetailPage() {
               </table>
             </div>
 
-            <div className="mt-4 border border-black">
-              <table className="w-full border-collapse text-sm">
+            <div className="mt-3 border border-black">
+              <table className="harang-outbound-print-items w-full border-collapse text-sm leading-normal">
                 <thead>
                   <tr>
                     <th className="border border-black px-2 py-1.5 w-10">No</th>
