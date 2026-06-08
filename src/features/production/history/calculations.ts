@@ -216,6 +216,15 @@ export function inferParbakeMetaFromBom(
   };
 }
 
+/** 당일 제품이 모두 파베이크사용(보관 파베이크)이고 브레드가 없는 날 */
+export function isStoredParbakeOnlyDay(
+  productSummaries: ProductSummary[]
+): boolean {
+  if (productSummaries.length === 0) return false;
+  if (productSummaries.some((p) => p.isBreadProduct)) return false;
+  return productSummaries.every((p) => p.usesStoredParbake);
+}
+
 /** 완제품 합계 / 추가 파베이크 합계 등 */
 function calculateTotals(state: DateGroupInput) {
   const totalFinishedQty = state.secondClosure.productOutputs.reduce(
@@ -266,6 +275,7 @@ function calculateParbakeAndDough(
     .filter((p) => p.usesStoredParbake)
     .reduce((s, p) => s + (p.finishedQty ?? 0), 0);
   const hasBread = productSummaries.some((p) => p.isBreadProduct);
+  const storedParbakeOnly = isStoredParbakeOnlyDay(productSummaries);
 
   const rawBreadWaste =
     doughMixQty - doughWasteQty - breadFinishedQty - generalDoughFinishedQty;
@@ -280,6 +290,12 @@ function calculateParbakeAndDough(
   if (hasBread && generalDoughFinishedQty === 0) {
     /** 브레드 + 파베이크사용만: 반죽은 브레드 라인, 파베이크 개수 폐기는 도우 잔량식에 넣지 않음 */
     parbakeWasteQty = 0;
+  } else if (storedParbakeOnly) {
+    /** 파베이크사용만: 재고 파베이크 출고 − 완제품 (당일 도우 반죽·파베이크 생산 없음) */
+    parbakeWasteQty =
+      totalExtraParbakeQty -
+      storedParbakeFinishedQty -
+      (astronautParbakeQty + saleParbakeQty);
   } else if (!hasBread) {
     parbakeWasteQty =
       doughMixQty +
@@ -304,15 +320,22 @@ function calculateParbakeAndDough(
     );
   }
 
-  const doughUsageQty =
-    doughMixQty - doughWasteQty - breadWasteQty - Math.max(0, parbakeWasteQty);
-  if (doughUsageQty < 0) {
-    warnings.push(
-      `도우 사용량이 음수입니다 (${doughUsageQty}). 입력값을 확인해 주세요.`
-    );
+  let doughUsageQty: number;
+  let sameDayParbakeProductionQty: number;
+  if (storedParbakeOnly) {
+    /** 당일 반죽 없음 — 파베이크 잔량(개)은 도우 사용량·당일 생산량에 반영하지 않음 */
+    doughUsageQty = 0;
+    sameDayParbakeProductionQty = 0;
+  } else {
+    doughUsageQty =
+      doughMixQty - doughWasteQty - breadWasteQty - Math.max(0, parbakeWasteQty);
+    if (doughUsageQty < 0) {
+      warnings.push(
+        `도우 사용량이 음수입니다 (${doughUsageQty}). 입력값을 확인해 주세요.`
+      );
+    }
+    sameDayParbakeProductionQty = doughUsageQty;
   }
-
-  const sameDayParbakeProductionQty = doughUsageQty;
 
   return {
     parbakeWasteQty,
@@ -793,7 +816,8 @@ export function calculateUsageSummary(
     parbakeDough.parbakeWasteQty;
   const directDoughBalanceQty =
     parbakeDough.doughUsageQty - expectedDirectDoughFlowQty;
-  if (directDoughBalanceQty !== 0) {
+  const storedParbakeOnly = isStoredParbakeOnlyDay(productSummaries);
+  if (!storedParbakeOnly && directDoughBalanceQty !== 0) {
     allWarnings.push(
       `도우 흐름 검증: 사용량과 기대 흐름 차이 = ${directDoughBalanceQty} (doughUsageQty - expectedDirectDoughFlowQty).`
     );

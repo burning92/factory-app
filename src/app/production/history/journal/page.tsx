@@ -58,7 +58,10 @@ import {
   getJournalStorageKey,
   buildPerProductUsage,
 } from "@/features/production/history/journalAllocation";
-import { getDateParbakeTypes } from "@/features/production/history/calculations";
+import {
+  getDateParbakeTypes,
+  isStoredParbakeOnlyDay,
+} from "@/features/production/history/calculations";
 import { mapTechnicalWarningsToOperatorMessages } from "@/features/production/history/operatorWarnings";
 import { calculateBreadDerived } from "@/features/production/history/breadDerived";
 import { calculateParbakeProductWasteDerived } from "@/features/production/history/parbakeProductWasteDerived";
@@ -381,9 +384,13 @@ function JournalPageContent() {
   const hasBreadDerived = breadDerived?.applicable === true;
   const hasParbakeProductWaste =
     parbakeProductWasteDerived?.applicable === true;
-  /** 브레드+보관 파베이크만이면 당일 도우소스(베이스) 없음 → 총괄에 베이스 블록 생략 */
+  /** 브레드+보관 파베이크만, 또는 파베이크사용만(당일 반죽 없음)이면 베이스 블록 생략 */
+  const storedParbakeOnlyNoDough =
+    isStoredParbakeOnlyDay(comp.productSummaries ?? []) &&
+    comp.doughMixQty === 0;
   const showBaseOnSummary =
-    !hasBreadDerived || (comp.generalDoughFinishedQty ?? 0) > 0;
+    (!hasBreadDerived || (comp.generalDoughFinishedQty ?? 0) > 0) &&
+    !storedParbakeOnlyNoDough;
 
   const baseWasteRows = comp.baseWasteRows?.length ? comp.baseWasteRows : (comp.baseWaste?.resolved && comp.baseWaste?.baseSauceMaterialName ? [{
     resolved: true,

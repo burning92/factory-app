@@ -9,6 +9,7 @@ import type {
   ComputedResult,
   ProductSummary,
 } from "./types";
+import { isStoredParbakeOnlyDay } from "./calculations";
 import { getBomRowsForProductAndStandard } from "./bomAdapter";
 import {
   allocateIntByWeight,
@@ -91,8 +92,21 @@ export function calculateParbakeProductWasteDerived(
   computedResult: ComputedResult,
   bomList: BomRowRef[]
 ): ParbakeProductWasteDerived {
-  const { productSummaries, lotUsages, parbakeWasteQty } = computedResult;
+  const { productSummaries, lotUsages, parbakeWasteQty, doughMixQty } =
+    computedResult;
   const candidates = productSummaries.filter(isParbakeWasteProduct);
+
+  if (
+    isStoredParbakeOnlyDay(productSummaries) &&
+    (doughMixQty ?? 0) === 0
+  ) {
+    return {
+      applicable: false,
+      reason:
+        "파베이크사용만(당일 반죽 없음): 재고 파베이크 잔량은 토핑·치즈 원료 폐기로 환산하지 않습니다.",
+      products: [],
+    };
+  }
 
   if (parbakeWasteQty <= 0 || candidates.length === 0) {
     return {
