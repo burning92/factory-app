@@ -506,18 +506,20 @@ function JournalPageContent() {
                       {comp.doughUsageQty.toLocaleString()}개
                     </p>
                   </div>
-                  <div>
-                    <span className="text-slate-600 print:text-gray-700 font-medium block mb-0.5">
-                      {hasBreadDerived ? "브레드 폐기량" : "파베이크 폐기량"}
-                    </span>
-                    <p className="font-medium text-slate-900 print:text-black">
-                      {(hasBreadDerived
-                        ? (comp.breadWasteQty ?? 0)
-                        : comp.parbakeWasteQty
-                      ).toLocaleString()}
-                      개
-                    </p>
-                  </div>
+                  {!storedParbakeOnlyNoDough && (
+                    <div>
+                      <span className="text-slate-600 print:text-gray-700 font-medium block mb-0.5">
+                        {hasBreadDerived ? "브레드 폐기량" : "파베이크 폐기량"}
+                      </span>
+                      <p className="font-medium text-slate-900 print:text-black">
+                        {(hasBreadDerived
+                          ? (comp.breadWasteQty ?? 0)
+                          : comp.parbakeWasteQty
+                        ).toLocaleString()}
+                        개
+                      </p>
+                    </div>
+                  )}
                   {comp.parbakeWasteQty > 0 && hasBreadDerived && (
                     <div>
                       <span className="text-slate-600 print:text-gray-700 font-medium block mb-0.5">

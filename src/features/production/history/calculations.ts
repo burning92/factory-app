@@ -291,11 +291,8 @@ function calculateParbakeAndDough(
     /** 브레드 + 파베이크사용만: 반죽은 브레드 라인, 파베이크 개수 폐기는 도우 잔량식에 넣지 않음 */
     parbakeWasteQty = 0;
   } else if (storedParbakeOnly) {
-    /** 파베이크사용만: 재고 파베이크 출고 − 완제품 (당일 도우 반죽·파베이크 생산 없음) */
-    parbakeWasteQty =
-      totalExtraParbakeQty -
-      storedParbakeFinishedQty -
-      (astronautParbakeQty + saleParbakeQty);
+    /** 파베이크사용만: 출고 파베이크는 전부 사용량으로 처리, 개수 폐기 산출 안 함 */
+    parbakeWasteQty = 0;
   } else if (!hasBread) {
     parbakeWasteQty =
       doughMixQty +
