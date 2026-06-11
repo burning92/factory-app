@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { useMasterStore } from "@/store/useMasterStore";
 import { bomRowsToRefs, materialsToMeta } from "@/features/dashboard/bomMaterialAdapters";
 import { loadProductionBundle } from "@/features/dashboard/loadProductionBundle";
+import { secondaryLineWasteQty } from "@/features/dashboard/aggregateProductionFromSnapshots";
 import {
   mergeBundleDaysWithManualImportsForTable,
   rollupWasteMockFromDayRows,
@@ -592,7 +593,7 @@ export default function ExecutiveDashboardPage() {
       date: d.date,
       doughMixQty: d.doughMixQty,
       doughWasteQty: d.doughWasteQty,
-      parbakeWasteQty: d.parbakeWasteQty,
+      parbakeWasteQty: secondaryLineWasteQty(d),
       sameDayParbakeProductionQty: d.sameDayParbakeProductionQty,
       doughDiscardRatePct: null,
       parbakeDiscardRatePct: null,

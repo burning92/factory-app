@@ -18,7 +18,10 @@ export type DayProductionMetrics = {
   totalFinishedQty: number;
   doughMixQty: number;
   doughWasteQty: number;
+  /** 피자: 파베이크(도우) 잔량 폐기. 브레드일: 0 */
   parbakeWasteQty: number;
+  /** 브레드: 완제품화 전 도우 잔량 폐기. 피자일: 0 */
+  breadWasteQty: number;
   sameDayParbakeProductionQty: number;
   astronautParbakeQty: number;
   saleParbakeQty: number;
@@ -63,6 +66,13 @@ export function addYtdProductionRollups(a: YtdProductionRollup, b: YtdProduction
 function safeNum(v: unknown): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
+}
+
+/** 폐기율 표 「파베폐기」열: 피자=파베이크 폐기, 브레드=브레드 폐기량 */
+export function secondaryLineWasteQty(
+  m: Pick<DayProductionMetrics, "parbakeWasteQty" | "breadWasteQty">
+): number {
+  return safeNum(m.parbakeWasteQty) + safeNum(m.breadWasteQty);
 }
 
 /**
@@ -118,6 +128,7 @@ export function metricsFromSnapshot(
     doughMixQty: safeNum(computed.doughMixQty),
     doughWasteQty: safeNum(computed.doughWasteQty),
     parbakeWasteQty: safeNum(computed.parbakeWasteQty),
+    breadWasteQty: safeNum(computed.breadWasteQty),
     sameDayParbakeProductionQty: safeNum(computed.sameDayParbakeProductionQty),
     astronautParbakeQty:
       safeNum(computed.astronautParbakeQty) + ujuinParbakeFromFinished,
@@ -157,7 +168,7 @@ export function rollupYtdWaste(days: DayProductionMetrics[]): YtdWasteRollup {
   for (const d of days) {
     sumDoughMix += d.doughMixQty;
     sumDoughWaste += d.doughWasteQty;
-    sumParbakeWaste += d.parbakeWasteQty;
+    sumParbakeWaste += secondaryLineWasteQty(d);
     sumSameDayParbakeProduction += d.sameDayParbakeProductionQty;
   }
   const closedDayCount = days.length;

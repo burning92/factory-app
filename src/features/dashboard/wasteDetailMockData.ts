@@ -1,9 +1,12 @@
 /**
  * 폐기율 상세용 더미 데이터 — 붙여넣기 Raw(구분자 생략) 파싱 후 생산일별 집계.
- * 테이블 컬럼: 반죽량·도우폐기·파베폐기 등은 스냅샷 일지와 동일한 의미로 사용.
+ * 테이블 컬럼: 반죽량·도우폐기·파베폐기(피자=파베폐기, 브레드=브레드폐기) 등은 스냅샷 일지와 동일한 의미.
  */
 
-import type { DayProductionMetrics } from "@/features/dashboard/aggregateProductionFromSnapshots";
+import {
+  secondaryLineWasteQty,
+  type DayProductionMetrics,
+} from "@/features/dashboard/aggregateProductionFromSnapshots";
 
 export interface WasteDetailMockRow {
   productionDate: string;
@@ -249,14 +252,15 @@ export const WASTE_DETAIL_MOCK_PARSED_ROWS: WasteDetailMockRow[] =
 
 /** 번들 일자 1건 → 폐기율 상세 테이블 행(비율 포함) */
 export function bundleDayToWasteDetailRow(d: DayProductionMetrics): WasteDetailMockDayRow {
-  const { doughMixQty, doughWasteQty, parbakeWasteQty, sameDayParbakeProductionQty } = d;
+  const { doughMixQty, doughWasteQty, sameDayParbakeProductionQty } = d;
+  const lineWaste = secondaryLineWasteQty(d);
   return {
     date: d.date,
     doughMixQty,
     doughWasteQty,
-    parbakeWasteQty,
+    parbakeWasteQty: lineWaste,
     sameDayParbakeProductionQty,
-    ...ratesForSums(doughMixQty, doughWasteQty, parbakeWasteQty, sameDayParbakeProductionQty),
+    ...ratesForSums(doughMixQty, doughWasteQty, lineWaste, sameDayParbakeProductionQty),
   };
 }
 
@@ -276,7 +280,7 @@ export function mergeBundleDaysWithWasteMockForTable(
       d.doughMixQty === 0 &&
       d.sameDayParbakeProductionQty === 0 &&
       d.doughWasteQty === 0 &&
-      d.parbakeWasteQty === 0;
+      secondaryLineWasteQty(d) === 0;
     if (emptySnapshot && mock) {
       filledMockDates.push(d.date);
       return { ...mock };
@@ -327,26 +331,26 @@ export function mergeBundleDaysWithManualImportsForTable(
         ? {
             doughMixQty: b.doughMixQty,
             doughWasteQty: b.doughWasteQty,
-            parbakeWasteQty: b.parbakeWasteQty,
+            lineWasteQty: secondaryLineWasteQty(b),
             sameDayParbakeProductionQty: b.sameDayParbakeProductionQty,
           }
         : {
             doughMixQty: 0,
             doughWasteQty: 0,
-            parbakeWasteQty: 0,
+            lineWasteQty: 0,
             sameDayParbakeProductionQty: 0,
           };
 
       const useManual =
         (fromBundle.doughMixQty === 0 &&
           fromBundle.doughWasteQty === 0 &&
-          fromBundle.parbakeWasteQty === 0 &&
+          fromBundle.lineWasteQty === 0 &&
           (manualMix > 0 || manualDWaste > 0 || manualPWaste > 0)) ||
         !b;
 
       const doughMixQty = useManual ? manualMix : fromBundle.doughMixQty;
       const doughWasteQty = useManual ? manualDWaste : fromBundle.doughWasteQty;
-      const parbakeWasteQty = useManual ? manualPWaste : fromBundle.parbakeWasteQty;
+      const parbakeWasteQty = useManual ? manualPWaste : fromBundle.lineWasteQty;
       const sameDayParbakeProductionQty =
         manualParbakeProd > 0
           ? manualParbakeProd

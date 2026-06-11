@@ -21,6 +21,7 @@ function dayMetricsFromEcountRollup(date: string, r: YtdProductionRollup): DayPr
     doughMixQty: 0,
     doughWasteQty: 0,
     parbakeWasteQty: 0,
+    breadWasteQty: 0,
     sameDayParbakeProductionQty: 0,
     astronautParbakeQty: r.astronautParbake,
     saleParbakeQty: r.saleParbake,
