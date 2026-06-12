@@ -7,6 +7,14 @@ import {
   mapEcountImportLine,
 } from "@/features/dashboard/ecountProductCanonicalize";
 import { classifyEcountItemForDashboard } from "@/features/dashboard/ecountProductionImport";
+import { parseProductLabel } from "@/features/production/history/productLabel";
+
+/** BOM/출고 기준 접미어 — 계획 시트 `제품명 - 브레드` 와 실적 baseProductName 통합 */
+const PLAN_ACTUAL_STANDARD_SUFFIXES = new Set(
+  ["일반", "미니", "파베이크사용", "브레드", "라지", "mini", "large"].map((s) =>
+    s.toLowerCase()
+  )
+);
 
 export type PlanActualMonthSummary = {
   year: number;
@@ -152,20 +160,35 @@ export type PlanActualByProductResult = {
 };
 
 function normName(s: string): string {
-  const raw = s.normalize("NFKC").trim().toLowerCase();
-  return raw
-    .replace(/\s*-\s*(일반|파베이크사용|라지|미니|mini|large)\s*$/i, "")
+  return reportDisplayName(s)
+    .normalize("NFKC")
+    .trim()
+    .toLowerCase()
     .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** 계획·실적 매칭용 — `- 일반` / `- 브레드` / `- 파베이크사용` 등 BOM 기준 접미어 제거 */
+function stripProductStandardSuffix(nameRaw: string): string {
+  const name = stripInvisibleChars(nameRaw).normalize("NFKC").trim();
+  if (!name) return "";
+  const parsed = parseProductLabel(name);
+  const stdNorm = parsed.productStandardName.trim().toLowerCase();
+  if (stdNorm && PLAN_ACTUAL_STANDARD_SUFFIXES.has(stdNorm)) {
+    return parsed.baseProductName.trim();
+  }
+  return name
+    .replace(/\s*-\s*(일반|파베이크사용|브레드|미니|라지|mini|large)\s*$/i, "")
     .trim();
 }
 
 /**
  * 계획 대비 실적 상세표 전용 표시 키:
- * - "<제품명> - 일반/파베이크사용" => "<제품명>"
+ * - "<제품명> - 일반/브레드/파베이크사용" => "<제품명>"
  * - "선인 파베이크_베샤멜/토마토" => "판매용 파베이크 베샤멜/토마토"
  */
 function reportDisplayName(nameRaw: string): string {
-  const name = stripInvisibleChars(nameRaw).normalize("NFKC").trim();
+  let name = stripProductStandardSuffix(nameRaw);
   const n = name.toLowerCase().replace(/\s+/g, " ");
   if (n.includes("선인 파베이크_베샤멜") || n.includes("판매용 파베이크 베샤멜")) {
     return "판매용 파베이크 베샤멜";
@@ -173,7 +196,7 @@ function reportDisplayName(nameRaw: string): string {
   if (n.includes("선인 파베이크_토마토") || n.includes("판매용 파베이크 토마토")) {
     return "판매용 파베이크 토마토";
   }
-  return name.replace(/\s*-\s*(일반|파베이크사용)\s*$/i, "").trim();
+  return name;
 }
 
 /** 시트/복사 붙여넣기에서 들어오는 보이지 않는 문자 제거 */

@@ -11,12 +11,14 @@ export const DASHBOARD_LIGHT_PIZZA_MARKERS = [
   "허니고르곤",
 ] as const;
 
-/** 브레드 — 포노부오노·포노브레드 등 (시트 '포노' 열과 동일 계열) */
+/** 브레드 — 포노부오노·포노브레드·신규 포노 라인 등 (시트 '포노' 열과 동일 계열) */
 export const DASHBOARD_BREAD_MARKERS = [
   "포노부오노",
   "도노부오노",
   "포노브레드",
   "포노 브레드",
+  "포노 리코타",
+  "포노 바질",
   "시그니처 화덕 브레드",
   "화덕 브레드",
 ] as const;
