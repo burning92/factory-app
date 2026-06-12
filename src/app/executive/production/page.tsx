@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Info } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
@@ -16,6 +16,7 @@ import {
 import { DashboardBackLink } from "../DashboardBackLink";
 import { ExecutivePortalTooltip } from "../ExecutivePortalTooltip";
 import { executiveTooltipHostRowClass } from "../executiveTooltipStyles";
+import { parseExecutivePeriodKey, parseExecutiveYearMonth } from "../executivePeriod";
 import type { ProductionBundle } from "@/features/dashboard/loadProductionBundle";
 
 function totalFinishedFromRollup(r: YtdProductionRollup): number {
@@ -40,8 +41,13 @@ function numericCellClass(n: number, opts?: { totalCol?: boolean }): string {
 
 export default function ExecutiveProductionDetailPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { profile, loading: authLoading } = useAuth();
   const canView = !!profile;
+
+  const periodKey = parseExecutivePeriodKey(searchParams.get("period"));
+  const { refYear, refMonth } = parseExecutiveYearMonth(searchParams);
+  const initialTableMonth = periodKey === "month" ? refMonth : null;
 
   const materials = useMasterStore((s) => s.materials);
   const bomList = useMasterStore((s) => s.bomList);
@@ -52,9 +58,14 @@ export default function ExecutiveProductionDetailPage() {
 
   const [bundle, setBundle] = useState<ProductionBundle | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [year, setYear] = useState<number>(new Date().getFullYear());
+  const [year, setYear] = useState<number>(refYear);
   /** null = 연간 전체 */
-  const [tableMonth, setTableMonth] = useState<number | null>(null);
+  const [tableMonth, setTableMonth] = useState<number | null>(initialTableMonth);
+
+  useEffect(() => {
+    setYear(refYear);
+    setTableMonth(periodKey === "month" ? refMonth : null);
+  }, [periodKey, refYear, refMonth]);
 
   useEffect(() => {
     if (authLoading) return;

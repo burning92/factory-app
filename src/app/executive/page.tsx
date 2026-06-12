@@ -48,8 +48,9 @@ import { executiveTooltipHostRowClass } from "./executiveTooltipStyles";
 import type { ProductionBundle } from "@/features/dashboard/loadProductionBundle";
 import type { ClimateDashboardWindows } from "@/features/dashboard/climateAndEquipment";
 import { rollupYtdProduction } from "@/features/dashboard/aggregateProductionFromSnapshots";
+import { buildExecutiveDetailHref, type ExecutivePeriodKey } from "./executivePeriod";
 
-type PeriodKey = "week" | "month" | "ytd";
+type PeriodKey = ExecutivePeriodKey;
 
 function toYmd(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -431,6 +432,11 @@ export default function ExecutiveDashboardPage() {
 
   const headerDisplayYear = periodKey === "week" ? new Date().getFullYear() : refYear;
 
+  const detailHref = useMemo(
+    () => (path: string) => buildExecutiveDetailHref(path, { periodKey, refYear, refMonth }),
+    [periodKey, refYear, refMonth]
+  );
+
   const yearSelectOptions = useMemo(() => {
     const cy = new Date().getFullYear();
     const out: number[] = [];
@@ -736,7 +742,7 @@ export default function ExecutiveDashboardPage() {
               </ExecutivePortalTooltip>
             </div>
             <div className="flex min-w-0 flex-col items-start gap-1 text-left sm:items-end sm:text-right">
-              <Link href="/executive/production" className={dashCardDetailLink}>
+              <Link href={detailHref("/executive/production")} className={dashCardDetailLink}>
                 상세보기 →
               </Link>
               <Link href="/executive/ecount-import" className={dashAuxLink}>
@@ -843,7 +849,7 @@ export default function ExecutiveDashboardPage() {
                 선택한 기간의 계획 대비 생산실적입니다. 추이와 품목군별 달성률을 함께 보여줍니다.
               </ExecutivePortalTooltip>
             </div>
-            <Link href="/executive/plan-actual" className={dashCardDetailLink}>
+            <Link href={detailHref("/executive/plan-actual")} className={dashCardDetailLink}>
               상세보기 →
             </Link>
           </div>
@@ -1054,7 +1060,7 @@ export default function ExecutiveDashboardPage() {
                 </span>
               </ExecutivePortalTooltip>
             </div>
-            <Link href={`/executive/waste?period=${periodKey}`} className={dashCardDetailLink}>
+            <Link href={detailHref("/executive/waste")} className={dashCardDetailLink}>
               상세보기 →
             </Link>
           </div>

@@ -23,22 +23,17 @@ import {
 } from "@/features/dashboard/wasteDetailMockData";
 import { DashboardBackLink } from "../DashboardBackLink";
 import type { ProductionBundle } from "@/features/dashboard/loadProductionBundle";
+import {
+  computeExecutivePeriodLabel,
+  computeExecutivePeriodRange,
+  parseExecutivePeriodKey,
+  parseExecutiveYearMonth,
+  type ExecutivePeriodKey,
+} from "../executivePeriod";
 
 const WASTE_WARN_PCT = 4;
 const WASTE_DANGER_PCT = 10;
-type PeriodKey = "week" | "month" | "ytd";
-
-function toYmd(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
-function mondayOfWeek(d: Date): Date {
-  const copy = new Date(d);
-  const day = copy.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  copy.setDate(copy.getDate() + diff);
-  return copy;
-}
+type PeriodKey = ExecutivePeriodKey;
 
 function pct2(n: number | null): string {
   if (n == null) return "—";
@@ -117,11 +112,8 @@ export default function ExecutiveWasteDetailPage() {
   const searchParams = useSearchParams();
   const { profile, loading: authLoading } = useAuth();
   const canView = !!profile;
-  const periodFromQuery = (searchParams.get("period") ?? "ytd") as PeriodKey;
-  const periodKey: PeriodKey =
-    periodFromQuery === "week" || periodFromQuery === "month" || periodFromQuery === "ytd"
-      ? periodFromQuery
-      : "ytd";
+  const periodKey = parseExecutivePeriodKey(searchParams.get("period"));
+  const { refYear, refMonth } = parseExecutiveYearMonth(searchParams);
 
   const materials = useMasterStore((s) => s.materials);
   const bomList = useMasterStore((s) => s.bomList);
@@ -133,27 +125,26 @@ export default function ExecutiveWasteDetailPage() {
   const [bundle, setBundle] = useState<ProductionBundle | null>(null);
   const [prevBundle, setPrevBundle] = useState<ProductionBundle | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [year, setYear] = useState<number>(new Date().getFullYear());
+  const [year, setYear] = useState<number>(refYear);
   const [manualSeries, setManualSeries] = useState<ManualWasteImportSeries>(emptyManual());
   const [prevManualSeries, setPrevManualSeries] = useState<ManualWasteImportSeries>(emptyManual());
   const [showCriteria, setShowCriteria] = useState(false);
   const [activeChartMonth, setActiveChartMonth] = useState<number | null>(null);
 
-  const today = useMemo(() => new Date(), []);
-  const periodRange = useMemo(() => {
-    const end = toYmd(today);
-    if (periodKey === "week") return { start: toYmd(mondayOfWeek(today)), end };
-    if (periodKey === "month") {
-      return { start: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`, end };
-    }
-    return { start: `${year}-01-01`, end: `${year}-12-31` };
-  }, [periodKey, today, year]);
+  useEffect(() => {
+    if (periodKey !== "ytd") setYear(refYear);
+  }, [periodKey, refYear]);
 
-  const periodLabel = useMemo(() => {
-    if (periodKey === "week") return "이번 주";
-    if (periodKey === "month") return "이번 달";
-    return "올해 누적";
-  }, [periodKey]);
+  const today = useMemo(() => new Date(), []);
+  const periodRange = useMemo(
+    () => computeExecutivePeriodRange(periodKey, refYear, refMonth, today),
+    [periodKey, refYear, refMonth, today]
+  );
+
+  const periodLabel = useMemo(
+    () => computeExecutivePeriodLabel(periodKey, refYear, refMonth, today),
+    [periodKey, refYear, refMonth, today]
+  );
 
   const { rows: tableRows, filledManualDates } = useMemo(() => {
     return mergeBundleDaysWithManualImportsForTable(bundle?.days ?? [], manualSeries);
@@ -202,9 +193,14 @@ export default function ExecutiveWasteDetailPage() {
       setActiveChartMonth(null);
       return;
     }
+    if (periodKey === "month") {
+      const inRange = monthlyRowsForChart.some((r) => r.month === refMonth);
+      setActiveChartMonth(inRange ? refMonth : monthlyRowsForChart[monthlyRowsForChart.length - 1]!.month);
+      return;
+    }
     const exists = monthlyRowsForChart.some((r) => r.month === activeChartMonth);
     if (!exists) setActiveChartMonth(monthlyRowsForChart[monthlyRowsForChart.length - 1]!.month);
-  }, [monthlyRowsForChart, activeChartMonth]);
+  }, [monthlyRowsForChart, activeChartMonth, periodKey, refMonth]);
 
   const dailyRowsForYear = useMemo(() => {
     return periodRows.filter((r) => r.date.startsWith(`${year}-`)).filter(wasteDayRowHasData);
@@ -558,6 +554,7 @@ export default function ExecutiveWasteDetailPage() {
           {dailyGroupsByMonth.map(({ month, dayRows }) => (
             <details
               key={month}
+              open={periodKey === "month" && month === refMonth}
               className="open:[&>summary_svg]:rotate-90 border-b border-slate-700/25 last:border-b-0"
             >
               <summary className="flex cursor-pointer list-none items-center gap-2 bg-slate-800/30 px-4 py-3 text-sm text-slate-200 transition-colors hover:bg-slate-800/50 [&::-webkit-details-marker]:hidden">

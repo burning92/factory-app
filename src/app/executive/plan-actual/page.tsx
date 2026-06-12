@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Info } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
@@ -12,6 +12,7 @@ import {
 import { DashboardBackLink } from "../DashboardBackLink";
 import { ExecutivePortalTooltip } from "../ExecutivePortalTooltip";
 import { executiveTooltipHostRowClass } from "../executiveTooltipStyles";
+import { parseExecutiveYearMonth } from "../executivePeriod";
 import type { PlanActualProductRow } from "@/features/dashboard/planVsActual";
 
 type PlanCategoryKey = "pizza" | "bread" | "parbake";
@@ -48,14 +49,17 @@ function diffCellClass(sum: number, opts?: { header?: boolean }): string {
 
 export default function ExecutivePlanActualDetailPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { profile, loading: authLoading } = useAuth();
   const canView = !!profile;
 
-  const { y, m } = useMemo(() => {
-    const d = new Date();
-    return { y: d.getFullYear(), m: d.getMonth() + 1 };
-  }, []);
-  const [month, setMonth] = useState(m);
+  const { refYear, refMonth } = parseExecutiveYearMonth(searchParams);
+  const [month, setMonth] = useState(refMonth);
+  const y = refYear;
+
+  useEffect(() => {
+    setMonth(refMonth);
+  }, [refMonth]);
 
   const [rows, setRows] = useState<PlanActualProductRow[]>([]);
   const [err, setErr] = useState<string | null>(null);
