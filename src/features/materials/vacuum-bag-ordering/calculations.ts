@@ -4,12 +4,18 @@ import {
   isMiniProductKind,
 } from "@/features/production/planning/productClassification";
 import type { PlanningEntryRow } from "@/features/production/planning/types";
-import type { VacuumBagForecastRow, VacuumBagKindRow } from "./types";
+import type { VacuumBagForecastRow, VacuumBagKindRow, VacuumBagMovementRow } from "./types";
 
 export const VACUUM_BAG_WEEK_OPTIONS = [1, 2, 3, 4, 5, 6] as const;
 export const DEFAULT_VACUUM_BAG_WEEKS = 3;
 
 export type VacuumBagPlanKind = "pizza" | "mini";
+
+export type VacuumBagStockAnchor = {
+  movement_date: string;
+  qty: number;
+  created_at: string;
+};
 
 export function addDaysIso(iso: string, days: number): string {
   const d = new Date(`${iso}T00:00:00`);
@@ -36,9 +42,6 @@ export function vacuumBagForecastRange(todayIso: string, weeks: number): { start
 /**
  * 생산계획 행 → 진공봉투 종류.
  * 부자재 BOM 없이 플래닝 제품 분류만 사용한다.
- * - 미니(조건·2입·mini 분류) → 미니진공봉투
- * - 일반 피자·파베이크(판매)·미분류 → 피자진공봉투
- * - 브레드·파베이크(보관) → 봉투 불필요
  */
 export function vacuumBagKindForPlanningEntry(productNameSnapshot: string): VacuumBagPlanKind | null {
   const snap = productNameSnapshot.trim();
@@ -69,52 +72,111 @@ export function vacuumBagKindForPlanningEntry(productNameSnapshot: string): Vacu
   return null;
 }
 
-/** 계획 수량 = 봉투 1장 (미니 2입도 계획 입력 수량 그대로) */
+/** 계획 수량 = 봉투 1장 */
 export function vacuumBagQtyFromPlanEntry(rawQty: number): number {
   const q = Number(rawQty) || 0;
   return q > 0 ? q : 0;
 }
 
-export function computeVacuumBagForecast(params: {
-  kinds: VacuumBagKindRow[];
-  balances: Record<string, number>;
-  entries: PlanningEntryRow[];
-  rangeStart: string;
-  rangeEnd: string;
-}): { rows: VacuumBagForecastRow[]; excluded_plan_qty: number } {
-  const { kinds, balances, entries, rangeStart, rangeEnd } = params;
-  const materialNameByKind = new Map(kinds.map((k) => [k.kind_key, k.planning_material_name.trim()]));
-  const labelByKind = new Map(kinds.map((k) => [k.kind_key, k.label]));
-  const requiredByKind = new Map<string, number>();
-  for (const kind of kinds) requiredByKind.set(kind.kind_key, 0);
+export function latestStockSetByKind(movements: VacuumBagMovementRow[]): Map<string, VacuumBagStockAnchor> {
+  const map = new Map<string, VacuumBagStockAnchor>();
+  const sorted = [...movements]
+    .filter((m) => m.movement_type === "stock_set")
+    .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.movement_date.localeCompare(a.movement_date));
+  for (const m of sorted) {
+    if (!map.has(m.kind_key)) {
+      map.set(m.kind_key, {
+        movement_date: m.movement_date,
+        qty: m.qty,
+        created_at: m.created_at,
+      });
+    }
+  }
+  return map;
+}
 
-  let excluded_plan_qty = 0;
+function isMovementAfterAnchor(movement: VacuumBagMovementRow, anchor: VacuumBagStockAnchor): boolean {
+  if (movement.movement_date > anchor.movement_date) return true;
+  if (movement.movement_date < anchor.movement_date) return false;
+  return movement.created_at > anchor.created_at;
+}
+
+export function sumPlanQtyByKind(params: {
+  entries: PlanningEntryRow[];
+  fromDateExclusive: string | null;
+  toDateInclusive: string;
+}): { pizza: number; mini: number; excluded: number } {
+  const { entries, fromDateExclusive, toDateInclusive } = params;
+  const totals = { pizza: 0, mini: 0, excluded: 0 };
 
   for (const entry of entries) {
-    if (entry.plan_date < rangeStart || entry.plan_date > rangeEnd) continue;
+    if (entry.plan_date > toDateInclusive) continue;
+    if (fromDateExclusive != null && entry.plan_date <= fromDateExclusive) continue;
+
     const bagQty = vacuumBagQtyFromPlanEntry(entry.qty);
     if (bagQty <= 0) continue;
 
     const planKind = vacuumBagKindForPlanningEntry(entry.product_name_snapshot);
     if (!planKind) {
-      excluded_plan_qty += bagQty;
+      totals.excluded += bagQty;
       continue;
     }
-
-    const curr = requiredByKind.get(planKind) ?? 0;
-    requiredByKind.set(planKind, curr + bagQty);
+    totals[planKind] += bagQty;
   }
 
+  return totals;
+}
+
+export function computeVacuumBagForecast(params: {
+  kinds: VacuumBagKindRow[];
+  balances: Record<string, number>;
+  movements: VacuumBagMovementRow[];
+  entries: PlanningEntryRow[];
+  todayIso: string;
+  rangeStart: string;
+  rangeEnd: string;
+}): { rows: VacuumBagForecastRow[]; excluded_plan_qty: number } {
+  const { kinds, balances, movements, entries, todayIso, rangeStart, rangeEnd } = params;
+  const materialNameByKind = new Map(kinds.map((k) => [k.kind_key, k.planning_material_name.trim()]));
+  const labelByKind = new Map(kinds.map((k) => [k.kind_key, k.label]));
+  const anchors = latestStockSetByKind(movements);
+
   const rows: VacuumBagForecastRow[] = kinds.map((kind) => {
-    const required_qty = Number((requiredByKind.get(kind.kind_key) ?? 0).toFixed(3));
-    const current_qty = Number(balances[kind.kind_key] ?? 0);
+    const anchor = anchors.get(kind.kind_key) ?? null;
+    const receipt_qty = anchor
+      ? movements
+          .filter((m) => m.kind_key === kind.kind_key && m.movement_type === "receipt" && isMovementAfterAnchor(m, anchor))
+          .reduce((sum, m) => sum + m.qty, 0)
+      : 0;
+
+    const autoUsedTotals = sumPlanQtyByKind({
+      entries,
+      fromDateExclusive: anchor?.movement_date ?? null,
+      toDateInclusive: todayIso,
+    });
+    const auto_used_qty = Number((autoUsedTotals[kind.kind_key as VacuumBagPlanKind] ?? 0).toFixed(3));
+
+    const futureTotals = sumPlanQtyByKind({
+      entries,
+      fromDateExclusive: todayIso,
+      toDateInclusive: rangeEnd,
+    });
+    const required_qty = Number((futureTotals[kind.kind_key as VacuumBagPlanKind] ?? 0).toFixed(3));
+
+    const base_qty = anchor ? anchor.qty : Number(balances[kind.kind_key] ?? 0);
+    const current_qty = Number((base_qty + receipt_qty - auto_used_qty).toFixed(3));
     const projected_qty = Number((current_qty - required_qty).toFixed(3));
     const is_shortage = projected_qty < 0;
     const shortage_qty = is_shortage ? Number(Math.abs(projected_qty).toFixed(3)) : 0;
+
     return {
       kind_key: kind.kind_key,
       label: labelByKind.get(kind.kind_key) ?? kind.label,
       planning_material_name: materialNameByKind.get(kind.kind_key) ?? kind.planning_material_name,
+      anchor_date: anchor?.movement_date ?? null,
+      anchor_qty: anchor?.qty ?? null,
+      receipt_qty: Number(receipt_qty.toFixed(3)),
+      auto_used_qty,
       current_qty,
       required_qty,
       projected_qty,
@@ -123,5 +185,11 @@ export function computeVacuumBagForecast(params: {
     };
   });
 
-  return { rows, excluded_plan_qty: Number(excluded_plan_qty.toFixed(3)) };
+  const futureExcluded = sumPlanQtyByKind({
+    entries,
+    fromDateExclusive: todayIso,
+    toDateInclusive: rangeEnd,
+  }).excluded;
+
+  return { rows, excluded_plan_qty: Number(futureExcluded.toFixed(3)) };
 }

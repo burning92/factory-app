@@ -1,6 +1,6 @@
 import type { PlanningEntryRow } from "@/features/production/planning/types";
 
-export type VacuumBagMovementType = "stock_set" | "receipt" | "usage";
+export type VacuumBagMovementType = "stock_set" | "receipt";
 
 export interface VacuumBagKindRow {
   kind_key: string;
@@ -23,6 +23,10 @@ export interface VacuumBagForecastRow {
   kind_key: string;
   label: string;
   planning_material_name: string;
+  anchor_date: string | null;
+  anchor_qty: number | null;
+  receipt_qty: number;
+  auto_used_qty: number;
   current_qty: number;
   required_qty: number;
   projected_qty: number;

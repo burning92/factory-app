@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
   const memo = body.memo != null ? String(body.memo).trim() : "";
 
   if (!kindKey) return NextResponse.json({ error: "kind_key_required" }, { status: 400 });
-  if (movementType !== "stock_set" && movementType !== "receipt" && movementType !== "usage") {
+  if (movementType !== "stock_set" && movementType !== "receipt") {
     return NextResponse.json({ error: "invalid_movement_type" }, { status: 400 });
   }
   if (qty == null) return NextResponse.json({ error: "invalid_qty" }, { status: 400 });
@@ -61,17 +61,7 @@ export async function POST(req: NextRequest) {
     if (balanceErr) throw balanceErr;
 
     const currentQty = Number(balanceRow?.current_qty) || 0;
-    let nextQty = currentQty;
-    if (movementType === "stock_set") nextQty = qty;
-    else if (movementType === "receipt") nextQty = currentQty + qty;
-    else nextQty = currentQty - qty;
-
-    if (nextQty < 0) {
-      return NextResponse.json(
-        { error: "insufficient_stock", message: "재고가 부족합니다. 사용량을 확인해 주세요." },
-        { status: 400 }
-      );
-    }
+    const nextQty = movementType === "stock_set" ? qty : currentQty + qty;
 
     const { error: insErr } = await admin.from("vacuum_bag_movements").insert({
       kind_key: kindKey,

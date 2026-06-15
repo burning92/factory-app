@@ -11,10 +11,10 @@ import type { VacuumBagMovementType, VacuumBagSummaryData } from "@/features/mat
 
 type ApiResponse = { ok?: boolean; data?: VacuumBagSummaryData; error?: string; message?: string };
 
-const MOVEMENT_LABEL: Record<VacuumBagMovementType, string> = {
-  stock_set: "재고 설정",
+const MOVEMENT_LABEL: Record<string, string> = {
+  stock_set: "재고 맞추기",
   receipt: "입고",
-  usage: "사용",
+  usage: "사용 (이전)",
 };
 
 function fmtNum(value: number): string {
@@ -38,7 +38,7 @@ export default function VacuumBagOrderingClient() {
   const [summary, setSummary] = useState<VacuumBagSummaryData | null>(null);
 
   const [formKind, setFormKind] = useState("");
-  const [formType, setFormType] = useState<VacuumBagMovementType>("stock_set");
+  const [formType, setFormType] = useState<VacuumBagMovementType>("receipt");
   const [formQty, setFormQty] = useState("");
   const [formDate, setFormDate] = useState(todayIsoLocal());
   const [formMemo, setFormMemo] = useState("");
@@ -102,10 +102,6 @@ export default function VacuumBagOrderingClient() {
     return allZero && noHistory;
   }, [summary]);
 
-  useEffect(() => {
-    if (needsSetup) setFormType("stock_set");
-  }, [needsSetup]);
-
   const submitMovement = async () => {
     if (!formKind) return alert("봉투 종류를 선택해 주세요.");
     const qty = Number(formQty);
@@ -156,22 +152,29 @@ export default function VacuumBagOrderingClient() {
         </Link>
         <h1 className="text-lg font-semibold text-slate-100 mt-1">진공봉투 발주 판단</h1>
         <p className="text-sm text-slate-400 mt-1">
-          생산계획 수량으로 필요량을 보고, 재고·사용·입고는 여기서 입력합니다.
+          생산계획 일자에 맞춰 사용량은 자동 차감됩니다. 입고·재고 맞추기만 입력하면 됩니다.
         </p>
       </div>
 
       {needsSetup ? (
         <div className="rounded-xl border border-cyan-500/40 bg-cyan-500/10 px-4 py-3 space-y-2">
-          <p className="text-sm font-semibold text-cyan-100">처음 사용 — 오늘 재고부터 맞추세요</p>
+          <p className="text-sm font-semibold text-cyan-100">처음 사용 — 재고부터 맞추세요</p>
           <ol className="text-xs text-slate-300 space-y-1 list-decimal list-inside">
-            <li>아래에서 <strong className="text-cyan-200">재고 설정</strong>으로 피자·미니 봉투 실사 수량 입력</li>
-            <li>위 <strong className="text-cyan-200">3주 전망</strong>에서 예상 잔량 확인 (마이너스면 주문)</li>
-            <li>이후 쓴 만큼 <strong className="text-cyan-200">사용량</strong>, 들어오면 <strong className="text-cyan-200">입고</strong></li>
+            <li>
+              아래 <strong className="text-cyan-200">재고 맞추기</strong>로 피자·미니 봉투 지금 수량 입력
+            </li>
+            <li>
+              위 <strong className="text-cyan-200">3주 전망</strong>에서 예상 잔량 확인 (마이너스면 주문)
+            </li>
+            <li>
+              이후 들어오면 <strong className="text-cyan-200">입고</strong>, 숫자 안 맞으면 재고 맞추기로 보정
+            </li>
           </ol>
         </div>
       ) : (
         <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 px-4 py-2.5 text-xs text-slate-400">
-          <span className="text-slate-300">매일:</span> 사용량 입력 → 3주 전망에서 부족 여부 확인 → 들어오면 입고
+          <span className="text-slate-300">자동:</span> 마지막 재고 맞추기 이후 생산계획(지난 일자)만큼 차감 ·{" "}
+          <span className="text-slate-300">수동:</span> 입고 / 재고 맞추기
         </div>
       )}
 
@@ -227,7 +230,9 @@ export default function VacuumBagOrderingClient() {
             <p className={`text-sm font-semibold ${shortageCount > 0 ? "text-amber-100" : "text-emerald-100"}`}>
               {shortageCount > 0 ? `${shortageCount}종 부족 예상 — 주문 검토 필요` : `${summary.weeks}주 계획 기준 재고 충분`}
             </p>
-            <p className="text-xs text-slate-400 mt-0.5">예상 잔량 = 현재고 − 기간 필요량</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              현재고 = 재고맞추기 + 입고 − 계획자동차감 · 예상 잔량 = 현재고 − {summary?.weeks}주 필요량
+            </p>
           </div>
         </div>
       )}
@@ -259,8 +264,16 @@ export default function VacuumBagOrderingClient() {
                 <dd className="font-medium text-slate-100">{fmtNum(row.current_qty)}</dd>
               </div>
               <div>
+                <dt className="text-slate-500 text-xs">계획 자동차감</dt>
+                <dd className="font-medium text-slate-300">−{fmtNum(row.auto_used_qty)}</dd>
+              </div>
+              <div>
                 <dt className="text-slate-500 text-xs">{summary?.weeks}주 필요량</dt>
                 <dd className="font-medium text-slate-100">{fmtNum(row.required_qty)}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-500 text-xs">입고(맞춘 이후)</dt>
+                <dd className="font-medium text-slate-300">+{fmtNum(row.receipt_qty)}</dd>
               </div>
               <div className="col-span-2 pt-1 border-t border-slate-700/50">
                 <dt className="text-slate-500 text-xs">예상 잔량</dt>
@@ -284,9 +297,8 @@ export default function VacuumBagOrderingClient() {
         <div className="flex flex-wrap gap-2">
           {(
             [
-              { type: "stock_set" as const, label: "재고 설정", hint: "오늘 실사" },
-              { type: "usage" as const, label: "사용량", hint: "차감" },
-              { type: "receipt" as const, label: "입고", hint: "증가" },
+              { type: "receipt" as const, label: "입고", hint: "들어온 만큼" },
+              { type: "stock_set" as const, label: "재고 맞추기", hint: "숫자 보정" },
             ] as const
           ).map(({ type, label, hint }) => (
             <button
@@ -327,13 +339,7 @@ export default function VacuumBagOrderingClient() {
               step={1}
               value={formQty}
               onChange={(e) => setFormQty(e.target.value)}
-              placeholder={
-                formType === "stock_set"
-                  ? "지금 창고에 있는 수량"
-                  : formType === "receipt"
-                    ? "입고 수량"
-                    : "사용 수량"
-              }
+              placeholder={formType === "receipt" ? "입고 수량" : "지금 맞출 재고 수량"}
               className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-100"
             />
           </label>
@@ -374,7 +380,9 @@ export default function VacuumBagOrderingClient() {
               <li key={m.id} className="px-4 py-2.5 text-sm flex flex-wrap items-center gap-x-3 gap-y-1">
                 <span className="text-slate-500 text-xs">{m.movement_date}</span>
                 <span className="font-medium text-slate-200">{kindLabelByKey.get(m.kind_key) ?? m.kind_key}</span>
-                <span className="text-xs rounded bg-slate-700/60 px-1.5 py-0.5 text-slate-300">{MOVEMENT_LABEL[m.movement_type]}</span>
+                <span className="text-xs rounded bg-slate-700/60 px-1.5 py-0.5 text-slate-300">
+                  {MOVEMENT_LABEL[m.movement_type] ?? m.movement_type}
+                </span>
                 <span className="text-slate-100">{fmtNum(m.qty)}</span>
                 {m.memo && <span className="text-xs text-slate-500 truncate">{m.memo}</span>}
               </li>
