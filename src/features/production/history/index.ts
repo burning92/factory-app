@@ -3,7 +3,25 @@ export {
   calculateLotUsages,
   inferParbakeMetaFromBom,
   resolveMixedParbakeWasteByTypeCounts,
+  resolveMixedParbakeWasteByDominantProduction,
+  computeParbakeProductionQtyByType,
+  pickDominantParbakeType,
+  buildParbakePurposeProductionLines,
+  summarizeDoughPizzaProductionBySize,
+  resolveAstronautParbakeJournalLabel,
+  resolveParbakeJournalLabelForRole,
+  pickPrimaryPizzaParbakeTypeForClosure,
+  mergeDateParbakeTypes,
+  resolveBaseSauceMetaForParbakeType,
 } from "./calculations";
+export {
+  isParbakeOnlyFinishedProductLabel,
+  normalizeSecondClosureForDate,
+  resolveParbakeProductionRows,
+  syncLegacyParbakeFields,
+  FINISHED_PRODUCT_GROUPS,
+  finishedProductGroupKey,
+} from "./parbakeClosure";
 export type {
   ComputedResult,
   DateGroupInput,

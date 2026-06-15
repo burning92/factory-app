@@ -18,8 +18,19 @@ import type {
   BaseUsageRow,
   FifoLotRow,
   ParbakeWasteByTypeInput,
+  ParbakePurposeProductionLine,
+  AstronautParbakeSizeLane,
 } from "./types";
+import { isUjuinParbakeFinishedProductLabel } from "@/features/dashboard/productCategoryRules";
 import { getDoughBaseRowsFromGeneralBom } from "./bomAdapter";
+import {
+  extraParbakeManufacturedDateFromRow,
+  parbakeExpiryFromManufacturedDate,
+} from "./extraParbakeDates";
+import {
+  resolveParbakeProductionRows,
+  sumParbakeClosureQty,
+} from "./parbakeClosure";
 
 export type { ComputedResult };
 
@@ -225,8 +236,23 @@ export function isStoredParbakeOnlyDay(
   return productSummaries.every((p) => p.usesStoredParbake);
 }
 
+/** productSummaries + 2차 마감 by-base 행에서 당일 파베이크 베이스 목록 */
+export function mergeDateParbakeTypes(
+  fromProductSummaries: string[],
+  secondClosure: DateGroupInput["secondClosure"]
+): string[] {
+  const set = new Set(fromProductSummaries);
+  for (const row of secondClosure.parbakeProductionByBase ?? []) {
+    if (row.parbakeName) set.add(row.parbakeName);
+  }
+  return Array.from(set).sort();
+}
+
 /** 완제품 합계 / 추가 파베이크 합계 등 */
-function calculateTotals(state: DateGroupInput) {
+function calculateTotals(
+  state: DateGroupInput,
+  dateParbakeTypes: string[] = []
+) {
   const totalFinishedQty = state.secondClosure.productOutputs.reduce(
     (s, o) => s + toNum(o.finishedQty),
     0
@@ -235,13 +261,19 @@ function calculateTotals(state: DateGroupInput) {
     (s, e) => s + toNum(e.qty),
     0
   );
-  const astronautParbakeQty = toNum(state.secondClosure.astronautParbakeQty);
-  const saleParbakeQty = toNum(state.secondClosure.saleParbakeQty);
+  const { astronautParbakeQty, saleParbakeQty } = sumParbakeClosureQty(
+    state.secondClosure
+  );
+  const parbakeProductionByBase = resolveParbakeProductionRows(
+    state.secondClosure,
+    dateParbakeTypes
+  );
   return {
     totalFinishedQty,
     totalExtraParbakeQty,
     astronautParbakeQty,
     saleParbakeQty,
+    parbakeProductionByBase,
   };
 }
 
@@ -357,7 +389,199 @@ export function getDateParbakeTypes(productSummaries: ProductSummary[]): string[
   return Array.from(set);
 }
 
-/** 추가 파베이크 이름 해석: 1종이면 resolved, 2종 이상이면 unresolved */
+/** 추가 파베이크 1행 → resolved (소스 베이스 확정) */
+function resolveOneExtraParbakeRow(
+  row: DateGroupInput["secondClosure"]["extraParbakes"][number],
+  parbakeName: string,
+  productSummaries: ProductSummary[]
+): ResolvedExtraParbake {
+  const qty = toNum(row.qty);
+  const manufacturedDate = extraParbakeManufacturedDateFromRow(row);
+  const expiryDate = parbakeExpiryFromManufacturedDate(manufacturedDate) || "—";
+  const candidates = productSummaries.filter(
+    (p) =>
+      p.participatesInParbakeTypeInference && p.inferredParbakeName === parbakeName
+  );
+  const productCandidates = candidates.map((p) => ({
+    productKey: p.productKey,
+    productName: p.productName,
+    standardName: p.productStandardName,
+    displayProductLabel: p.displayProductLabel,
+    baseProductName: p.baseProductName,
+  }));
+  const displayLabel =
+    qty > 0
+      ? `${parbakeName} ${qty}개 (${expiryDate})`
+      : `${parbakeName} 0개 (${expiryDate})`;
+  return {
+    extraParbakeId: row.extraParbakeId,
+    parbakeName,
+    qty,
+    manufacturedDate,
+    expiryDate,
+    displayLabel,
+    productCandidates,
+    targetProductResolved: productCandidates.length === 1,
+  };
+}
+
+function isMiniProductStandard(productStandardName: string): boolean {
+  return (productStandardName ?? "").trim() === "미니";
+}
+
+export type DoughPizzaSizeProductionSummary = {
+  miniQty: number;
+  regularQty: number;
+  hasMixedMiniAndRegular: boolean;
+  isMiniOnly: boolean;
+  isRegularOnly: boolean;
+};
+
+/** 당일 도우 피자(우주인 완제품·브레드 제외) 일반/미니 생산량 */
+export function summarizeDoughPizzaProductionBySize(
+  productSummaries: ProductSummary[]
+): DoughPizzaSizeProductionSummary {
+  let miniQty = 0;
+  let regularQty = 0;
+  for (const p of productSummaries) {
+    if (isUjuinParbakeFinishedProductLabel(p.displayProductLabel)) continue;
+    if (!p.usesTodayDough || p.isBreadProduct) continue;
+    const qty = p.finishedQty ?? 0;
+    if (qty <= 0) continue;
+    if (isMiniProductStandard(p.productStandardName)) miniQty += qty;
+    else regularQty += qty;
+  }
+  return {
+    miniQty,
+    regularQty,
+    hasMixedMiniAndRegular: miniQty > 0 && regularQty > 0,
+    isMiniOnly: miniQty > 0 && regularQty === 0,
+    isRegularOnly: regularQty > 0 && miniQty === 0,
+  };
+}
+
+/** @deprecated summarizeDoughPizzaProductionBySize().isMiniOnly 사용 */
+export function shouldLabelClosureAstronautAsMiniParbake(
+  productSummaries: ProductSummary[]
+): boolean {
+  return summarizeDoughPizzaProductionBySize(productSummaries).isMiniOnly;
+}
+
+/** 생산일지 표기: 토마토 파베이크 → 미니 토마토 파베이크 */
+export function formatMiniParbakeJournalName(baseParbakeName: string): string {
+  const base = (baseParbakeName ?? "").trim();
+  if (!base) return base;
+  if (base.startsWith("미니 ")) return base;
+  return `미니 ${base}`;
+}
+
+/** 우주인·판매용 필드 수량의 생산일지 파베이크 이름 (베이스 × 일반/미니) */
+export function resolveParbakeJournalLabelForRole(
+  role: "astronaut" | "sale",
+  baseParbakeName: string,
+  productSummaries: ProductSummary[],
+  sizeLane: AstronautParbakeSizeLane | "" | undefined
+): string {
+  const summary = summarizeDoughPizzaProductionBySize(productSummaries);
+  const useMini =
+    summary.isMiniOnly ||
+    (summary.hasMixedMiniAndRegular && sizeLane === "mini");
+  if (role === "astronaut") {
+    if (useMini) return formatMiniParbakeJournalName(baseParbakeName);
+    return baseParbakeName;
+  }
+  if (useMini) return formatMiniParbakeJournalName(baseParbakeName);
+  return baseParbakeName;
+}
+
+/** @deprecated resolveParbakeJournalLabelForRole("astronaut", ...) 사용 */
+export function resolveAstronautParbakeJournalLabel(
+  baseParbakeName: string,
+  productSummaries: ProductSummary[],
+  sizeLane: AstronautParbakeSizeLane | "" | undefined
+): string {
+  return resolveParbakeJournalLabelForRole(
+    "astronaut",
+    baseParbakeName,
+    productSummaries,
+    sizeLane
+  );
+}
+
+/** 우주인·판매용 필드 수량을 붙일 당일 도우 피자 베이스(우주인 완제품 제외, 생산량 최다) */
+export function pickPrimaryPizzaParbakeTypeForClosure(
+  productSummaries: ProductSummary[]
+): string | null {
+  let targetType: string | null = null;
+  let maxFinished = -1;
+  for (const p of productSummaries) {
+    if (isUjuinParbakeFinishedProductLabel(p.displayProductLabel)) continue;
+    if (!p.inferredParbakeName || !p.usesTodayDough) continue;
+    const finished = p.finishedQty ?? 0;
+    if (finished > maxFinished) {
+      maxFinished = finished;
+      targetType = p.inferredParbakeName;
+    }
+  }
+  return targetType;
+}
+
+function mergeParbakePurposeLine(
+  lines: ParbakePurposeProductionLine[],
+  role: "astronaut" | "sale",
+  parbakeName: string,
+  qty: number
+): void {
+  if (qty <= 0 || !parbakeName) return;
+  const existing = lines.find((l) => l.role === role && l.parbakeName === parbakeName);
+  if (existing) existing.qty += qty;
+  else lines.push({ role, parbakeName, qty });
+}
+
+/** 생산일지 「파베이크 목적별 생산량」 — 베이스별 우주인/판매 필드 반영 */
+export function buildParbakePurposeProductionLines(
+  state: DateGroupInput,
+  productSummaries: ProductSummary[],
+  dateParbakeTypes: string[]
+): ParbakePurposeProductionLine[] {
+  const lines: ParbakePurposeProductionLine[] = [];
+  const parbakeRows = resolveParbakeProductionRows(state.secondClosure, dateParbakeTypes);
+
+  for (const row of parbakeRows) {
+    const astro = toNum(row.astronautQty);
+    const sale = toNum(row.saleQty);
+    if (astro > 0) {
+      mergeParbakePurposeLine(
+        lines,
+        "astronaut",
+        resolveParbakeJournalLabelForRole(
+          "astronaut",
+          row.parbakeName,
+          productSummaries,
+          state.secondClosure.astronautParbakeSizeLane
+        ),
+        astro
+      );
+    }
+    if (sale > 0) {
+      mergeParbakePurposeLine(
+        lines,
+        "sale",
+        resolveParbakeJournalLabelForRole(
+          "sale",
+          row.parbakeName,
+          productSummaries,
+          state.secondClosure.saleParbakeSizeLane
+        ),
+        sale
+      );
+    }
+  }
+
+  return lines.filter((l) => l.qty > 0);
+}
+
+/** 추가 파베이크 이름 해석: 단일 종류 자동, 혼합은 행별 parbakeName(소스 베이스) */
 function resolveExtraParbakes(
   state: DateGroupInput,
   dateParbakeTypes: string[],
@@ -374,11 +598,12 @@ function resolveExtraParbakes(
   if (dateParbakeTypes.length === 0) {
     for (const row of state.secondClosure.extraParbakes) {
       const qty = toNum(row.qty);
-      if (qty === 0 && !row.expiryDate.trim()) continue;
+      const manufacturedDate = extraParbakeManufacturedDateFromRow(row);
+      if (qty === 0 && !manufacturedDate) continue;
       unresolved.push({
         extraParbakeId: row.extraParbakeId,
         qty,
-        expiryDate: row.expiryDate,
+        manufacturedDate,
         reason: "해당 날짜 완제품 BOM에서 파베이크 종류를 판별할 수 없습니다.",
       });
     }
@@ -386,50 +611,41 @@ function resolveExtraParbakes(
   }
 
   if (dateParbakeTypes.length > 1) {
-    warnings.push(
-      `당일 파베이크 종류가 2종 이상입니다 (${dateParbakeTypes.join(", ")}). 추가 파베이크 행에 종류를 자동 확정하지 않습니다.`
-    );
+    let anyUnresolved = false;
     for (const row of state.secondClosure.extraParbakes) {
       const qty = toNum(row.qty);
-      if (qty === 0 && !row.expiryDate.trim()) continue;
-      unresolved.push({
-        extraParbakeId: row.extraParbakeId,
-        qty,
-        expiryDate: row.expiryDate,
-        reason: "파베이크 종류가 2종 이상이라 자동 확정하지 않습니다.",
-      });
+      const manufacturedDate = extraParbakeManufacturedDateFromRow(row);
+      if (qty === 0 && !manufacturedDate) continue;
+      const selected = (row.parbakeName ?? "").trim();
+      if (selected && dateParbakeTypes.includes(selected)) {
+        resolved.push(resolveOneExtraParbakeRow(row, selected, productSummaries));
+      } else {
+        anyUnresolved = true;
+        unresolved.push({
+          extraParbakeId: row.extraParbakeId,
+          qty,
+          manufacturedDate,
+          reason: selected
+            ? "선택한 소스 베이스가 당일 파베이크 목록에 없습니다."
+            : "추가 파베이크 소스 베이스를 선택해 주세요.",
+        });
+      }
+    }
+    if (anyUnresolved) {
+      warnings.push(
+        "혼합 베이스: 추가 파베이크는 소스 베이스를 선택해야 일지에 표시됩니다."
+      );
     }
     return { resolved, unresolved, warnings };
   }
 
   const parbakeName = dateParbakeTypes[0]!;
-  const candidates = productSummaries.filter(
-    (p) =>
-      p.participatesInParbakeTypeInference && p.inferredParbakeName === parbakeName
-  );
-  const productCandidates = candidates.map((p) => ({
-    productKey: p.productKey,
-    productName: p.productName,
-    standardName: p.productStandardName,
-    displayProductLabel: p.displayProductLabel,
-    baseProductName: p.baseProductName,
-  }));
-
   for (const row of state.secondClosure.extraParbakes) {
     const qty = toNum(row.qty);
-    const displayLabel =
-      qty > 0
-        ? `${parbakeName} ${qty}개 (${row.expiryDate || "—"})`
-        : `${parbakeName} 0개 (${row.expiryDate || "—"})`;
-    resolved.push({
-      extraParbakeId: row.extraParbakeId,
-      parbakeName,
-      qty,
-      expiryDate: row.expiryDate,
-      displayLabel,
-      productCandidates,
-      targetProductResolved: productCandidates.length === 1,
-    });
+    const manufacturedDate = extraParbakeManufacturedDateFromRow(row);
+    if (qty === 0 && !manufacturedDate) continue;
+    const name = (row.parbakeName ?? "").trim() || parbakeName;
+    resolved.push(resolveOneExtraParbakeRow(row, name, productSummaries));
   }
   return { resolved, unresolved, warnings };
 }
@@ -456,10 +672,42 @@ function getAstronautSaleLabels(
   };
 }
 
-/** 단일 파베이크 종류에 대한 가중 g/ea 및 베이스 소스명 */
-function getWeightedBaseSauceForType(
+/** BOM 전체에서 파베이크 종류 → 도우소스 (완제품 없이 파베만 생산된 베이스용) */
+function findBaseSauceMetaFromBomList(
   parbakeName: string,
-  productSummaries: ProductSummary[]
+  bomList: BomRowRef[]
+): { baseSauceMaterialName: string; bomGPerEa: number } | null {
+  for (const row of bomList) {
+    const pn = parbakeNameFromBaseSauce(row.materialName);
+    if (pn !== parbakeName) continue;
+    if (/토핑/i.test(row.materialName)) continue;
+    if (!/도우.*소스|소스.*도우/i.test(row.materialName)) continue;
+    const g = row.bomGPerEa ?? 0;
+    if (g > 0) {
+      return { baseSauceMaterialName: (row.materialName ?? "").trim(), bomGPerEa: g };
+    }
+  }
+  return null;
+}
+
+function parbakeClosureQtyForType(
+  parbakeName: string,
+  state: DateGroupInput,
+  dateParbakeTypes: string[]
+): number {
+  const rows = resolveParbakeProductionRows(state.secondClosure, dateParbakeTypes);
+  const row = rows.find((r) => r.parbakeName === parbakeName);
+  if (!row) return 0;
+  return toNum(row.astronautQty) + toNum(row.saleQty);
+}
+
+/** 단일 파베이크 종류에 대한 가중 g/ea 및 베이스 소스명 (완제품 + 파베이크 생산량) */
+export function resolveBaseSauceMetaForParbakeType(
+  parbakeName: string,
+  productSummaries: ProductSummary[],
+  state: DateGroupInput,
+  dateParbakeTypes: string[],
+  bomList: BomRowRef[]
 ): { baseSauceMaterialName: string; weightedBaseSaucePerUnitQty: number } | null {
   const candidates = productSummaries.filter(
     (p) =>
@@ -467,23 +715,76 @@ function getWeightedBaseSauceForType(
       p.inferredParbakeName === parbakeName &&
       p.inferredBaseSaucePerUnitQty != null
   );
-  if (candidates.length === 0) return null;
+
   let totalQty = 0;
   let weightedSum = 0;
+  let baseSauceMaterialName = candidates[0]?.inferredBaseSauceMaterialName ?? "";
+  const bomFallback = findBaseSauceMetaFromBomList(parbakeName, bomList);
+
   for (const p of candidates) {
     totalQty += p.finishedQty;
     weightedSum += p.finishedQty * (p.inferredBaseSaucePerUnitQty ?? 0);
   }
-  const weightedBaseSaucePerUnitQty = totalQty > 0 ? weightedSum / totalQty : 0;
-  const baseSauceMaterialName = candidates[0]!.inferredBaseSauceMaterialName ?? "";
-  return { baseSauceMaterialName, weightedBaseSaucePerUnitQty };
+
+  const closureQty = parbakeClosureQtyForType(parbakeName, state, dateParbakeTypes);
+  if (closureQty > 0) {
+    const gPerEa =
+      totalQty > 0
+        ? weightedSum / totalQty
+        : (candidates[0]?.inferredBaseSaucePerUnitQty ?? bomFallback?.bomGPerEa ?? 0);
+    if (gPerEa > 0) {
+      weightedSum += closureQty * gPerEa;
+      totalQty += closureQty;
+      if (!baseSauceMaterialName && bomFallback) {
+        baseSauceMaterialName = bomFallback.baseSauceMaterialName;
+      }
+    }
+  }
+
+  if (totalQty <= 0) {
+    if (closureQty > 0 && bomFallback) {
+      return {
+        baseSauceMaterialName: bomFallback.baseSauceMaterialName,
+        weightedBaseSaucePerUnitQty: bomFallback.bomGPerEa,
+      };
+    }
+    return null;
+  }
+
+  if (!baseSauceMaterialName && bomFallback) {
+    baseSauceMaterialName = bomFallback.baseSauceMaterialName;
+  }
+  if (!baseSauceMaterialName) return null;
+
+  return {
+    baseSauceMaterialName,
+    weightedBaseSaucePerUnitQty: weightedSum / totalQty,
+  };
+}
+
+function getWeightedBaseSauceForType(
+  parbakeName: string,
+  productSummaries: ProductSummary[],
+  state: DateGroupInput,
+  dateParbakeTypes: string[],
+  bomList: BomRowRef[]
+): { baseSauceMaterialName: string; weightedBaseSaucePerUnitQty: number } | null {
+  return resolveBaseSauceMetaForParbakeType(
+    parbakeName,
+    productSummaries,
+    state,
+    dateParbakeTypes,
+    bomList
+  );
 }
 
 /** 베이스(도우소스) 폐기량 g: parbakeWasteQty × 가중평균 g/ea. 1종일 때만 계산 (레거시 단일 결과용) */
 function calculateBaseWaste(
   parbakeWasteQty: number,
   productSummaries: ProductSummary[],
-  dateParbakeTypes: string[]
+  dateParbakeTypes: string[],
+  state: DateGroupInput,
+  bomList: BomRowRef[]
 ): BaseWasteResult & { warnings: string[] } {
   const warnings: string[] = [];
   if (dateParbakeTypes.length === 0) {
@@ -497,7 +798,13 @@ function calculateBaseWaste(
   }
 
   const parbakeName = dateParbakeTypes[0]!;
-  const meta = getWeightedBaseSauceForType(parbakeName, productSummaries);
+  const meta = getWeightedBaseSauceForType(
+    parbakeName,
+    productSummaries,
+    state,
+    dateParbakeTypes,
+    bomList
+  );
   if (!meta) {
     warnings.push(
       `파베이크 [${parbakeName}] 제품에 도우소스 BOM g/ea가 없어 베이스 폐기량을 계산할 수 없습니다.`
@@ -599,12 +906,119 @@ export function resolveMixedParbakeWasteByTypeCounts(
   return { resolved: out, warnings };
 }
 
-/** 총괄(P1) 베이스 폐기량 행 배열. 단일 종류면 1행(자동). 혼합이면 타입별 1행(parbakeWasteByType 규칙 반영) */
+/**
+ * 혼합 베이스일: 파베이크 종류별 당일 생산량(개) — 지배 종류(폐기·소스 폐기 배분) 판별용.
+ * 우주인·판매용 필드 수량은 우주인 완제품이 아닌 당일 도우 피자 중 생산량이 가장 많은 베이스에 가산.
+ */
+export function computeParbakeProductionQtyByType(
+  state: DateGroupInput,
+  productSummaries: ProductSummary[],
+  dateParbakeTypes: string[] = []
+): Map<string, number> {
+  const byType = new Map<string, number>();
+
+  for (const p of productSummaries) {
+    const parbakeName = p.inferredParbakeName;
+    if (!parbakeName) continue;
+    const qty = p.finishedQty ?? 0;
+    if (qty <= 0) continue;
+    byType.set(parbakeName, (byType.get(parbakeName) ?? 0) + qty);
+  }
+
+  const parbakeRows = resolveParbakeProductionRows(state.secondClosure, dateParbakeTypes);
+  if (parbakeRows.length > 0) {
+    for (const row of parbakeRows) {
+      const qty = toNum(row.astronautQty) + toNum(row.saleQty);
+      if (qty <= 0) continue;
+      byType.set(row.parbakeName, (byType.get(row.parbakeName) ?? 0) + qty);
+    }
+    return byType;
+  }
+
+  const addClosureQtyToPrimaryPizzaType = (qty: number) => {
+    if (qty <= 0) return;
+    let targetType = pickPrimaryPizzaParbakeTypeForClosure(productSummaries);
+    if (!targetType) {
+      let maxN = -1;
+      for (const [name, n] of byType.entries()) {
+        if (n > maxN) {
+          maxN = n;
+          targetType = name;
+        }
+      }
+    }
+    if (targetType) {
+      byType.set(targetType, (byType.get(targetType) ?? 0) + qty);
+    }
+  };
+
+  addClosureQtyToPrimaryPizzaType(toNum(state.secondClosure.astronautParbakeQty));
+  addClosureQtyToPrimaryPizzaType(toNum(state.secondClosure.saleParbakeQty));
+
+  return byType;
+}
+
+/** dateParbakeTypes 중 생산량(개)이 가장 많은 파베이크 종류 */
+export function pickDominantParbakeType(
+  productionByType: Map<string, number>,
+  dateParbakeTypes: string[]
+): string | null {
+  if (dateParbakeTypes.length === 0) return null;
+  let dominant = dateParbakeTypes[0]!;
+  let maxQty = productionByType.get(dominant) ?? 0;
+  for (let i = 1; i < dateParbakeTypes.length; i++) {
+    const name = dateParbakeTypes[i]!;
+    const qty = productionByType.get(name) ?? 0;
+    if (qty > maxQty) {
+      maxQty = qty;
+      dominant = name;
+    }
+  }
+  return dominant;
+}
+
+/**
+ * 혼합 베이스: 총 파베이크 폐기(개)를 생산량이 많은 종류에만 배분.
+ * 나머지 베이스(도우소스)는 폐기 0 → 실사용량 그대로 사용량으로 집계.
+ */
+export function resolveMixedParbakeWasteByDominantProduction(
+  state: DateGroupInput,
+  productSummaries: ProductSummary[],
+  dateParbakeTypes: string[],
+  totalParbakeWasteQty: number
+): {
+  resolved: Map<string, number>;
+  dominantParbakeName: string | null;
+  productionByType: Map<string, number>;
+  warnings: string[];
+} {
+  const warnings: string[] = [];
+  const totalInt = Math.max(0, Math.floor(totalParbakeWasteQty));
+  const productionByType = computeParbakeProductionQtyByType(
+    state,
+    productSummaries,
+    dateParbakeTypes
+  );
+  const dominant = pickDominantParbakeType(productionByType, dateParbakeTypes);
+  const resolved = new Map<string, number>();
+  for (const name of dateParbakeTypes) {
+    resolved.set(name, name === dominant ? totalInt : 0);
+  }
+  if (dominant && dateParbakeTypes.length > 1 && totalInt > 0) {
+    warnings.push(
+      `혼합 베이스: 생산량이 많은 ${dominant}에 파베이크 폐기 ${totalInt}개를 반영합니다. 다른 베이스는 사용량만 집계합니다.`
+    );
+  }
+  return { resolved, dominantParbakeName: dominant, productionByType, warnings };
+}
+
+/** 총괄(P1) 베이스 폐기량 행 배열. 단일 종류면 1행(자동). 혼합이면 생산량 지배 종류에만 폐기 배분 */
 function calculateBaseWasteRows(
   state: DateGroupInput,
   parbakeWasteQty: number,
   productSummaries: ProductSummary[],
-  dateParbakeTypes: string[]
+  dateParbakeTypes: string[],
+  bomList: BomRowRef[]
 ): { rows: BaseWasteRow[]; warnings: string[] } {
   const warnings: string[] = [];
   if (dateParbakeTypes.length === 0) {
@@ -612,7 +1026,13 @@ function calculateBaseWasteRows(
   }
 
   if (dateParbakeTypes.length === 1) {
-    const single = calculateBaseWaste(parbakeWasteQty, productSummaries, dateParbakeTypes);
+    const single = calculateBaseWaste(
+      parbakeWasteQty,
+      productSummaries,
+      dateParbakeTypes,
+      state,
+      bomList
+    );
     warnings.push(...single.warnings);
     return {
       rows: [
@@ -628,24 +1048,23 @@ function calculateBaseWasteRows(
     };
   }
 
-  // 혼합 베이스: 공란/0 구분 및 보정 규칙은 resolveMixedParbakeWasteByTypeCounts 참고
-  const mixed = resolveMixedParbakeWasteByTypeCounts(
-    state.secondClosure.parbakeWasteByType,
+  const mixed = resolveMixedParbakeWasteByDominantProduction(
+    state,
+    productSummaries,
     dateParbakeTypes,
     parbakeWasteQty
   );
   warnings.push(...mixed.warnings);
-  if (!mixed.resolved) {
-    const rows: BaseWasteRow[] = [];
-    for (const parbakeName of dateParbakeTypes) {
-      rows.push({ resolved: false });
-    }
-    return { rows, warnings };
-  }
 
   const rows: BaseWasteRow[] = [];
   for (const parbakeName of dateParbakeTypes) {
-    const meta = getWeightedBaseSauceForType(parbakeName, productSummaries);
+    const meta = getWeightedBaseSauceForType(
+      parbakeName,
+      productSummaries,
+      state,
+      dateParbakeTypes,
+      bomList
+    );
     if (!meta) {
       warnings.push(
         `파베이크 [${parbakeName}] 제품에 도우소스 BOM이 없어 베이스 폐기량을 계산할 수 없습니다.`
@@ -792,7 +1211,12 @@ export function calculateUsageSummary(
     }
   );
 
-  const totals = calculateTotals(dateGroup);
+  const dateParbakeTypes = mergeDateParbakeTypes(
+    getDateParbakeTypes(productSummaries),
+    dateGroup.secondClosure
+  );
+
+  const totals = calculateTotals(dateGroup, dateParbakeTypes);
   const parbakeDough = calculateParbakeAndDough(
     dateGroup,
     totals,
@@ -828,8 +1252,6 @@ export function calculateUsageSummary(
     );
   }
 
-  const dateParbakeTypes = getDateParbakeTypes(productSummaries);
-
   const { resolved: resolvedExtra, unresolved: unresolvedExtra, warnings: extraWarnings } =
     resolveExtraParbakes(dateGroup, dateParbakeTypes, productSummaries);
   allWarnings.push(...extraWarnings);
@@ -849,11 +1271,18 @@ export function calculateUsageSummary(
     );
   allWarnings.push(...labelWarnings);
 
+  const parbakePurposeProductionLines = buildParbakePurposeProductionLines(
+    dateGroup,
+    productSummaries,
+    dateParbakeTypes
+  );
+
   const { rows: baseWasteRows, warnings: baseWasteWarnings } = calculateBaseWasteRows(
     dateGroup,
     parbakeDough.parbakeWasteQty,
     productSummaries,
-    dateParbakeTypes
+    dateParbakeTypes,
+    bomList
   );
   allWarnings.push(...baseWasteWarnings);
 
@@ -933,6 +1362,7 @@ export function calculateUsageSummary(
     saleParbakeQty: totals.saleParbakeQty,
     astronautParbakeOutputLabel: astronautLabel,
     saleParbakeOutputLabel: saleLabel,
+    parbakePurposeProductionLines,
 
     directDoughFinishedQty,
     storedParbakeFinishedQty,

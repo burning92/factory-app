@@ -62,6 +62,8 @@ import {
   getDateParbakeTypes,
   isStoredParbakeOnlyDay,
 } from "@/features/production/history/calculations";
+import { isUjuinParbakeFinishedProductLabel } from "@/features/dashboard/productCategoryRules";
+import { parbakeExpiryFromManufacturedDate } from "@/features/production/history/extraParbakeDates";
 import { mapTechnicalWarningsToOperatorMessages } from "@/features/production/history/operatorWarnings";
 import { calculateBreadDerived } from "@/features/production/history/breadDerived";
 import { calculateParbakeProductWasteDerived } from "@/features/production/history/parbakeProductWasteDerived";
@@ -278,7 +280,9 @@ function JournalPageContent() {
     const summary = { type: "summary" as const };
     const products = usageResult.productUsagePages
       .filter(
-        (p) => (p.productStandardName ?? "").trim() !== BREAD_PRODUCT_STANDARD
+        (p) =>
+          (p.productStandardName ?? "").trim() !== BREAD_PRODUCT_STANDARD &&
+          !isUjuinParbakeFinishedProductLabel(p.displayProductLabel ?? "")
       )
       .map((product) => ({
         type: "product" as const,
@@ -373,6 +377,7 @@ function JournalPageContent() {
   const comp = stored.computedResult;
   /** 총괄 P1: 제품명 및 수량 (baseProductName만, 수량 큰 순) */
   const productLabelsAndQty = [...comp.productSummaries]
+    .filter((p) => !isUjuinParbakeFinishedProductLabel(p.displayProductLabel))
     .sort((a, b) => (b.finishedQty ?? 0) - (a.finishedQty ?? 0))
     .map(
       (p) =>
@@ -687,17 +692,29 @@ function JournalPageContent() {
                   </div>
                 ) : null}
 
+                {(comp.parbakePurposeProductionLines?.length ?? 0) > 0 && (
                 <div className="journal-section">
                   <p className="journal-section-title">파베이크 목적별 생산량</p>
                   <ul className="journal-section-body journal-section-list list-none pl-0 space-y-1">
-                    {comp.astronautParbakeOutputLabel && (
-                      <li>우주인 파베이크(보관용): {comp.astronautParbakeOutputLabel}</li>
-                    )}
-                    {comp.saleParbakeOutputLabel && (
-                      <li>판매용 파베이크(납품용): {comp.saleParbakeOutputLabel}</li>
-                    )}
+                    {comp.parbakePurposeProductionLines
+                      .filter((l) => l.role === "astronaut")
+                      .map((l) => (
+                        <li key={`astro-${l.parbakeName}`}>
+                          우주인 파베이크(보관용): {l.parbakeName}{" "}
+                          {l.qty.toLocaleString()}개
+                        </li>
+                      ))}
+                    {comp.parbakePurposeProductionLines
+                      .filter((l) => l.role === "sale")
+                      .map((l) => (
+                        <li key={`sale-${l.parbakeName}`}>
+                          판매용 파베이크(납품용): {l.parbakeName}{" "}
+                          {l.qty.toLocaleString()}개
+                        </li>
+                      ))}
                   </ul>
                 </div>
+                )}
 
                 {((comp.resolvedExtraParbakes?.length > 0 && comp.resolvedExtraParbakes.some((r) => r.qty > 0)) ||
                   (comp.unresolvedExtraParbakes?.length > 0 && comp.unresolvedExtraParbakes.some((r) => r.qty > 0))) && (
@@ -714,8 +731,9 @@ function JournalPageContent() {
                       {comp.unresolvedExtraParbakes
                         ?.filter((r) => r.qty > 0)
                         .map((r) => (
-                          <li key={r.extraParbakeId}>
-                            추가 파베이크 {r.qty}개 ({r.expiryDate || "—"})
+                          <li key={r.extraParbakeId} className="text-amber-800 print:text-amber-900">
+                            추가 파베이크 {r.qty}개 (
+                            {parbakeExpiryFromManufacturedDate(r.manufacturedDate) || "—"}) — {r.reason}
                           </li>
                         ))}
                     </ul>

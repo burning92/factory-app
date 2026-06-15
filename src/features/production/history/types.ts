@@ -48,7 +48,12 @@ export type ProductOutputInput = {
 export type ExtraParbakeRowInput = {
   extraParbakeId: string;
   qty: number | "";
-  expiryDate: string;
+  /** 제조일자 YYYY-MM-DD (일지·표시는 +364일 소비기한) */
+  manufacturedDate: string;
+  /** 혼합 베이스일 추가 파베이크 소스(토마토/베샤멜 등). 단일 종류일 때는 자동 보완 가능 */
+  parbakeName?: string;
+  /** @deprecated 레거시: 과거에는 소비기한을 직접 저장 */
+  expiryDate?: string;
 };
 
 /** 혼합 베이스 날: 파베이크 종류별 폐기량(개). 자동 분배하지 않고 사용자 입력만 사용 */
@@ -57,10 +62,28 @@ export type ParbakeWasteByTypeInput = {
   wasteQty: number | "";
 };
 
+/** 일반·미니 혼합일: 우주인 파베이크 생산량이 어느 규격인지 (생산일지 표기용) */
+export type AstronautParbakeSizeLane = "standard" | "mini";
+
+/** 베이스(토마토/베샤멜 등)별 우주인·판매용 파베이크 생산량 */
+export type ParbakeProductionByBaseInput = {
+  parbakeName: string;
+  astronautQty: number | "";
+  saleQty: number | "";
+};
+
 export type SecondClosureInput = {
   productOutputs: ProductOutputInput[];
+  /** @deprecated parbakeProductionByBase 합계와 동기화. 신규 UI는 by-base 사용 */
   astronautParbakeQty: number | "";
+  /** @deprecated parbakeProductionByBase 합계와 동기화 */
   saleParbakeQty: number | "";
+  /** 베이스별 우주인/판매용 파베이크 생산량 */
+  parbakeProductionByBase?: ParbakeProductionByBaseInput[];
+  /** 일반+미니 혼합일만. 미니-only는 자동, 일반-only는 불필요 */
+  astronautParbakeSizeLane?: AstronautParbakeSizeLane | "";
+  /** 일반+미니 혼합일 판매용 파베이크 표기 */
+  saleParbakeSizeLane?: AstronautParbakeSizeLane | "";
   extraParbakes: ExtraParbakeRowInput[];
   /** 베이스 2종 이상인 날만 사용. 타입별 파베이크 폐기량(개) */
   parbakeWasteByType?: ParbakeWasteByTypeInput[];
@@ -130,6 +153,8 @@ export type ResolvedExtraParbake = {
   extraParbakeId: string;
   parbakeName: string;
   qty: number;
+  manufacturedDate: string;
+  /** 일지 표시용 소비기한 (= manufacturedDate + 364일) */
   expiryDate: string;
   displayLabel: string;
   productCandidates: {
@@ -145,8 +170,15 @@ export type ResolvedExtraParbake = {
 export type UnresolvedExtraParbake = {
   extraParbakeId: string;
   qty: number;
-  expiryDate: string;
+  manufacturedDate: string;
   reason: string;
+};
+
+/** 생산일지 「파베이크 목적별 생산량」 한 줄 */
+export type ParbakePurposeProductionLine = {
+  role: "astronaut" | "sale";
+  parbakeName: string;
+  qty: number;
 };
 
 export type BaseWasteResult = {
@@ -210,6 +242,8 @@ export type ComputedResult = {
   saleParbakeQty: number;
   astronautParbakeOutputLabel: string | null;
   saleParbakeOutputLabel: string | null;
+  /** 혼합·우주인 완제품 포함 목적별 파베 생산량 (생산일지 표시용) */
+  parbakePurposeProductionLines: ParbakePurposeProductionLine[];
 
   /** Step 3.5: 당일 도우 사용 완제품 수량 합계 */
   directDoughFinishedQty: number;

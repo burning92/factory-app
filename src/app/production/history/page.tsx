@@ -7,9 +7,20 @@ import { useMasterStore, type ProductionLog, type OutboundLine } from "@/store/u
 import {
   calculateUsageSummary,
   getDateParbakeTypes,
-  resolveMixedParbakeWasteByTypeCounts,
+  mergeDateParbakeTypes,
+  resolveMixedParbakeWasteByDominantProduction,
+  summarizeDoughPizzaProductionBySize,
+  resolveParbakeJournalLabelForRole,
   type ComputedResult,
 } from "@/features/production/history/calculations";
+import {
+  FINISHED_PRODUCT_GROUPS,
+  finishedProductGroupKey,
+  isParbakeOnlyFinishedProductLabel,
+  normalizeSecondClosureForDate,
+  resolveParbakeProductionRows,
+  syncLegacyParbakeFields,
+} from "@/features/production/history/parbakeClosure";
 import { parseProductLabel } from "@/features/production/history/productLabel";
 import { getBomRowsForProductAndStandard } from "@/features/production/history/bomAdapter";
 import type { BomRowRef } from "@/features/production/history/types";
@@ -18,6 +29,7 @@ import { getAppRecentValue, setAppRecentValue } from "@/lib/appRecentValues";
 import { createSafeId } from "@/lib/createSafeId";
 import { useAuth } from "@/contexts/AuthContext";
 import { requestSecondCloseLabSync } from "@/lib/materialStockLab/clientSyncFirstCloseReturn";
+import { extraParbakeManufacturedDateFromRow } from "@/features/production/history/extraParbakeDates";
 
 const HISTORY_GROUP_STATE_KEY = "production-history:group-state";
 /** 1차 마감 전용 최근 작성자명 (출고 입력과 분리). Supabase 우선, localStorage는 보조 fallback */
@@ -119,6 +131,9 @@ function migrateDateGroupState(parsed: Record<string, unknown>): Record<string, 
         productOutputs: [],
         astronautParbakeQty: "",
         saleParbakeQty: "",
+        astronautParbakeSizeLane: "",
+        saleParbakeSizeLane: "",
+        parbakeProductionByBase: [],
         extraParbakes: [],
       },
     };
@@ -140,7 +155,18 @@ function migrateSingleState(cached: DateGroupState, defaultAuthor?: string): Dat
   }));
   const fallback = defaultAuthor ?? getLastAuthorNameFromStorage();
   const authorName = cached.authorName?.trim() ? cached.authorName : fallback;
-  return { ...cached, materials, authorName };
+  const secondClosure = cached.secondClosure
+    ? {
+        ...cached.secondClosure,
+        extraParbakes: (cached.secondClosure.extraParbakes ?? []).map((r) => ({
+          extraParbakeId: r.extraParbakeId,
+          qty: r.qty,
+          parbakeName: r.parbakeName ?? "",
+          manufacturedDate: extraParbakeManufacturedDateFromRow(r),
+        })),
+      }
+    : cached.secondClosure;
+  return { ...cached, materials, authorName, secondClosure };
 }
 
 type MissingStockFieldKey =
@@ -337,7 +363,10 @@ export type ProductOutput = {
 export type ExtraParbakeRow = {
   extraParbakeId: string;
   qty: number | "";
-  expiryDate: string;
+  /** 제조일자 (일지에는 +364일 소비기한) */
+  manufacturedDate: string;
+  /** 추가 파베이크 소스 베이스 (토마토/베샤멜 등) */
+  parbakeName: string;
 };
 
 /** 혼합 베이스 날: 파베이크 종류별 폐기량(개). 자동 분배 없이 사용자 입력만 사용 */
@@ -346,10 +375,21 @@ export type ParbakeWasteByTypeRow = {
   wasteQty: number | "";
 };
 
+export type ParbakeProductionByBaseRow = {
+  parbakeName: string;
+  astronautQty: number | "";
+  saleQty: number | "";
+};
+
 export type SecondClosure = {
   productOutputs: ProductOutput[];
   astronautParbakeQty: number | "";
   saleParbakeQty: number | "";
+  parbakeProductionByBase?: ParbakeProductionByBaseRow[];
+  /** 일반+미니 혼합일: 우주인 파베이크 규격 (생산일지 표기) */
+  astronautParbakeSizeLane?: "standard" | "mini" | "";
+  /** 일반+미니 혼합일: 판매용 파베이크 규격 */
+  saleParbakeSizeLane?: "standard" | "mini" | "";
   extraParbakes: ExtraParbakeRow[];
   /** 베이스 2종 이상인 날만 사용. 타입별 파베이크 폐기량(개) */
   parbakeWasteByType?: ParbakeWasteByTypeRow[];
@@ -453,6 +493,29 @@ function getProductsFromLogs(logs: ProductionLog[]): ProductItem[] {
   return list;
 }
 
+/** 파베이크 전용(우주인/선인·판매용) 출고 제품 제외 — 2차 마감 완제품 입력용 */
+function getFinishedProductsFromLogs(logs: ProductionLog[]): ProductItem[] {
+  return getProductsFromLogs(logs).filter(
+    (p) => !isParbakeOnlyFinishedProductLabel(p.displayProductLabel)
+  );
+}
+
+function normalizeGroupSecondClosure(
+  state: DateGroupState,
+  logs: ProductionLog[],
+  bomList: BomRowRef[]
+): SecondClosure {
+  const finishedProducts = state.products.filter(
+    (p) => !isParbakeOnlyFinishedProductLabel(p.displayProductLabel)
+  );
+  return normalizeSecondClosureForDate(
+    state.secondClosure,
+    logs,
+    finishedProducts,
+    bomList
+  ) as SecondClosure;
+}
+
 function getRequiredBomMaterialNames(
   products: { baseProductName?: string; productStandardName?: string }[],
   bomList: BomRowRef[]
@@ -492,6 +555,12 @@ function isConsumeAllSelection(row: LotRow, isGOnly: boolean): boolean {
 
 function normalizeName(name: string): string {
   return (name ?? "").trim();
+}
+
+function toNumRow(x: number | "" | undefined): number {
+  if (x === "" || x === undefined) return 0;
+  const n = Number(x);
+  return Number.isFinite(n) ? n : 0;
 }
 
 const AUTO_CARRYOVER_BLOCKED_MATERIALS = new Set(
@@ -897,7 +966,7 @@ function createInitialDateGroupState(
   bomRows: BomRowRef[] = [],
   groupStateByDate: Record<string, DateGroupState> = {}
 ): DateGroupState {
-  const products = getProductsFromLogs(logs);
+  const products = getFinishedProductsFromLogs(logs);
   const requiredBomMaterials = getRequiredBomMaterialNames(products, bomRows);
   const productOutputs: ProductOutput[] = products.map((p) => ({
     productOutputId: generateId(),
@@ -909,16 +978,25 @@ function createInitialDateGroupState(
     productStandardName: p.productStandardName,
     finishedQty: "",
   }));
-  const secondClosure: SecondClosure = {
+  const secondClosureRaw: SecondClosure = {
     productOutputs,
     astronautParbakeQty: "",
     saleParbakeQty: "",
+    astronautParbakeSizeLane: "",
+    saleParbakeSizeLane: "",
+    parbakeProductionByBase: [],
     extraParbakes: [
-      { extraParbakeId: generateId(), qty: "", expiryDate: "" },
-      { extraParbakeId: generateId(), qty: "", expiryDate: "" },
+      { extraParbakeId: generateId(), qty: "", manufacturedDate: "", parbakeName: "" },
+      { extraParbakeId: generateId(), qty: "", manufacturedDate: "", parbakeName: "" },
     ],
     parbakeWasteByType: undefined,
   };
+  const secondClosure = normalizeSecondClosureForDate(
+    secondClosureRaw,
+    logs,
+    products,
+    bomRows
+  ) as SecondClosure;
   return {
     id: date,
     date,
@@ -1176,10 +1254,15 @@ function UsageCalculationPageContent() {
       const logs = productionLogs.filter((l) => (l.생산일자 ?? "").slice(0, 10) === date);
       if (cached) {
         if (!cached.products?.length || !cached.secondClosure) {
-          const products = getProductsFromLogs(logs);
+          const products = getFinishedProductsFromLogs(logs);
           const productOutputs =
             cached.secondClosure?.productOutputs?.length === products.length
-              ? cached.secondClosure.productOutputs
+              ? cached.secondClosure.productOutputs.filter(
+                  (o) =>
+                    !isParbakeOnlyFinishedProductLabel(
+                      o.displayProductLabel ?? o.productKey ?? ""
+                    )
+                )
               : products.map((p) => ({
                   productOutputId: generateId(),
                   productKey: p.productKey,
@@ -1194,12 +1277,15 @@ function UsageCalculationPageContent() {
             productOutputs,
             astronautParbakeQty: "",
             saleParbakeQty: "",
+            astronautParbakeSizeLane: "",
+            saleParbakeSizeLane: "",
+            parbakeProductionByBase: [],
             extraParbakes: [
-              { extraParbakeId: generateId(), qty: "", expiryDate: "" },
-              { extraParbakeId: generateId(), qty: "", expiryDate: "" },
+              { extraParbakeId: generateId(), qty: "", manufacturedDate: "", parbakeName: "" },
+              { extraParbakeId: generateId(), qty: "", manufacturedDate: "", parbakeName: "" },
             ],
           };
-          return migrateSingleState(
+          const migrated = migrateSingleState(
             {
               ...cached,
               status: cached.status ?? "작업대기",
@@ -1213,15 +1299,25 @@ function UsageCalculationPageContent() {
                   secondClosure.extraParbakes?.length >= 2
                     ? secondClosure.extraParbakes
                     : [
-                        { extraParbakeId: generateId(), qty: "", expiryDate: "" },
-                        { extraParbakeId: generateId(), qty: "", expiryDate: "" },
+                        { extraParbakeId: generateId(), qty: "", manufacturedDate: "", parbakeName: "" },
+                        { extraParbakeId: generateId(), qty: "", manufacturedDate: "", parbakeName: "" },
                       ],
               },
             },
             defaultAuthor
           );
+          return {
+            ...migrated,
+            products: products,
+            secondClosure: normalizeGroupSecondClosure(migrated, logs, bomList),
+          };
         }
-        return migrateSingleState(cached, defaultAuthor);
+        const migrated = migrateSingleState(cached, defaultAuthor);
+        return {
+          ...migrated,
+          products: getFinishedProductsFromLogs(logs),
+          secondClosure: normalizeGroupSecondClosure(migrated, logs, bomList),
+        };
       }
       return createInitialDateGroupState(
         date,
@@ -1676,14 +1772,51 @@ function UsageCalculationPageContent() {
   );
 
   const updateSecondClosureParbake = useCallback(
-    (date: string, field: "astronautParbakeQty" | "saleParbakeQty", value: number | "") => {
+    (
+      date: string,
+      patch: Partial<
+        Pick<
+          SecondClosure,
+          | "astronautParbakeQty"
+          | "saleParbakeQty"
+          | "astronautParbakeSizeLane"
+          | "saleParbakeSizeLane"
+          | "parbakeProductionByBase"
+        >
+      >
+    ) => {
       const s = getOrInitGroupState(date);
+      const next = syncLegacyParbakeFields({
+        ...s.secondClosure,
+        ...patch,
+      }) as SecondClosure;
       setGroupState(date, {
         ...s,
-        secondClosure: { ...s.secondClosure, [field]: value },
+        secondClosure: next,
       });
     },
     [getOrInitGroupState, setGroupState]
+  );
+
+  const updateParbakeProductionByBaseRow = useCallback(
+    (
+      date: string,
+      parbakeName: string,
+      field: "astronautQty" | "saleQty",
+      value: number | ""
+    ) => {
+      const s = getOrInitGroupState(date);
+      const comp = computedByDate[date];
+      const types = comp
+        ? mergeDateParbakeTypes(getDateParbakeTypes(comp.productSummaries), s.secondClosure)
+        : (s.secondClosure.parbakeProductionByBase ?? []).map((r) => r.parbakeName);
+      const rows = resolveParbakeProductionRows(s.secondClosure, types);
+      const updated = rows.map((r) =>
+        r.parbakeName === parbakeName ? { ...r, [field]: value } : r
+      );
+      updateSecondClosureParbake(date, { parbakeProductionByBase: updated });
+    },
+    [getOrInitGroupState, computedByDate, updateSecondClosureParbake]
   );
 
   const addExtraParbake = useCallback(
@@ -1692,7 +1825,8 @@ function UsageCalculationPageContent() {
       const row: ExtraParbakeRow = {
         extraParbakeId: generateId(),
         qty: "",
-        expiryDate: "",
+        manufacturedDate: "",
+        parbakeName: "",
       };
       setGroupState(date, {
         ...s,
@@ -1706,7 +1840,7 @@ function UsageCalculationPageContent() {
   );
 
   const updateExtraParbake = useCallback(
-    (date: string, extraParbakeId: string, patch: Partial<Pick<ExtraParbakeRow, "qty" | "expiryDate">>) => {
+    (date: string, extraParbakeId: string, patch: Partial<Pick<ExtraParbakeRow, "qty" | "manufacturedDate" | "parbakeName">>) => {
       const s = getOrInitGroupState(date);
       const extraParbakes = s.secondClosure.extraParbakes.map((r) =>
         r.extraParbakeId === extraParbakeId ? { ...r, ...patch } : r
@@ -1733,41 +1867,35 @@ function UsageCalculationPageContent() {
     [getOrInitGroupState, setGroupState]
   );
 
-  const updateParbakeWasteByType = useCallback(
-    (date: string, parbakeName: string, wasteQty: number | "") => {
-      const s = getOrInitGroupState(date);
-      const prev = s.secondClosure.parbakeWasteByType ?? [];
-      const next = prev.some((t) => t.parbakeName === parbakeName)
-        ? prev.map((t) => (t.parbakeName === parbakeName ? { ...t, wasteQty } : t))
-        : [...prev, { parbakeName, wasteQty }];
-      setGroupState(date, {
-        ...s,
-        secondClosure: { ...s.secondClosure, parbakeWasteByType: next },
-      });
-    },
-    [getOrInitGroupState, setGroupState]
-  );
-
   const closeSecond = useCallback(
     async (date: string) => {
       const s = getOrInitGroupState(date);
       const comp = computedByDate[date];
+      const astroQty =
+        s.secondClosure.astronautParbakeQty === ""
+          ? 0
+          : Number(s.secondClosure.astronautParbakeQty);
+      const saleQty =
+        s.secondClosure.saleParbakeQty === ""
+          ? 0
+          : Number(s.secondClosure.saleParbakeQty);
       if (comp) {
-        const types = getDateParbakeTypes(comp.productSummaries);
-        if (types.length > 1) {
-          const mixed = resolveMixedParbakeWasteByTypeCounts(
-            s.secondClosure.parbakeWasteByType,
-            types,
-            comp.parbakeWasteQty
-          );
-          if (!mixed.resolved) {
-            setToast({
-              message:
-                mixed.warnings[0] ??
-                "혼합 베이스 파베이크 폐기량 상세를 확인한 뒤 다시 저장해 주세요.",
-            });
-            return;
-          }
+        const { hasMixedMiniAndRegular } = summarizeDoughPizzaProductionBySize(
+          comp.productSummaries
+        );
+        if (hasMixedMiniAndRegular && astroQty > 0 && !s.secondClosure.astronautParbakeSizeLane) {
+          setToast({
+            message:
+              "일반·미니 혼합일: 우주인 파베이크 규격(일반/미니)을 선택해 주세요.",
+          });
+          return;
+        }
+        if (hasMixedMiniAndRegular && saleQty > 0 && !s.secondClosure.saleParbakeSizeLane) {
+          setToast({
+            message:
+              "일반·미니 혼합일: 판매용 파베이크 규격(일반/미니)을 선택해 주세요.",
+          });
+          return;
         }
       }
       setSaving({ date, type: "second" });
@@ -2235,107 +2363,322 @@ function UsageCalculationPageContent() {
                         <div className="rounded-xl border border-slate-600 bg-space-800/80 p-4 sm:p-6 space-y-6 border-cyan-500/30 shadow-glow">
                           <h3 className="text-base font-semibold text-slate-100">2차 마감 입력</h3>
 
-                          {/* 제품별 완제품 생산수량 */}
-                          <div className="space-y-3">
-                            <h4 className="text-sm font-medium text-slate-400">완제품 생산량</h4>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                              {state.secondClosure.productOutputs.map((o) => (
-                                <label key={o.productOutputId} className="flex flex-col gap-1.5">
-                                  <span className="text-sm text-slate-400">
-                                    완제품생산량({o.displayProductLabel ?? o.productName})
-                                  </span>
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    inputMode="numeric"
-                                    className="w-full rounded-lg border border-slate-600 bg-space-900 px-3 py-2.5 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500/50"
-                                    placeholder="0"
-                                    value={o.finishedQty === "" ? "" : o.finishedQty}
-                                    onChange={(e) => {
-                                      const v = e.target.value;
-                                      updateProductOutput(
-                                        date,
-                                        o.productOutputId,
-                                        v === "" ? "" : Number(v)
-                                      );
-                                    }}
-                                  />
-                                </label>
-                              ))}
+                          {/* 제품별 완제품 생산수량 (파베이크 전용 출고 제품 제외) */}
+                          <div className="space-y-4">
+                            <div>
+                              <h4 className="text-sm font-medium text-slate-400">완제품 생산량</h4>
+                              <p className="mt-0.5 text-xs text-slate-500">
+                                우주인·판매용 파베이크는 아래 「파베이크 생산량」에 입력합니다.
+                              </p>
                             </div>
+                            {FINISHED_PRODUCT_GROUPS.map((group) => {
+                              const items = state.secondClosure.productOutputs.filter(
+                                (o) =>
+                                  finishedProductGroupKey(
+                                    o.productStandardName ?? o.standardName ?? ""
+                                  ) === group.key
+                              );
+                              if (items.length === 0) return null;
+                              return (
+                                <div key={group.key} className="space-y-2">
+                                  <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                    {group.label}
+                                  </h5>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {items.map((o) => (
+                                      <label
+                                        key={o.productOutputId}
+                                        className="flex flex-col gap-1.5"
+                                      >
+                                        <span className="text-sm text-slate-400">
+                                          {o.displayProductLabel ?? o.productName}
+                                        </span>
+                                        <input
+                                          type="number"
+                                          min={0}
+                                          inputMode="numeric"
+                                          className="w-full rounded-lg border border-slate-600 bg-space-900 px-3 py-2.5 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500/50"
+                                          placeholder="0"
+                                          value={o.finishedQty === "" ? "" : o.finishedQty}
+                                          onChange={(e) => {
+                                            const v = e.target.value;
+                                            updateProductOutput(
+                                              date,
+                                              o.productOutputId,
+                                              v === "" ? "" : Number(v)
+                                            );
+                                          }}
+                                        />
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {state.secondClosure.productOutputs.length === 0 && (
+                              <p className="text-sm text-slate-500">당일 완제품 출고가 없습니다.</p>
+                            )}
                           </div>
 
-                          {/* 우주인 / 판매용 파베이크 */}
-                          <div className="rounded-lg border border-slate-700 bg-space-900/60 p-4 space-y-3">
+                          {/* 베이스별 우주인 / 판매용 파베이크 */}
+                          <div className="rounded-lg border border-slate-700 bg-space-900/60 p-4 space-y-4">
                             <h4 className="text-sm font-medium text-slate-400">파베이크 생산량</h4>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                              <label className="flex flex-col gap-1.5">
-                                <span className="text-sm text-slate-400">우주인 파베이크 생산량</span>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  inputMode="numeric"
-                                  className="w-full rounded-lg border border-slate-600 bg-space-900 px-3 py-2.5 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500/50"
-                                  placeholder="0"
-                                  value={
-                                    state.secondClosure.astronautParbakeQty === ""
-                                      ? ""
-                                      : state.secondClosure.astronautParbakeQty
-                                  }
-                                  onChange={(e) => {
-                                    const v = e.target.value;
-                                    updateSecondClosureParbake(
-                                      date,
-                                      "astronautParbakeQty",
-                                      v === "" ? "" : Number(v)
-                                    );
-                                  }}
-                                />
-                              </label>
-                              <label className="flex flex-col gap-1.5">
-                                <span className="text-sm text-slate-400">판매용 파베이크 생산량</span>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  inputMode="numeric"
-                                  className="w-full rounded-lg border border-slate-600 bg-space-900 px-3 py-2.5 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500/50"
-                                  placeholder="0"
-                                  value={
-                                    state.secondClosure.saleParbakeQty === ""
-                                      ? ""
-                                      : state.secondClosure.saleParbakeQty
-                                  }
-                                  onChange={(e) => {
-                                    const v = e.target.value;
-                                    updateSecondClosureParbake(
-                                      date,
-                                      "saleParbakeQty",
-                                      v === "" ? "" : Number(v)
-                                    );
-                                  }}
-                                />
-                              </label>
-                            </div>
+                            {(() => {
+                              const comp = computedByDate[date];
+                              const types = comp
+                                ? mergeDateParbakeTypes(
+                                    getDateParbakeTypes(comp.productSummaries),
+                                    state.secondClosure
+                                  )
+                                : (state.secondClosure.parbakeProductionByBase ?? []).map(
+                                    (r) => r.parbakeName
+                                  );
+                              const rows = resolveParbakeProductionRows(state.secondClosure, types);
+                              const sizeSummary = comp
+                                ? summarizeDoughPizzaProductionBySize(comp.productSummaries)
+                                : null;
+                              const astroTotal =
+                                state.secondClosure.astronautParbakeQty === ""
+                                  ? 0
+                                  : Number(state.secondClosure.astronautParbakeQty);
+                              const saleTotal =
+                                state.secondClosure.saleParbakeQty === ""
+                                  ? 0
+                                  : Number(state.secondClosure.saleParbakeQty);
+
+                              if (rows.length === 0) {
+                                return (
+                                  <p className="text-sm text-slate-500">
+                                    당일 BOM에서 파베이크 베이스를 판별할 수 없습니다.
+                                  </p>
+                                );
+                              }
+
+                              return (
+                                <>
+                                  <div className="space-y-4">
+                                    {rows.map((row) => (
+                                      <div
+                                        key={row.parbakeName}
+                                        className="rounded-lg border border-slate-700/80 bg-space-900/50 p-3 space-y-3"
+                                      >
+                                        <p className="text-sm font-medium text-slate-300">
+                                          {row.parbakeName}
+                                        </p>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                          <label className="flex flex-col gap-1.5">
+                                            <span className="text-sm text-slate-400">
+                                              우주인(보관용)
+                                            </span>
+                                            <input
+                                              type="number"
+                                              min={0}
+                                              inputMode="numeric"
+                                              className="w-full rounded-lg border border-slate-600 bg-space-900 px-3 py-2.5 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500/50"
+                                              placeholder="0"
+                                              value={
+                                                row.astronautQty === "" ? "" : row.astronautQty
+                                              }
+                                              onChange={(e) => {
+                                                const v = e.target.value;
+                                                updateParbakeProductionByBaseRow(
+                                                  date,
+                                                  row.parbakeName,
+                                                  "astronautQty",
+                                                  v === "" ? "" : Number(v)
+                                                );
+                                              }}
+                                            />
+                                          </label>
+                                          <label className="flex flex-col gap-1.5">
+                                            <span className="text-sm text-slate-400">
+                                              판매용(납품용)
+                                            </span>
+                                            <input
+                                              type="number"
+                                              min={0}
+                                              inputMode="numeric"
+                                              className="w-full rounded-lg border border-slate-600 bg-space-900 px-3 py-2.5 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500/50"
+                                              placeholder="0"
+                                              value={row.saleQty === "" ? "" : row.saleQty}
+                                              onChange={(e) => {
+                                                const v = e.target.value;
+                                                updateParbakeProductionByBaseRow(
+                                                  date,
+                                                  row.parbakeName,
+                                                  "saleQty",
+                                                  v === "" ? "" : Number(v)
+                                                );
+                                              }}
+                                            />
+                                          </label>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+
+                                  {sizeSummary?.hasMixedMiniAndRegular && (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-700/80">
+                                      <label className="flex flex-col gap-1.5">
+                                        <span className="text-sm text-slate-400">
+                                          우주인 파베이크 규격{" "}
+                                          <span className="text-amber-400/90">(일반·미니)</span>
+                                        </span>
+                                        <select
+                                          className="w-full rounded-lg border border-slate-600 bg-space-900 px-3 py-2.5 text-slate-100 focus:ring-2 focus:ring-cyan-500/50"
+                                          value={state.secondClosure.astronautParbakeSizeLane ?? ""}
+                                          onChange={(e) => {
+                                            const v = e.target.value;
+                                            updateSecondClosureParbake(date, {
+                                              astronautParbakeSizeLane:
+                                                v === "standard" || v === "mini" ? v : "",
+                                            });
+                                          }}
+                                        >
+                                          <option value="">선택</option>
+                                          <option value="standard">일반 파베이크</option>
+                                          <option value="mini">미니 파베이크</option>
+                                        </select>
+                                        {astroTotal > 0 && !state.secondClosure.astronautParbakeSizeLane && (
+                                          <p className="text-xs text-amber-400/90">
+                                            우주인 수량 입력 시 규격을 선택해 주세요.
+                                          </p>
+                                        )}
+                                      </label>
+                                      <label className="flex flex-col gap-1.5">
+                                        <span className="text-sm text-slate-400">
+                                          판매용 파베이크 규격{" "}
+                                          <span className="text-amber-400/90">(일반·미니)</span>
+                                        </span>
+                                        <select
+                                          className="w-full rounded-lg border border-slate-600 bg-space-900 px-3 py-2.5 text-slate-100 focus:ring-2 focus:ring-cyan-500/50"
+                                          value={state.secondClosure.saleParbakeSizeLane ?? ""}
+                                          onChange={(e) => {
+                                            const v = e.target.value;
+                                            updateSecondClosureParbake(date, {
+                                              saleParbakeSizeLane:
+                                                v === "standard" || v === "mini" ? v : "",
+                                            });
+                                          }}
+                                        >
+                                          <option value="">선택</option>
+                                          <option value="standard">일반 파베이크</option>
+                                          <option value="mini">미니 파베이크</option>
+                                        </select>
+                                        {saleTotal > 0 && !state.secondClosure.saleParbakeSizeLane && (
+                                          <p className="text-xs text-amber-400/90">
+                                            판매용 수량 입력 시 규격을 선택해 주세요.
+                                          </p>
+                                        )}
+                                      </label>
+                                    </div>
+                                  )}
+
+                                  {comp && rows.some((r) => toNumRow(r.astronautQty) > 0 || toNumRow(r.saleQty) > 0) && (
+                                    <div className="text-xs text-slate-500 space-y-1">
+                                      <p className="font-medium text-slate-400">생산일지 미리보기</p>
+                                      {rows.map((row) => {
+                                        const astro = toNumRow(row.astronautQty);
+                                        const sale = toNumRow(row.saleQty);
+                                        if (astro <= 0 && sale <= 0) return null;
+                                        const astroLabel = resolveParbakeJournalLabelForRole(
+                                          "astronaut",
+                                          row.parbakeName,
+                                          comp.productSummaries,
+                                          state.secondClosure.astronautParbakeSizeLane || "standard"
+                                        );
+                                        const saleLabel = resolveParbakeJournalLabelForRole(
+                                          "sale",
+                                          row.parbakeName,
+                                          comp.productSummaries,
+                                          state.secondClosure.saleParbakeSizeLane || "standard"
+                                        );
+                                        return (
+                                          <div key={`preview-${row.parbakeName}`}>
+                                            {astro > 0 && (
+                                              <p>
+                                                우주인(보관): {astroLabel} {astro.toLocaleString()}개
+                                              </p>
+                                            )}
+                                            {sale > 0 && (
+                                              <p>
+                                                판매용: {saleLabel} {sale.toLocaleString()}개
+                                              </p>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </div>
 
                           {/* 추가 파베이크 수량 */}
                           <div className="space-y-3">
-                            <div className="flex items-center justify-between">
-                              <h4 className="text-sm font-medium text-slate-400">추가 파베이크 수량</h4>
+                            <div className="flex items-center justify-between gap-2">
+                              <div>
+                                <h4 className="text-sm font-medium text-slate-400">추가 파베이크 수량</h4>
+                                {(() => {
+                                  const comp = computedByDate[date];
+                                  const types = comp ? getDateParbakeTypes(comp.productSummaries) : [];
+                                  if (types.length <= 1) return null;
+                                  return (
+                                    <p className="mt-0.5 text-xs text-slate-500">
+                                      혼합 베이스: 소스 베이스(토마토/베샤멜 등)를 선택해야 일지에 표시됩니다.
+                                    </p>
+                                  );
+                                })()}
+                              </div>
                               <button
                                 type="button"
                                 onClick={() => addExtraParbake(date)}
-                                className="text-sm font-medium text-cyan-400 hover:text-cyan-300 py-2 px-3 rounded-lg border border-dashed border-slate-600 hover:border-cyan-500/50"
+                                className="text-sm font-medium text-cyan-400 hover:text-cyan-300 py-2 px-3 rounded-lg border border-dashed border-slate-600 hover:border-cyan-500/50 shrink-0"
                               >
                                 + 추가
                               </button>
                             </div>
                             <ul className="space-y-2">
-                              {state.secondClosure.extraParbakes.map((row) => (
+                              {state.secondClosure.extraParbakes.map((row) => {
+                                const comp = computedByDate[date];
+                                const dateParbakeTypes = comp
+                                  ? mergeDateParbakeTypes(
+                                      getDateParbakeTypes(comp.productSummaries),
+                                      state.secondClosure
+                                    )
+                                  : [];
+                                const baseSelectValue =
+                                  row.parbakeName ||
+                                  (dateParbakeTypes.length === 1 ? dateParbakeTypes[0]! : "");
+                                return (
                                 <li
                                   key={row.extraParbakeId}
                                   className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-700 bg-space-900/80 p-3"
                                 >
+                                  {dateParbakeTypes.length > 0 && (
+                                    <div className="min-w-[140px] flex-1 sm:flex-none sm:w-40">
+                                      <span className="text-xs text-slate-500 block mb-0.5">소스 베이스</span>
+                                      <select
+                                        className="w-full rounded-lg border border-slate-600 bg-space-900 px-2 py-2 text-sm text-slate-100 focus:ring-2 focus:ring-cyan-500/50"
+                                        value={baseSelectValue}
+                                        onChange={(e) => {
+                                          updateExtraParbake(date, row.extraParbakeId, {
+                                            parbakeName: e.target.value,
+                                          });
+                                        }}
+                                      >
+                                        {dateParbakeTypes.length > 1 && (
+                                          <option value="">선택</option>
+                                        )}
+                                        {dateParbakeTypes.map((name) => (
+                                          <option key={name} value={name}>
+                                            {name}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  )}
                                   <div className="w-24 sm:w-28">
                                     <span className="text-xs text-slate-500 block mb-0.5">수량</span>
                                     <input
@@ -2346,19 +2689,26 @@ function UsageCalculationPageContent() {
                                       value={row.qty === "" ? "" : row.qty}
                                       onChange={(e) => {
                                         const v = e.target.value;
-                                        updateExtraParbake(date, row.extraParbakeId, {
+                                        const patch: Partial<Pick<ExtraParbakeRow, "qty" | "parbakeName">> = {
                                           qty: v === "" ? "" : Number(v),
-                                        });
+                                        };
+                                        if (
+                                          dateParbakeTypes.length === 1 &&
+                                          !row.parbakeName
+                                        ) {
+                                          patch.parbakeName = dateParbakeTypes[0]!;
+                                        }
+                                        updateExtraParbake(date, row.extraParbakeId, patch);
                                       }}
                                     />
                                   </div>
                                   <div className="flex-1 min-w-[120px]">
-                                    <span className="text-xs text-slate-500 block mb-0.5">소비기한</span>
+                                    <span className="text-xs text-slate-500 block mb-0.5">제조일자</span>
                                     <DateWheelPicker
-                                      value={row.expiryDate || ""}
+                                      value={row.manufacturedDate || ""}
                                       onChange={(v) =>
                                         updateExtraParbake(date, row.extraParbakeId, {
-                                          expiryDate: v || "",
+                                          manufacturedDate: v || "",
                                         })
                                       }
                                       className="w-full rounded-lg px-2 py-2 text-sm focus:ring-2 focus:ring-cyan-500/50"
@@ -2373,46 +2723,43 @@ function UsageCalculationPageContent() {
                                     삭제
                                   </button>
                                 </li>
-                              ))}
+                              );
+                              })}
                             </ul>
                           </div>
 
-                          {/* 혼합 베이스 날: 파베이크 폐기량 타입별 입력 (자동 분배 없음) */}
+                          {/* 혼합 베이스 날: 생산량 지배 종류에 파베이크·소스 폐기 자동 배분 */}
                           {(() => {
                             const comp = computedByDate[date];
                             const dateParbakeTypes = comp ? getDateParbakeTypes(comp.productSummaries) : [];
-                            if (dateParbakeTypes.length <= 1) return null;
+                            if (dateParbakeTypes.length <= 1 || !comp) return null;
+                            const mixed = resolveMixedParbakeWasteByDominantProduction(
+                              state,
+                              comp.productSummaries,
+                              dateParbakeTypes,
+                              comp.parbakeWasteQty
+                            );
                             return (
                               <div className="rounded-lg border border-amber-700/50 bg-amber-950/30 p-4 space-y-3">
-                                <h4 className="text-sm font-medium text-amber-200">파베이크 폐기량 상세 (혼합 베이스)</h4>
-                                <p className="text-xs text-slate-400">
-                                  당일 파베이크 종류가 2종 이상이므로, 종류별 폐기량을 입력해 주세요. 총합만으로는 자동 배분하지 않습니다.
+                                <h4 className="text-sm font-medium text-amber-200">혼합 베이스 — 폐기·소스 배분</h4>
+                                <p className="text-xs text-slate-400 leading-relaxed">
+                                  당일 파베이크 종류가 2종 이상입니다. 생산량이 많은 베이스에만 파베이크 폐기(
+                                  {Math.max(0, Math.floor(comp.parbakeWasteQty))}개)와 도우소스 폐기를 반영합니다.
+                                  다른 베이스는 실사용량 그대로 사용량으로 집계합니다.
                                 </p>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                  {dateParbakeTypes.map((parbakeName) => (
-                                    <label key={parbakeName} className="flex flex-col gap-1.5">
-                                      <span className="text-sm text-slate-400">{parbakeName} 폐기량 (개)</span>
-                                      <input
-                                        type="number"
-                                        min={0}
-                                        inputMode="numeric"
-                                        className="w-full rounded-lg border border-slate-600 bg-space-900 px-3 py-2.5 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500/50"
-                                        placeholder="0"
-                                        value={
-                                          state.secondClosure.parbakeWasteByType?.find((t) => t.parbakeName === parbakeName)?.wasteQty ?? ""
-                                        }
-                                        onChange={(e) => {
-                                          const v = e.target.value;
-                                          updateParbakeWasteByType(
-                                            date,
-                                            parbakeName,
-                                            v === "" ? "" : Math.max(0, Number(v) || 0)
-                                          );
-                                        }}
-                                      />
-                                    </label>
-                                  ))}
-                                </div>
+                                <ul className="text-xs text-slate-300 space-y-1 tabular-nums">
+                                  {dateParbakeTypes.map((parbakeName) => {
+                                    const prod = mixed.productionByType.get(parbakeName) ?? 0;
+                                    const waste = mixed.resolved.get(parbakeName) ?? 0;
+                                    const isDominant = parbakeName === mixed.dominantParbakeName;
+                                    return (
+                                      <li key={parbakeName} className={isDominant ? "text-amber-100" : ""}>
+                                        {parbakeName}: 생산 {prod.toLocaleString("ko-KR")}개
+                                        {isDominant ? ` · 폐기 ${waste.toLocaleString("ko-KR")}개 반영` : " · 폐기 미반영"}
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
                               </div>
                             );
                           })()}
