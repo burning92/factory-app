@@ -940,7 +940,7 @@ export function computeParbakeProductionQtyByType(
     let targetType = pickPrimaryPizzaParbakeTypeForClosure(productSummaries);
     if (!targetType) {
       let maxN = -1;
-      for (const [name, n] of byType.entries()) {
+      for (const [name, n] of Array.from(byType.entries())) {
         if (n > maxN) {
           maxN = n;
           targetType = name;
