@@ -128,7 +128,37 @@ export function buildKeep2fStockByMaterial(
   return result;
 }
 
-/** 화면·모달용 LOT 1줄 */
+/** 화면·출력용: 원료별 2층 유지 총량 (소비기한 제외) */
+export function formatKeep2fTotalHint(
+  stock: Keep2fMaterialStock,
+  material?: Pick<MaterialWeightMeta, "boxWeightG" | "unitWeightG">
+): string {
+  return `2층 ${formatKeep2fTotalQtyText(stock, material)}`;
+}
+
+/** LOT 합산 낱개·잔량 → 표시 문자열 */
+export function formatKeep2fTotalQtyText(
+  stock: Keep2fMaterialStock,
+  material?: Pick<MaterialWeightMeta, "boxWeightG" | "unitWeightG">
+): string {
+  let totalUnits = 0;
+  let totalRemG = 0;
+  for (const lot of stock.lots) {
+    totalUnits += lot.unitCount;
+    totalRemG += lot.remainderG;
+  }
+  const parts: string[] = [];
+  const box = material?.boxWeightG ?? 0;
+  const ea = material?.unitWeightG ?? 0;
+  const gOnly = box === 0 && ea === 0;
+  if (!gOnly && totalUnits > 0) parts.push(`${totalUnits.toLocaleString()}개`);
+  if (totalRemG > 0) parts.push(`${totalRemG.toLocaleString()}g`);
+  if (parts.length > 0) return parts.join(" ");
+  if (stock.totalG > 0) return `${stock.totalG.toLocaleString()}g`;
+  return "—";
+}
+
+/** 출고 입력 모달용 LOT 1줄 (소비기한 포함) */
 export function formatKeep2fLotLine(
   lot: Keep2fLotLine,
   material?: Pick<MaterialWeightMeta, "boxWeightG" | "unitWeightG">
@@ -150,16 +180,10 @@ export function formatKeep2fLotQtyText(
   return parts.length > 0 ? parts.join(" ") : "—";
 }
 
-/** 출력용: 원료명 셀 아래 한 줄 (열 구조 변경 없음) */
+/** @deprecated formatKeep2fTotalHint 사용 */
 export function formatKeep2fPrintHint(
   stock: Keep2fMaterialStock,
   material?: Pick<MaterialWeightMeta, "boxWeightG" | "unitWeightG">
 ): string {
-  const parts = stock.lots.map((lot) => {
-    const qty = formatKeep2fLotQtyText(lot, material);
-    const exp = lot.expiryDate.length >= 10 ? lot.expiryDate.slice(5) : lot.expiryDate;
-    return `${qty}(${exp})`;
-  });
-  if (parts.length <= 2) return `2층 ${parts.join(" / ")}`;
-  return `2층 ${parts.slice(0, 2).join(" / ")} 외${parts.length - 2}`;
+  return formatKeep2fTotalHint(stock, material);
 }

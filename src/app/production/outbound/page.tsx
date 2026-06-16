@@ -11,7 +11,7 @@ import { computeOutboundTotalG } from "@/features/production/outbound/computeOut
 import {
   buildKeep2fStockByMaterial,
   formatKeep2fLotLine,
-  formatKeep2fPrintHint,
+  formatKeep2fTotalHint,
   type Keep2fMaterialStock,
 } from "@/features/production/outbound/keep2fStockReference";
 
@@ -1096,12 +1096,7 @@ export default function OutboundPage() {
                             <h3 className="text-base font-bold text-slate-100">{row.materialName}</h3>
                             {keep2f && keep2f.lots.length > 0 && (
                               <p className="mt-0.5 text-[11px] leading-tight text-emerald-300/90">
-                                {keep2f.lots.map((lot, i) => (
-                                  <span key={`${lot.expiryDate}-${lot.fromDate}`}>
-                                    {i > 0 ? " · " : ""}
-                                    2층 {formatKeep2fLotLine(lot, mat)}
-                                  </span>
-                                ))}
+                                {formatKeep2fTotalHint(keep2f, mat)}
                               </p>
                             )}
                           </div>
@@ -1216,12 +1211,7 @@ export default function OutboundPage() {
                                 <div>{row.materialName}</div>
                                 {keep2f && keep2f.lots.length > 0 && (
                                   <p className="mt-0.5 text-[11px] leading-tight text-emerald-300/90">
-                                    {keep2f.lots.map((lot, i) => (
-                                      <span key={`${lot.expiryDate}-${lot.fromDate}`}>
-                                        {i > 0 ? " · " : ""}
-                                        2층 {formatKeep2fLotLine(lot, mat)}
-                                      </span>
-                                    ))}
+                                    {formatKeep2fTotalHint(keep2f, mat)}
                                   </p>
                                 )}
                               </td>
@@ -1352,7 +1342,7 @@ export default function OutboundPage() {
                                 <div>{base.materialName}</div>
                                 {keep2f && keep2f.lots.length > 0 && (
                                   <div className="outbound-print-keep2f">
-                                    {formatKeep2fPrintHint(keep2f, mat)}
+                                    {formatKeep2fTotalHint(keep2f, mat)}
                                   </div>
                                 )}
                               </td>
@@ -1465,7 +1455,7 @@ export default function OutboundPage() {
                   </div>
                 </div>
               </div>
-              <p className="outbound-print-footnote mt-2">기본·참고 각각: 개당 BOM, 필요 박스/낱개, 총중량(g)입니다. 원료명 아래 2층 유지는 1차 마감 참고입니다.</p>
+              <p className="outbound-print-footnote mt-2">기본·참고 각각: 개당 BOM, 필요 박스/낱개, 총중량(g)입니다. 원료명 아래 2층 유지는 1차 마감 기준 총 재고입니다.</p>
             </div>
 
             <div className="mt-6 no-print">
