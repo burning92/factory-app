@@ -11,9 +11,10 @@ export function createAdminClient() {
   });
 }
 
-export async function verifyPurchasingAccess(params: {
+export async function verifyRoleAccess(params: {
   authorizationHeader: string | null;
   refreshTokenHeader: string | null;
+  allowedRoles: string[];
 }): Promise<{ ok: true; userId: string } | { ok: false; status: number; error: string }> {
   if (!serviceRoleKey) return { ok: false, status: 500, error: "server_config_error" };
   const authHeader = params.authorizationHeader ?? "";
@@ -38,9 +39,20 @@ export async function verifyPurchasingAccess(params: {
 
   const admin = createAdminClient();
   const { data: me, error: meErr } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  if (meErr || !me || (me.role !== "admin" && me.role !== "manager" && me.role !== "headquarters")) {
+  if (meErr || !me || !params.allowedRoles.includes(me.role)) {
     return { ok: false, status: 403, error: "forbidden" };
   }
   return { ok: true, userId: user.id };
+}
+
+export async function verifyPurchasingAccess(params: {
+  authorizationHeader: string | null;
+  refreshTokenHeader: string | null;
+}): Promise<{ ok: true; userId: string } | { ok: false; status: number; error: string }> {
+  return verifyRoleAccess({
+    authorizationHeader: params.authorizationHeader,
+    refreshTokenHeader: params.refreshTokenHeader,
+    allowedRoles: ["admin", "manager", "headquarters"],
+  });
 }
 

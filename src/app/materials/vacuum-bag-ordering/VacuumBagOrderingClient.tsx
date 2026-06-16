@@ -29,7 +29,11 @@ function todayIsoLocal(): string {
 export default function VacuumBagOrderingClient() {
   const router = useRouter();
   const { profile, loading: authLoading } = useAuth();
-  const canView = profile?.role === "admin" || profile?.role === "manager" || profile?.role === "headquarters";
+  const canView =
+    profile?.role === "admin" ||
+    profile?.role === "headquarters" ||
+    profile?.role === "manager" ||
+    profile?.role === "assistant_manager";
 
   const [weeks, setWeeks] = useState<number>(DEFAULT_VACUUM_BAG_WEEKS);
   const [loading, setLoading] = useState(false);

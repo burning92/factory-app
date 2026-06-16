@@ -9,7 +9,7 @@ import {
   vacuumBagForecastRange,
 } from "@/features/materials/vacuum-bag-ordering/calculations";
 import type { VacuumBagKindRow, VacuumBagMovementRow, VacuumBagSummaryData } from "@/features/materials/vacuum-bag-ordering/types";
-import { createAdminClient, verifyPurchasingAccess } from "@/app/api/materials/purchasing/_auth";
+import { createAdminClient, verifyRoleAccess } from "@/app/api/materials/purchasing/_auth";
 
 function toVersion(v: string | null): PlanningVersionType {
   if (v === "draft") return "draft";
@@ -30,9 +30,10 @@ function monthTargetsBetween(startIso: string, endIso: string): Array<{ year: nu
 }
 
 export async function GET(req: NextRequest) {
-  const auth = await verifyPurchasingAccess({
+  const auth = await verifyRoleAccess({
     authorizationHeader: req.headers.get("authorization"),
     refreshTokenHeader: req.headers.get("x-refresh-token"),
+    allowedRoles: ["admin", "headquarters", "manager", "assistant_manager"],
   });
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
