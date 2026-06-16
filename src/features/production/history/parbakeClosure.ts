@@ -4,7 +4,7 @@
 
 import { classifyProductBaseName } from "@/features/production/planning/productClassification";
 import type { ProductionLog } from "@/store/useMasterStore";
-import { getDoughBaseRowsFromGeneralBom } from "./bomAdapter";
+import { getDoughBaseRowsFromProductBom } from "./bomAdapter";
 import { parseProductLabel } from "./productLabel";
 import type {
   AstronautParbakeSizeLane,
@@ -24,8 +24,13 @@ function parbakeNameFromBaseSauce(materialName: string): string | null {
   return null;
 }
 
-function inferParbakeNameFromBom(baseProductName: string, bomList: BomRowRef[]): string | null {
-  const doughRows = getDoughBaseRowsFromGeneralBom(baseProductName, bomList);
+function inferParbakeNameFromBom(
+  baseProductName: string,
+  bomList: BomRowRef[],
+  productStandardName?: string
+): string | null {
+  const standard = (productStandardName ?? "일반").trim() || "일반";
+  const doughRows = getDoughBaseRowsFromProductBom(baseProductName, standard, bomList);
   const parbakeNames = new Set<string>();
   for (const row of doughRows) {
     if (!/도우.*소스|소스.*도우/i.test(row.materialName) || /토핑/i.test(row.materialName)) {
@@ -59,9 +64,9 @@ export function inferParbakeNameFromProductLabel(
   displayProductLabel: string,
   bomList: BomRowRef[] = []
 ): string | null {
-  const { baseProductName } = parseProductLabel(displayProductLabel);
+  const { baseProductName, productStandardName } = parseProductLabel(displayProductLabel);
   if (baseProductName) {
-    const fromBom = inferParbakeNameFromBom(baseProductName, bomList);
+    const fromBom = inferParbakeNameFromBom(baseProductName, bomList, productStandardName);
     if (fromBom) return fromBom;
   }
   const n = (baseProductName || displayProductLabel).normalize("NFKC").trim().toLowerCase();
@@ -139,7 +144,7 @@ export function inferParbakeTypesFromFinishedProducts(
     if (!base) continue;
     const std = (p.productStandardName ?? "일반").trim() || "일반";
     if (std === "브레드") continue;
-    const meta = inferParbakeNameFromBom(base, bomList);
+    const meta = inferParbakeNameFromBom(base, bomList, std);
     if (meta) set.add(meta);
   }
   return Array.from(set).sort();

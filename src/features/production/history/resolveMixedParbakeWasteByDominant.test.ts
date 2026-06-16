@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildParbakePurposeProductionLines,
   computeParbakeProductionQtyByType,
+  getDateParbakeTypes,
+  inferParbakeMetaFromBom,
   pickDominantParbakeType,
   resolveMixedParbakeWasteByDominantProduction,
   resolveBaseSauceMetaForParbakeType,
@@ -232,5 +234,42 @@ describe("resolveMixedParbakeWasteByDominantProduction", () => {
     );
     expect(tomatoMeta?.baseSauceMaterialName).toBe("도우 토마토소스");
     expect(tomatoMeta?.weightedBaseSaucePerUnitQty).toBe(41);
+  });
+});
+
+describe("inferParbakeMetaFromBom (미니-only)", () => {
+  const miniBom: BomRowRef[] = [
+    {
+      productName: "허니페퍼로니 - 미니",
+      materialName: "도우 토마토소스",
+      bomGPerEa: 42,
+      basis: "도우",
+    },
+  ];
+
+  it("미니 BOM에서 토마토 파베이크를 추론한다", () => {
+    const meta = inferParbakeMetaFromBom("허니페퍼로니", miniBom, "미니");
+    expect(meta.inferredParbakeName).toBe("토마토 파베이크");
+    expect(meta.inferredBaseSauceMaterialName).toBe("도우 토마토소스");
+    expect(meta.warnings).toEqual([]);
+  });
+
+  it("일반 BOM만 있으면 미니 추론은 실패한다", () => {
+    const meta = inferParbakeMetaFromBom("허니페퍼로니", miniBom, "일반");
+    expect(meta.inferredParbakeName).toBeNull();
+  });
+
+  it("미니-only productSummaries → getDateParbakeTypes 비어 있지 않음", () => {
+    const meta = inferParbakeMetaFromBom("허니페퍼로니", miniBom, "미니");
+    const summaries = [
+      makeSummary({
+        displayProductLabel: "허니페퍼로니 - 미니",
+        baseProductName: "허니페퍼로니",
+        productStandardName: "미니",
+        finishedQty: 3046,
+        inferredParbakeName: meta.inferredParbakeName,
+      }),
+    ];
+    expect(getDateParbakeTypes(summaries)).toEqual(["토마토 파베이크"]);
   });
 });

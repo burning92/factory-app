@@ -22,7 +22,7 @@ import type {
   AstronautParbakeSizeLane,
 } from "./types";
 import { isUjuinParbakeFinishedProductLabel } from "@/features/dashboard/productCategoryRules";
-import { getDoughBaseRowsFromGeneralBom } from "./bomAdapter";
+import { getDoughBaseRowsFromProductBom } from "./bomAdapter";
 import {
   extraParbakeManufacturedDateFromRow,
   parbakeExpiryFromManufacturedDate,
@@ -156,24 +156,30 @@ function parbakeNameFromBaseSauce(materialName: string): string | null {
 }
 
 /**
- * 제품 BOM "일반" + 하위원료 "도우" 기준: 파베이크 이름 + 도우소스 정보 판별.
+ * 제품 BOM + productStandardName + 하위원료 "도우" 기준: 파베이크 이름 + 도우소스 정보 판별.
+ * 미니-only 생산일은 "허니페퍼로니 - 미니" BOM 도우 행을 사용한다.
  * 호출 측에서 requiresBaseSauceBom === true 일 때만 반환된 warnings를 사용할 것.
- * (브레드 등 requiresBaseSauceBom === false 인 제품에는 호출하지 않음)
  */
 export function inferParbakeMetaFromBom(
   baseProductName: string,
-  bomList: BomRowRef[]
+  bomList: BomRowRef[],
+  productStandardName?: string
 ): {
   inferredParbakeName: string | null;
   inferredBaseSauceMaterialName: string | null;
   inferredBaseSaucePerUnitQty: number | null;
   warnings: string[];
 } {
+  const standard = (productStandardName ?? "일반").trim() || "일반";
   const warnings: string[] = [];
-  const doughRows = getDoughBaseRowsFromGeneralBom(baseProductName, bomList);
+  const doughRows = getDoughBaseRowsFromProductBom(
+    baseProductName,
+    standard,
+    bomList
+  );
   if (doughRows.length === 0) {
     warnings.push(
-      `제품 [${baseProductName}]에 대한 BOM(일반+도우)이 없습니다.`
+      `제품 [${baseProductName} · ${standard}]에 대한 BOM(도우)이 없습니다.`
     );
     return {
       inferredParbakeName: null,
@@ -1185,7 +1191,11 @@ export function calculateUsageSummary(
       let inferredBaseSauceMaterialName: string | null = null;
       let inferredBaseSaucePerUnitQty: number | null = null;
       if (classification.requiresBaseSauceBom) {
-        const meta = inferParbakeMetaFromBom(baseProductName, bomList);
+        const meta = inferParbakeMetaFromBom(
+          baseProductName,
+          bomList,
+          productStandardName
+        );
         inferredParbakeName = meta.inferredParbakeName;
         inferredBaseSauceMaterialName = meta.inferredBaseSauceMaterialName;
         inferredBaseSaucePerUnitQty = meta.inferredBaseSaucePerUnitQty;

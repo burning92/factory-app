@@ -28,17 +28,30 @@ export function bomProductMatchesBaseProduct(
 }
 
 /**
+ * 제품명 = baseProductName, 제품 기준(productStandardName) + 하위원료 기준 "도우" 인 BOM 행.
+ * 미니·일반 등 productStandardName에 맞는 "base - 미니" 행을 사용한다.
+ */
+export function getDoughBaseRowsFromProductBom(
+  baseProductName: string,
+  productStandardName: string,
+  bomList: BomRowRef[]
+): BomRowRef[] {
+  return getBomRowsForProductAndStandard(
+    baseProductName,
+    productStandardName,
+    bomList
+  ).filter((b) => b.basis === "도우");
+}
+
+/**
+ * @deprecated getDoughBaseRowsFromProductBom(base, "일반", bomList) 사용
  * 제품명 = baseProductName, 제품 기준 = "일반", 하위원료 기준 = "도우" 인 BOM 행만 반환.
- * (실제 DB에 product_standard 컬럼이 없으면 product_name이 "baseProductName" 또는 "baseProductName - 일반" 인 행 중 basis === "도우" 만 사용)
  */
 export function getDoughBaseRowsFromGeneralBom(
   baseProductName: string,
   bomList: BomRowRef[]
 ): BomRowRef[] {
-  return bomList.filter(
-    (b) =>
-      bomProductMatchesBase(b.productName, baseProductName) && b.basis === "도우"
-  );
+  return getDoughBaseRowsFromProductBom(baseProductName, "일반", bomList);
 }
 
 /**
