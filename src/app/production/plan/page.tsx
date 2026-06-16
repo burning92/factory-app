@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getProductionPlanPageData } from "@/features/production/plan/getProductionPlanPageData";
 import type { ProductionPlanRow } from "@/features/production/plan/types";
 import { getKoreanHolidayName, isKoreanPublicHoliday } from "@/features/production/planning/calculations";
+import { isMiniProductKind } from "@/features/production/planning/productClassification";
 import { formatDateTimeKorea } from "@/lib/formatDateTimeKorea";
 import MobilePlanList from "./MobilePlanList";
 import AutoScrollToToday from "./AutoScrollToToday";
@@ -64,7 +65,12 @@ function getDisplayName(category: string | null, productName: string, note: stri
   if (category === "반차") return `반 : ${productName}`;
   if (category === "생산") {
     const idx = productName.indexOf(" - ");
-    return idx >= 0 ? productName.slice(0, idx).trim() : productName;
+    if (idx < 0) return productName;
+    const base = productName.slice(0, idx).trim();
+    const kind = productName.slice(idx + 3).trim();
+    // 일반/파베이크사용 등 조건은 숨기되, 미니 여부는 라벨에 유지한다.
+    if (isMiniProductKind(kind)) return `미니 ${base}`;
+    return base;
   }
   return productName;
 }
