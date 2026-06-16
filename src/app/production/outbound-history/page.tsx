@@ -5,8 +5,18 @@ import Link from "next/link";
 import { useMasterStore, type ProductionLog, type OutboundLine } from "@/store/useMasterStore";
 import { ChevronDown, ChevronRight, Trash2, Pencil, Plus } from "lucide-react";
 import DateWheelPicker from "@/components/DateWheelPicker";
+import {
+  buildLotOptions,
+  fetchInventoryLotsForMaterial,
+  resolveOutboundExpiry,
+} from "@/features/production/outbound/inventoryLots";
 
-type MaterialLike = { materialName: string; boxWeightG: number; unitWeightG: number };
+type MaterialLike = {
+  materialName: string;
+  boxWeightG: number;
+  unitWeightG: number;
+  inventoryItemCode?: string;
+};
 
 /** 박스/낱개/g → 총중량(g). g전용이면 boxG=0, unitG=0 → g만 사용 */
 function totalGFromQty(
@@ -241,20 +251,56 @@ function AddOutboundModal({
   saving: boolean;
 }) {
   const [materialName, setMaterialName] = useState("");
-  const [expiry, setExpiry] = useState("");
+  const [manualLotIso, setManualLotIso] = useState("");
+  const [selectedLotIso, setSelectedLotIso] = useState("");
   const [boxQty, setBoxQty] = useState("");
   const [bagQty, setBagQty] = useState("");
   const [gQty, setGQty] = useState("");
   const [pending, setPending] = useState(false);
+  const [inventoryLoading, setInventoryLoading] = useState(false);
+  const [inventoryHint, setInventoryHint] = useState<string | null>(null);
+  const [lotOptions, setLotOptions] = useState<{ lotNo: string; qty: number; iso: string }[]>([]);
+
   const selectedMaterial = useMemo(
     () => materials.find((m) => m.materialName === materialName),
     [materials, materialName]
   );
   const qType = getQuantityType(selectedMaterial);
 
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    const name = materialName.trim();
+    const code = selectedMaterial?.inventoryItemCode;
+    if (!name && !code) {
+      setLotOptions([]);
+      setInventoryHint(null);
+      setSelectedLotIso("");
+      return;
+    }
+    (async () => {
+      setInventoryLoading(true);
+      setInventoryHint(null);
+      const { rows, hint } = await fetchInventoryLotsForMaterial(name, code);
+      if (cancelled) return;
+      const options = buildLotOptions(rows);
+      setLotOptions(options);
+      setInventoryHint(hint);
+      setSelectedLotIso((prev) =>
+        prev && options.some((o) => o.iso === prev) ? prev : ""
+      );
+      setInventoryLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, materialName, selectedMaterial?.inventoryItemCode]);
+
+  const resolvedExpiry = resolveOutboundExpiry({ manualLotIso, selectedLotIso });
+
   const handleSave = async () => {
     const cleanName = materialName.trim();
-    const cleanExpiry = expiry.trim();
+    const cleanExpiry = resolvedExpiry.trim();
     const b = Math.max(0, parseInt(boxQty, 10) || 0);
     const n = Math.max(0, parseInt(bagQty, 10) || 0);
     const g = Math.max(0, parseInt(gQty, 10) || 0);
@@ -279,7 +325,8 @@ function AddOutboundModal({
       await onSave({ materialName: cleanName, expiry: cleanExpiry, boxQty: b, bagQty: n, gQty: g });
       onClose();
       setMaterialName("");
-      setExpiry("");
+      setManualLotIso("");
+      setSelectedLotIso("");
       setBoxQty("");
       setBagQty("");
       setGQty("");
@@ -298,16 +345,73 @@ function AddOutboundModal({
         <div className="p-5 space-y-3 overflow-y-auto">
           <div>
             <label className="block text-xs text-slate-400 mb-1">원료명</label>
-            <select value={materialName} onChange={(e) => setMaterialName(e.target.value)} className="w-full px-3 py-2 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100">
+            <select
+              value={materialName}
+              onChange={(e) => {
+                setMaterialName(e.target.value);
+                setManualLotIso("");
+                setSelectedLotIso("");
+              }}
+              className="w-full px-3 py-2 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100"
+            >
               <option value="">원료 선택</option>
               {materialOptions.map((name) => (
                 <option key={name} value={name}>{name}</option>
               ))}
             </select>
           </div>
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">소비기한(LOT)</label>
-            <DateWheelPicker value={expiry} onChange={(v) => setExpiry(v)} className="w-full px-3 py-2 text-sm" placeholder="날짜 선택" />
+          <div className="space-y-2 rounded-lg border border-slate-700 bg-space-900/50 p-3">
+            <p className="text-xs text-slate-500">LOT (소비기한)</p>
+            {inventoryHint && (
+              <p className="text-xs text-slate-500">{inventoryHint}</p>
+            )}
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">LOT 선택 (재고 연동)</label>
+              <select
+                value={selectedLotIso}
+                onChange={(e) => setSelectedLotIso(e.target.value)}
+                disabled={inventoryLoading || !materialName.trim()}
+                className="w-full px-3 py-2 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100 disabled:opacity-60"
+              >
+                <option value="">
+                  {!materialName.trim()
+                    ? "원료를 먼저 선택하세요"
+                    : inventoryLoading
+                      ? "불러오는 중…"
+                      : "LOT 선택 (선택사항)"}
+                </option>
+                {lotOptions.map((l) => (
+                  <option key={l.iso} value={l.iso}>
+                    {l.lotNo} (재고 {l.qty.toLocaleString("ko-KR")})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">LOT 직접입력 (소비기한)</label>
+              <DateWheelPicker
+                value={manualLotIso}
+                onChange={setManualLotIso}
+                className="w-full px-3 py-2 text-sm"
+                placeholder="목록에 없으면 날짜 선택"
+              />
+              {manualLotIso && (
+                <button
+                  type="button"
+                  onClick={() => setManualLotIso("")}
+                  className="mt-1 text-xs text-slate-500 hover:text-slate-300 underline"
+                >
+                  직접입력 지우기
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-cyan-400/90">
+              최종 적용 소비기한:{" "}
+              <span className="font-medium text-cyan-300">{resolvedExpiry || "—"}</span>
+              <span className="text-slate-500 block mt-0.5">
+                직접입력 → LOT 선택 → 오늘 날짜 순으로 적용됩니다.
+              </span>
+            </p>
           </div>
           <div className="grid grid-cols-3 gap-2">
             {qType === "box_ea" && (
@@ -532,7 +636,13 @@ export default function OutboundHistoryPage() {
   );
 
   const materialsList = useMemo(
-    () => materials.map((m) => ({ materialName: m.materialName, boxWeightG: m.boxWeightG, unitWeightG: m.unitWeightG })),
+    () =>
+      materials.map((m) => ({
+        materialName: m.materialName,
+        boxWeightG: m.boxWeightG,
+        unitWeightG: m.unitWeightG,
+        inventoryItemCode: m.inventoryItemCode,
+      })),
     [materials]
   );
 
