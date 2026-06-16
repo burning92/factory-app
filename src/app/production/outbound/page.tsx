@@ -8,12 +8,6 @@ import { createSafeId } from "@/lib/createSafeId";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { computeOutboundTotalG } from "@/features/production/outbound/computeOutboundTotalG";
-import {
-  buildKeep2fStockByMaterial,
-  formatKeep2fLotLine,
-  formatKeep2fTotalHint,
-  type Keep2fMaterialStock,
-} from "@/features/production/outbound/keep2fStockReference";
 
 /** 출고 입력 전용 최근 작성자명 (1차 마감과 분리). Supabase 우선, localStorage는 보조 fallback */
 const OUTBOUND_LAST_AUTHOR_KEY = "outbound-last-author-name";
@@ -292,8 +286,6 @@ function OutboundModal({
   defaultExpiryDate,
   initialEntries,
   quantityType,
-  keep2fStock,
-  materialMeta,
   onClose,
   onSave,
 }: {
@@ -304,8 +296,6 @@ function OutboundModal({
   defaultExpiryDate: string;
   initialEntries?: { expiryDate: string; boxQty: number; bagQty: number; remainderG: number }[];
   quantityType: "g_only" | "ea_only" | "box_ea";
-  keep2fStock?: Keep2fMaterialStock;
-  materialMeta?: { boxWeightG: number; unitWeightG: number };
   onClose: () => void;
   onSave: (entries: { expiryDate: string; boxQty: number; bagQty: number; remainderG: number }[]) => void;
 }) {
@@ -459,19 +449,6 @@ function OutboundModal({
           )}
         </div>
         <div className="p-5 overflow-y-auto flex-1">
-          {keep2fStock && keep2fStock.lots.length > 0 && (
-            <div className="mb-3 rounded-lg border border-emerald-500/35 bg-emerald-500/10 px-3 py-2">
-              <p className="text-xs font-medium text-emerald-200">2층 유지 재고 (1차 마감 참고)</p>
-              <ul className="mt-1 space-y-0.5 text-xs text-emerald-100/90">
-                {keep2fStock.lots.map((lot) => (
-                  <li key={`${lot.expiryDate}-${lot.fromDate}`}>
-                    {formatKeep2fLotLine(lot, materialMeta)}
-                    <span className="text-emerald-200/60"> · {lot.fromDate} 마감</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
           {inventoryHint && (
             <p className="mb-3 text-xs text-slate-500">{inventoryHint}</p>
           )}
@@ -608,8 +585,6 @@ export default function OutboundPage() {
     setLastUsedDate,
     getUsageCalculation,
     saveUsageCalculation,
-    fetchProductionHistoryDateStates,
-    productionHistoryDateStates,
   } = useMasterStore();
   const [productionDate, setProductionDate] = useState(todayStr());
   const [selectedBaseName, setSelectedBaseName] = useState("");
@@ -630,8 +605,7 @@ export default function OutboundPage() {
     fetchBom();
     fetchOutboundStandards();
     fetchLastUsedDates();
-    void fetchProductionHistoryDateStates();
-  }, [fetchMaterials, fetchBom, fetchOutboundStandards, fetchLastUsedDates, fetchProductionHistoryDateStates]);
+  }, [fetchMaterials, fetchBom, fetchOutboundStandards, fetchLastUsedDates]);
 
   /** 마운트 시 작성자 최초값: 로그인 사용자명 1순위. 없을 때만 Supabase → localStorage fallback */
   useEffect(() => {
@@ -775,22 +749,6 @@ export default function OutboundPage() {
     }
     return map;
   }, [standardPreviewRows]);
-
-  const keep2fByMaterial = useMemo(
-    () =>
-      buildKeep2fStockByMaterial(
-        productionDate,
-        productionHistoryDateStates,
-        materials.map((m) => ({
-          materialName: m.materialName,
-          boxWeightG: m.boxWeightG,
-          unitWeightG: m.unitWeightG,
-        }))
-      ),
-    [productionDate, productionHistoryDateStates, materials]
-  );
-
-  const hasKeep2fReference = keep2fByMaterial.size > 0;
 
   const printRowsWithStandard = useMemo(
     () =>
@@ -1069,13 +1027,6 @@ export default function OutboundPage() {
 
         {rows !== null && (
           <>
-            {hasKeep2fReference && rows.length > 0 && (
-              <div className="no-print mb-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100 leading-relaxed">
-                전일 1차 마감 기준{" "}
-                <span className="font-medium text-emerald-200">2층 유지</span> 재고가 있습니다.
-                원료명 아래·출고 입력 화면에서 참고하세요.
-              </div>
-            )}
             <div className="no-print">
               <div className="md:hidden space-y-3">
                 {rows.length === 0 ? (
@@ -1086,20 +1037,12 @@ export default function OutboundPage() {
                   rows.map((row) => {
                     const pending = pendingOutbound[row.materialName];
                     const mat = materials.find((m) => m.materialName === row.materialName);
-                    const keep2f = keep2fByMaterial.get(row.materialName);
                     const { totalBox, totalBag, totalG } = sumPendingBoxBagG(pending?.entries ?? []);
                     const actualOutboundG = calcActualOutboundG(pending?.entries ?? [], mat);
                     return (
                       <div key={row.materialName} className="rounded-xl border border-slate-700 bg-space-800/80 shadow-glow p-3">
                         <div className="flex items-start justify-between gap-2 mb-2">
-                          <div>
-                            <h3 className="text-base font-bold text-slate-100">{row.materialName}</h3>
-                            {keep2f && keep2f.lots.length > 0 && (
-                              <p className="mt-0.5 text-[11px] leading-tight text-emerald-300/90">
-                                {formatKeep2fTotalHint(keep2f, mat)}
-                              </p>
-                            )}
-                          </div>
+                          <h3 className="text-base font-bold text-slate-100">{row.materialName}</h3>
                           <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-700 text-slate-300 text-xs font-medium">
                             {row.basis}
                           </span>
@@ -1201,20 +1144,12 @@ export default function OutboundPage() {
                         rows.map((row) => {
                           const pending = pendingOutbound[row.materialName];
                           const mat = materials.find((m) => m.materialName === row.materialName);
-                          const keep2f = keep2fByMaterial.get(row.materialName);
                           const standard = standardPreviewByMaterial.get(row.materialName);
                           const { totalBox, totalBag, totalG } = sumPendingBoxBagG(pending?.entries ?? []);
                           const actualOutboundG = calcActualOutboundG(pending?.entries ?? [], mat);
                           return (
                             <tr key={row.materialName} className="border-b border-slate-700 hover:bg-space-700/40">
-                              <td className="px-2 py-2 text-sm font-medium text-slate-100 break-keep">
-                                <div>{row.materialName}</div>
-                                {keep2f && keep2f.lots.length > 0 && (
-                                  <p className="mt-0.5 text-[11px] leading-tight text-emerald-300/90">
-                                    {formatKeep2fTotalHint(keep2f, mat)}
-                                  </p>
-                                )}
-                              </td>
+                              <td className="px-2 py-2 text-sm font-medium text-slate-100 break-keep">{row.materialName}</td>
                               <td className="px-2 py-2 text-center">
                                 <div className="leading-tight">
                                   <p className="text-sm text-slate-300 whitespace-nowrap">{row.basis}</p>
@@ -1330,22 +1265,12 @@ export default function OutboundPage() {
                           </td>
                         </tr>
                       ) : (
-                        printRowsWithStandard.map(({ base }) => {
-                          const mat = materials.find((m) => m.materialName === base.materialName);
-                          const keep2f = keep2fByMaterial.get(base.materialName);
-                          return (
+                        printRowsWithStandard.map(({ base }) => (
                             <tr
                               key={`print-base-${base.materialName}`}
                               className={base.basis === "도우" ? "outbound-print-dough-row" : ""}
                             >
-                              <td className="border border-slate-400 break-words align-top">
-                                <div>{base.materialName}</div>
-                                {keep2f && keep2f.lots.length > 0 && (
-                                  <div className="outbound-print-keep2f">
-                                    {formatKeep2fTotalHint(keep2f, mat)}
-                                  </div>
-                                )}
-                              </td>
+                              <td className="border border-slate-400 break-words align-top">{base.materialName}</td>
                               <td className="border border-slate-400 text-right tabular-nums">
                                 {base.bomGPerEa.toLocaleString()}
                               </td>
@@ -1359,8 +1284,7 @@ export default function OutboundPage() {
                                 {base.totalG.toLocaleString()}
                               </td>
                             </tr>
-                          );
-                        })
+                          ))
                       )}
                     </tbody>
                   </table>
@@ -1455,7 +1379,7 @@ export default function OutboundPage() {
                   </div>
                 </div>
               </div>
-              <p className="outbound-print-footnote mt-2">기본·참고 각각: 개당 BOM, 필요 박스/낱개, 총중량(g)입니다. 원료명 아래 2층 유지는 1차 마감 기준 총 재고입니다.</p>
+              <p className="outbound-print-footnote mt-2">기본·참고 각각: 개당 BOM, 필요 박스/낱개, 총중량(g)입니다.</p>
             </div>
 
             <div className="mt-6 no-print">
@@ -1497,8 +1421,6 @@ export default function OutboundPage() {
             defaultExpiryDate={getDefaultExpiry(modal.row.materialName)}
             initialEntries={Array.isArray(pendingOutbound[modal.row.materialName]?.entries) ? pendingOutbound[modal.row.materialName].entries : undefined}
             quantityType={modal.row.quantityType === "g_only" || modal.row.quantityType === "ea_only" || modal.row.quantityType === "box_ea" ? modal.row.quantityType : "g_only"}
-            keep2fStock={keep2fByMaterial.get(String(modal.row.materialName ?? ""))}
-            materialMeta={materials.find((m) => m.materialName === String(modal.row.materialName ?? ""))}
             onClose={() => setModal(null)}
             onSave={(entries) => handleSaveToPending(entries, { productionDate, productName: productName.trim(), materialName: String(modal.row.materialName ?? "") })}
           />
@@ -1594,13 +1516,6 @@ export default function OutboundPage() {
             color: #333333 !important;
             line-height: 1.4;
             margin-top: 4px !important;
-          }
-          .outbound-print-keep2f {
-            margin-top: 1px !important;
-            font-size: 7.2pt !important;
-            line-height: 1.15 !important;
-            color: #2d6a4f !important;
-            font-weight: normal !important;
           }
           .outbound-print-header {
             display: flex;
