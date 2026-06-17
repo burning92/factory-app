@@ -1789,6 +1789,8 @@ function UsageCalculationPageContent() {
           | "saleParbakeSizeLane"
           | "parbakeProductionByBase"
           | "selectedParbakeBases"
+          | "extraParbakes"
+          | "parbakeWasteByType"
         >
       >
     ) => {
@@ -1830,10 +1832,35 @@ function UsageCalculationPageContent() {
     (date: string, parbakeName: string, checked: boolean) => {
       const s = getOrInitGroupState(date);
       const cur = s.secondClosure.selectedParbakeBases ?? [];
-      const next = checked
+      const nextSelected = checked
         ? Array.from(new Set([...cur, parbakeName]))
         : cur.filter((n) => n !== parbakeName);
-      updateSecondClosureParbake(date, { selectedParbakeBases: next });
+
+      const patch: Partial<
+        Pick<
+          SecondClosure,
+          | "selectedParbakeBases"
+          | "parbakeProductionByBase"
+          | "extraParbakes"
+          | "parbakeWasteByType"
+        >
+      > = { selectedParbakeBases: nextSelected };
+
+      if (!checked) {
+        patch.parbakeProductionByBase = (s.secondClosure.parbakeProductionByBase ?? []).filter(
+          (r) => r.parbakeName !== parbakeName
+        );
+        patch.extraParbakes = s.secondClosure.extraParbakes.map((row) =>
+          row.parbakeName === parbakeName ? { ...row, parbakeName: "" } : row
+        );
+        if (s.secondClosure.parbakeWasteByType?.length) {
+          patch.parbakeWasteByType = s.secondClosure.parbakeWasteByType.filter(
+            (r) => r.parbakeName !== parbakeName
+          );
+        }
+      }
+
+      updateSecondClosureParbake(date, patch);
     },
     [getOrInitGroupState, updateSecondClosureParbake]
   );

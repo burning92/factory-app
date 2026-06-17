@@ -242,21 +242,26 @@ export function isStoredParbakeOnlyDay(
   return productSummaries.every((p) => p.usesStoredParbake);
 }
 
-/** productSummaries + 2차 마감 by-base·수동 선택에서 당일 파베이크 베이스 목록 */
+/** productSummaries + 2차 마감 수동 선택·추론에서 당일 파베이크 베이스 목록 */
 export function mergeDateParbakeTypes(
   fromProductSummaries: string[],
   secondClosure: DateGroupInput["secondClosure"]
 ): string[] {
-  const set = new Set<string>();
-  for (const name of secondClosure.selectedParbakeBases ?? []) {
-    const t = name.trim();
-    if (t) set.add(t);
+  const manual = secondClosure.selectedParbakeBases;
+  if (manual != null) {
+    const set = new Set<string>();
+    for (const name of manual) {
+      const t = name.trim();
+      if (t) set.add(t);
+    }
+    for (const name of fromProductSummaries) {
+      if (name) set.add(name);
+    }
+    return Array.from(set).sort();
   }
+  const set = new Set(fromProductSummaries);
   for (const row of secondClosure.parbakeProductionByBase ?? []) {
     if (row.parbakeName) set.add(row.parbakeName);
-  }
-  for (const name of fromProductSummaries) {
-    if (name) set.add(name);
   }
   return Array.from(set).sort();
 }
