@@ -377,6 +377,10 @@ export function normalizeSecondClosureForDate(
   for (const r of secondClosure.parbakeProductionByBase ?? []) {
     if (r.parbakeName) typeSet.add(r.parbakeName);
   }
+  for (const name of secondClosure.selectedParbakeBases ?? []) {
+    const t = name.trim();
+    if (t) typeSet.add(t);
+  }
   const dateParbakeTypes = Array.from(typeSet).sort();
 
   const parbakeProductionByBase = buildParbakeProductionByBase(

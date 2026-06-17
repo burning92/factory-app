@@ -87,6 +87,8 @@ export type SecondClosureInput = {
   extraParbakes: ExtraParbakeRowInput[];
   /** 베이스 2종 이상인 날만 사용. 타입별 파베이크 폐기량(개) */
   parbakeWasteByType?: ParbakeWasteByTypeInput[];
+  /** 2차 마감: 당일 사용 파베이크 베이스(토마토/베샤멜 등) — BOM 도우소스 기준 수동 선택 */
+  selectedParbakeBases?: string[];
 };
 
 export type DateGroupInput = {

@@ -242,14 +242,21 @@ export function isStoredParbakeOnlyDay(
   return productSummaries.every((p) => p.usesStoredParbake);
 }
 
-/** productSummaries + 2차 마감 by-base 행에서 당일 파베이크 베이스 목록 */
+/** productSummaries + 2차 마감 by-base·수동 선택에서 당일 파베이크 베이스 목록 */
 export function mergeDateParbakeTypes(
   fromProductSummaries: string[],
   secondClosure: DateGroupInput["secondClosure"]
 ): string[] {
-  const set = new Set(fromProductSummaries);
+  const set = new Set<string>();
+  for (const name of secondClosure.selectedParbakeBases ?? []) {
+    const t = name.trim();
+    if (t) set.add(t);
+  }
   for (const row of secondClosure.parbakeProductionByBase ?? []) {
     if (row.parbakeName) set.add(row.parbakeName);
+  }
+  for (const name of fromProductSummaries) {
+    if (name) set.add(name);
   }
   return Array.from(set).sort();
 }
@@ -404,10 +411,13 @@ function resolveOneExtraParbakeRow(
   const qty = toNum(row.qty);
   const manufacturedDate = extraParbakeManufacturedDateFromRow(row);
   const expiryDate = parbakeExpiryFromManufacturedDate(manufacturedDate) || "—";
-  const candidates = productSummaries.filter(
-    (p) =>
-      p.participatesInParbakeTypeInference && p.inferredParbakeName === parbakeName
-  );
+  const candidates = productSummaries.filter((p) => {
+    if (!p.participatesInParbakeTypeInference) return false;
+    if (p.inferredParbakeName === parbakeName) return true;
+    // 파베이크사용 등 BOM 추론 실패 시 수동 선택 베이스와 연결
+    if (p.usesStoredParbake && !p.inferredParbakeName) return true;
+    return false;
+  });
   const productCandidates = candidates.map((p) => ({
     productKey: p.productKey,
     productName: p.productName,
