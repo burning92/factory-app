@@ -12,6 +12,7 @@ export {
   resolveParbakeJournalLabelForRole,
   pickPrimaryPizzaParbakeTypeForClosure,
   mergeDateParbakeTypes,
+  mergeProductionParbakeTypes,
   resolveBaseSauceMetaForParbakeType,
 } from "./calculations";
 export {

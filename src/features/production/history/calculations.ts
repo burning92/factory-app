@@ -242,8 +242,8 @@ export function isStoredParbakeOnlyDay(
   return productSummaries.every((p) => p.usesStoredParbake);
 }
 
-/** productSummaries + 2차 마감 수동 선택·추론에서 당일 파베이크 베이스 목록 */
-export function mergeDateParbakeTypes(
+/** 체크된 베이스 + BOM 자동 추론 — 파베이크 생산량 UI용 */
+export function mergeProductionParbakeTypes(
   fromProductSummaries: string[],
   secondClosure: DateGroupInput["secondClosure"]
 ): string[] {
@@ -262,6 +262,21 @@ export function mergeDateParbakeTypes(
   const set = new Set(fromProductSummaries);
   for (const row of secondClosure.parbakeProductionByBase ?? []) {
     if (row.parbakeName) set.add(row.parbakeName);
+  }
+  return Array.from(set).sort();
+}
+
+/** 일지·추가 파베이크 해석용 — 생산 베이스 + 추가 파베이크 행에서 선택한 베이스 */
+export function mergeDateParbakeTypes(
+  fromProductSummaries: string[],
+  secondClosure: DateGroupInput["secondClosure"]
+): string[] {
+  const set = new Set(
+    mergeProductionParbakeTypes(fromProductSummaries, secondClosure)
+  );
+  for (const row of secondClosure.extraParbakes ?? []) {
+    const t = (row.parbakeName ?? "").trim();
+    if (t) set.add(t);
   }
   return Array.from(set).sort();
 }

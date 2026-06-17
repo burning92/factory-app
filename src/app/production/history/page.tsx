@@ -8,6 +8,7 @@ import {
   calculateUsageSummary,
   getDateParbakeTypes,
   mergeDateParbakeTypes,
+  mergeProductionParbakeTypes,
   resolveMixedParbakeWasteByDominantProduction,
   summarizeDoughPizzaProductionBySize,
   resolveParbakeJournalLabelForRole,
@@ -1817,7 +1818,7 @@ function UsageCalculationPageContent() {
       const s = getOrInitGroupState(date);
       const comp = computedByDate[date];
       const types = comp
-        ? mergeDateParbakeTypes(getDateParbakeTypes(comp.productSummaries), s.secondClosure)
+        ? mergeProductionParbakeTypes(getDateParbakeTypes(comp.productSummaries), s.secondClosure)
         : (s.secondClosure.parbakeProductionByBase ?? []).map((r) => r.parbakeName);
       const rows = resolveParbakeProductionRows(s.secondClosure, types);
       const updated = rows.map((r) =>
@@ -2539,11 +2540,11 @@ function UsageCalculationPageContent() {
                             {(() => {
                               const comp = computedByDate[date];
                               const types = comp
-                                ? mergeDateParbakeTypes(
+                                ? mergeProductionParbakeTypes(
                                     getDateParbakeTypes(comp.productSummaries),
                                     state.secondClosure
                                   )
-                                : mergeDateParbakeTypes([], state.secondClosure);
+                                : mergeProductionParbakeTypes([], state.secondClosure);
                               const rows = resolveParbakeProductionRows(state.secondClosure, types);
                               const sizeSummary = comp
                                 ? summarizeDoughPizzaProductionBySize(comp.productSummaries)
@@ -2727,32 +2728,32 @@ function UsageCalculationPageContent() {
                           </div>
 
                           {/* 추가 파베이크 수량 */}
+                          {(() => {
+                            const finishedForBom = state.secondClosure.productOutputs.map((o) => ({
+                              baseProductName: o.baseProductName ?? o.productName,
+                              productStandardName: o.productStandardName ?? o.standardName ?? "일반",
+                              displayProductLabel:
+                                o.displayProductLabel ?? o.productKey ?? o.productName,
+                            }));
+                            const baseCandidates = collectParbakeBaseCandidatesFromBom(
+                              bomList,
+                              finishedForBom
+                            );
+                            const baseOptions = baseCandidates.map((c) => c.parbakeName);
+                            return (
                           <div className="space-y-3">
                             <div className="flex items-center justify-between gap-2">
                               <div>
                                 <h4 className="text-sm font-medium text-slate-400">추가 파베이크 수량</h4>
-                                {(() => {
-                                  const comp = computedByDate[date];
-                                  const types = comp
-                                    ? mergeDateParbakeTypes(
-                                        getDateParbakeTypes(comp.productSummaries),
-                                        state.secondClosure
-                                      )
-                                    : mergeDateParbakeTypes([], state.secondClosure);
-                                  if (types.length === 0) {
-                                    return (
-                                      <p className="mt-0.5 text-xs text-amber-300/90">
-                                        파베이크 베이스를 선택하면 추가 파베이크가 일지에 표시됩니다.
-                                      </p>
-                                    );
-                                  }
-                                  if (types.length <= 1) return null;
-                                  return (
-                                    <p className="mt-0.5 text-xs text-slate-500">
-                                      혼합 베이스: 소스 베이스(토마토/베샤멜 등)를 선택해야 일지에 표시됩니다.
-                                    </p>
-                                  );
-                                })()}
+                                {baseOptions.length === 0 ? (
+                                  <p className="mt-0.5 text-xs text-amber-300/90">
+                                    BOM에 도우 소스(기준: 도우)가 없어 소스 베이스를 선택할 수 없습니다.
+                                  </p>
+                                ) : baseOptions.length > 1 ? (
+                                  <p className="mt-0.5 text-xs text-slate-500">
+                                    혼합 베이스: 소스 베이스(토마토/베샤멜 등)를 선택해야 일지에 표시됩니다.
+                                  </p>
+                                ) : null}
                               </div>
                               <button
                                 type="button"
@@ -2764,22 +2765,15 @@ function UsageCalculationPageContent() {
                             </div>
                             <ul className="space-y-2">
                               {state.secondClosure.extraParbakes.map((row) => {
-                                const comp = computedByDate[date];
-                                const dateParbakeTypes = comp
-                                  ? mergeDateParbakeTypes(
-                                      getDateParbakeTypes(comp.productSummaries),
-                                      state.secondClosure
-                                    )
-                                  : mergeDateParbakeTypes([], state.secondClosure);
                                 const baseSelectValue =
                                   row.parbakeName ||
-                                  (dateParbakeTypes.length === 1 ? dateParbakeTypes[0]! : "");
+                                  (baseOptions.length === 1 ? baseOptions[0]! : "");
                                 return (
                                 <li
                                   key={row.extraParbakeId}
                                   className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-700 bg-space-900/80 p-3"
                                 >
-                                  {dateParbakeTypes.length > 0 && (
+                                  {baseOptions.length > 0 && (
                                     <div className="min-w-[140px] flex-1 sm:flex-none sm:w-40">
                                       <span className="text-xs text-slate-500 block mb-0.5">소스 베이스</span>
                                       <select
@@ -2791,10 +2785,10 @@ function UsageCalculationPageContent() {
                                           });
                                         }}
                                       >
-                                        {dateParbakeTypes.length > 1 && (
+                                        {baseOptions.length > 1 && (
                                           <option value="">선택</option>
                                         )}
-                                        {dateParbakeTypes.map((name) => (
+                                        {baseOptions.map((name) => (
                                           <option key={name} value={name}>
                                             {name}
                                           </option>
@@ -2816,10 +2810,10 @@ function UsageCalculationPageContent() {
                                           qty: v === "" ? "" : Number(v),
                                         };
                                         if (
-                                          dateParbakeTypes.length === 1 &&
+                                          baseOptions.length === 1 &&
                                           !row.parbakeName
                                         ) {
-                                          patch.parbakeName = dateParbakeTypes[0]!;
+                                          patch.parbakeName = baseOptions[0]!;
                                         }
                                         updateExtraParbake(date, row.extraParbakeId, patch);
                                       }}
@@ -2850,6 +2844,8 @@ function UsageCalculationPageContent() {
                               })}
                             </ul>
                           </div>
+                            );
+                          })()}
 
                           {/* 혼합 베이스 날: 생산량 지배 종류에 파베이크·소스 폐기 자동 배분 */}
                           {(() => {
