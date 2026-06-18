@@ -1,5 +1,20 @@
+import { rollupQtyForPlanning } from "@/features/production/planning/calculations";
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
 import type { ProductionPlanPageData, ProductionPlanRow } from "./types";
+
+/** 플래닝 미러 행은 DB에 2입 세트 수(입력값)로 저장되므로 작업자 조회 화면에서는 rollup 수량을 보여준다. */
+function displayQtyForPlanRow(row: {
+  qty: number | null;
+  category: string | null;
+  product_name: string;
+  source_sheet_name: string | null;
+}): number | null {
+  if (row.qty == null || !Number.isFinite(row.qty)) return null;
+  if ((row.source_sheet_name ?? "") !== "planning_board" || (row.category ?? "") !== "생산") {
+    return row.qty;
+  }
+  return rollupQtyForPlanning(row.product_name, row.qty);
+}
 
 const SYNC_NAME = "production_plan";
 
@@ -29,7 +44,15 @@ export async function getProductionPlanPageData(): Promise<ProductionPlanPageDat
     id: Number(r.id),
     plan_date: String(r.plan_date).slice(0, 10),
     product_name: String(r.product_name ?? ""),
-    qty: r.qty != null && Number.isFinite(Number(r.qty)) ? Number(r.qty) : null,
+    qty:
+      r.qty != null && Number.isFinite(Number(r.qty))
+        ? displayQtyForPlanRow({
+            qty: Number(r.qty),
+            category: r.category != null ? String(r.category) : null,
+            product_name: String(r.product_name ?? ""),
+            source_sheet_name: r.source_sheet_name != null ? String(r.source_sheet_name) : null,
+          })
+        : null,
     category: r.category != null ? String(r.category) : null,
     note: r.note != null ? String(r.note) : null,
     plan_year: Number.isFinite(Number(r.plan_year)) ? Number(r.plan_year) : Number(String(r.plan_date).slice(0, 4)),
