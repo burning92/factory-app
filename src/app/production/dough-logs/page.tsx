@@ -24,6 +24,12 @@ export default function DoughLogsPage() {
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
   useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  useEffect(() => {
     fetchDoughLogs();
   }, [fetchDoughLogs]);
 
