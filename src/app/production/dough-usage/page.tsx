@@ -6,6 +6,7 @@ import { useMasterStore, type DoughBom, type DoughLogRecord, type DoughProcessLi
 import DateWheelPicker from "@/components/DateWheelPicker";
 import { useAuth } from "@/contexts/AuthContext";
 import { getDefaultAuthorName, persistAuthorName } from "@/lib/authorDefault";
+import { getHydrationByDayOfWeek } from "@/features/production/doughHydration";
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
@@ -43,15 +44,6 @@ function getRecipeFromDoughBom(
     { name: "설탕", percent: perKgToPercent(dough.sugar) },
     { name: "개량제", percent: perKgToPercent(dough.improver) },
   ];
-}
-
-function getHydrationByDayOfWeek(dateStr: string): number {
-  const d = new Date(dateStr + "T12:00:00");
-  if (Number.isNaN(d.getTime())) return 61;
-  const day = d.getDay();
-  if (day === 5) return 60;
-  if (day === 6) return 60.5;
-  return 61;
 }
 
 function getDayNameKo(dateStr: string): string {

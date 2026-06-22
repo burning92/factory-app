@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, Fragment } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMasterStore, type DoughLogRecord } from "@/store/useMasterStore";
+import { formatDoughHydration } from "@/features/production/doughHydration";
 import { Pencil, Trash2, ChevronDown, ChevronRight } from "lucide-react";
 
 const KG_PER_BAG = 25;
@@ -14,12 +15,6 @@ function flourSummary(record: DoughLogRecord): { totalG: number; bags: number; k
   const kg = totalG / 1000;
   const bags = Math.round((totalG / 1000) / KG_PER_BAG * 10) / 10;
   return { totalG, bags, kg };
-}
-
-function hydrationSummary(record: DoughLogRecord): string {
-  const hydration = record.수분율;
-  if (hydration == null || !Number.isFinite(hydration)) return "—";
-  return `${hydration}%`;
 }
 
 export default function DoughLogsPage() {
@@ -113,7 +108,7 @@ export default function DoughLogsPage() {
                   record.예상수량 != null && Number.isFinite(record.예상수량)
                     ? `${Math.round(record.예상수량).toLocaleString()}개`
                     : "—";
-                const 수분율텍스트 = hydrationSummary(record);
+                const 수분율텍스트 = formatDoughHydration(record);
                 const 밀가루텍스트 = totalG > 0 ? `${totalG.toLocaleString()}g (약 ${bags}포대 / ${kg.toFixed(1)}kg)` : "—";
                 return (
                   <div
@@ -228,7 +223,7 @@ export default function DoughLogsPage() {
                         record.예상수량 != null && Number.isFinite(record.예상수량)
                           ? `${Math.round(record.예상수량).toLocaleString()}개`
                           : "—";
-                      const 수분율텍스트 = hydrationSummary(record);
+                      const 수분율텍스트 = formatDoughHydration(record);
                       return (
                         <Fragment key={date}>
                           <tr
