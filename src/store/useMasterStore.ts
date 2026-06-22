@@ -169,6 +169,8 @@ export interface DoughLogRecord {
   예상수량?: number;
   /** 도우 BOM id (dough_boms.id). 수정 시 도우 종류 드롭다운 매핑용 */
   dough_id?: string;
+  /** 수분율(%) */
+  수분율?: number;
 }
 
 /** 사용량 계산: 원료별 전일/당일 재고 다중 LOT */
@@ -542,15 +544,20 @@ function mapDoughLogFromDb(row: {
   dough_ingredients?: unknown;
   dust_oil?: unknown;
   dough_date?: string | null;
-  meta?: { target_quantity?: number; dough_id?: string } | null;
+  meta?: { target_quantity?: number; dough_id?: string; hydration_percent?: number } | null;
 }): DoughLogRecord {
   const usage_date = typeof row.usage_date === "string" ? row.usage_date.slice(0, 10) : "";
   const 반죽원료 = (row.dough_ingredients && typeof row.dough_ingredients === "object") ? row.dough_ingredients as Record<string, DoughProcessLine[]> : {};
   const 덧가루덧기름 = (row.dust_oil && typeof row.dust_oil === "object") ? row.dust_oil as Record<string, DoughProcessLine[]> : {};
   const dough_date = row.dough_date != null ? String(row.dough_date).slice(0, 10) : undefined;
-  const meta = row.meta != null && typeof row.meta === "object" ? row.meta as { target_quantity?: number; dough_id?: string } : undefined;
+  const meta = row.meta != null && typeof row.meta === "object"
+    ? row.meta as { target_quantity?: number; dough_id?: string; hydration_percent?: number }
+    : undefined;
   const 예상수량 = meta != null && typeof meta.target_quantity === "number" ? meta.target_quantity : undefined;
   const dough_id = meta != null && typeof meta.dough_id === "string" && meta.dough_id.trim() !== "" ? meta.dough_id.trim() : undefined;
+  const 수분율 = meta != null && typeof meta.hydration_percent === "number" && Number.isFinite(meta.hydration_percent)
+    ? meta.hydration_percent
+    : undefined;
   return {
     id: row.id != null ? String(row.id) : undefined,
     사용일자: usage_date,
@@ -560,6 +567,7 @@ function mapDoughLogFromDb(row: {
     반죽일자: dough_date || undefined,
     예상수량,
     dough_id: dough_id || undefined,
+    수분율,
   };
 }
 
@@ -579,9 +587,10 @@ function buildDoughLogDbPayload(usageDateKey: string, data: DoughLogRecord) {
   };
   const doughIng = sanitizeRecord(data.반죽원료 ?? {});
   const dustOil = sanitizeRecord(data.덧가루덧기름 ?? {});
-  const meta: { target_quantity?: number; dough_id?: string } = {};
+  const meta: { target_quantity?: number; dough_id?: string; hydration_percent?: number } = {};
   if (data.예상수량 != null && Number.isFinite(data.예상수량)) meta.target_quantity = Math.round(data.예상수량);
   if (data.dough_id != null && String(data.dough_id).trim() !== "") meta.dough_id = String(data.dough_id).trim();
+  if (data.수분율 != null && Number.isFinite(data.수분율)) meta.hydration_percent = Number(data.수분율);
   return {
     usage_date: usageDateKey,
     author_name: data.작성자명 != null && String(data.작성자명).trim() !== "" ? String(data.작성자명).trim() : null,

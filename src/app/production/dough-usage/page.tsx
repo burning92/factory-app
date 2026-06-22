@@ -306,7 +306,14 @@ function DoughUsageContent() {
     }
 
     const doughDateForHydration = row.반죽일자 ?? row.사용일자;
-    setHydrationPercentInput(String(getHydrationByDayOfWeek(doughDateForHydration)));
+    const hydrationFromRecord = row.수분율;
+    setHydrationPercentInput(
+      String(
+        hydrationFromRecord != null && Number.isFinite(hydrationFromRecord)
+          ? hydrationFromRecord
+          : getHydrationByDayOfWeek(doughDateForHydration)
+      )
+    );
     setHydrationAutoMessage(null);
 
     if (row.dough_id && doughBoms.length > 0) {
@@ -521,6 +528,7 @@ function DoughUsageContent() {
       반죽일자: doughDate || undefined,
       예상수량: targetQtyNum,
       dough_id: selectedDough?.id ?? undefined,
+      수분율: Number.isFinite(hydrationPercent) ? hydrationPercent : undefined,
     };
     try {
       if (isEditMode) {

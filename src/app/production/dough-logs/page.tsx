@@ -16,6 +16,12 @@ function flourSummary(record: DoughLogRecord): { totalG: number; bags: number; k
   return { totalG, bags, kg };
 }
 
+function hydrationSummary(record: DoughLogRecord): string {
+  const hydration = record.수분율;
+  if (hydration == null || !Number.isFinite(hydration)) return "—";
+  return `${hydration}%`;
+}
+
 export default function DoughLogsPage() {
   const router = useRouter();
   const { fetchDoughLogs, doughLogsMap, doughLogsLoading, deleteDoughLog, saving, error } = useMasterStore();
@@ -107,6 +113,7 @@ export default function DoughLogsPage() {
                   record.예상수량 != null && Number.isFinite(record.예상수량)
                     ? `${Math.round(record.예상수량).toLocaleString()}개`
                     : "—";
+                const 수분율텍스트 = hydrationSummary(record);
                 const 밀가루텍스트 = totalG > 0 ? `${totalG.toLocaleString()}g (약 ${bags}포대 / ${kg.toFixed(1)}kg)` : "—";
                 return (
                   <div
@@ -118,7 +125,7 @@ export default function DoughLogsPage() {
                         {record.반죽일자 ?? "—"} → {record.사용일자 ?? date}
                       </p>
                       <p className="text-xs text-slate-400 mb-1">
-                        예상수량 {예상수량포맷} · 작성자 {record.작성자명 || "—"}
+                        예상수량 {예상수량포맷} · 수분율 {수분율텍스트} · 작성자 {record.작성자명 || "—"}
                       </p>
                       <p className="text-sm font-semibold text-cyan-300 tabular-nums mb-3">
                         밀가루 사용량 {밀가루텍스트}
@@ -198,6 +205,7 @@ export default function DoughLogsPage() {
                     <col />
                     <col />
                     <col />
+                    <col className="w-24" />
                     <col className="w-28" />
                   </colgroup>
                   <thead>
@@ -208,6 +216,7 @@ export default function DoughLogsPage() {
                       <th className="px-3 py-3 text-right font-semibold text-slate-200">예상수량</th>
                       <th className="px-3 py-3 text-left font-semibold text-slate-200">작성자</th>
                       <th className="px-3 py-3 text-right font-semibold text-slate-200">밀가루 사용량</th>
+                      <th className="px-3 py-3 text-right font-semibold text-slate-200">수분율</th>
                       <th className="px-3 py-3 text-right font-semibold text-slate-200">작업</th>
                     </tr>
                   </thead>
@@ -219,6 +228,7 @@ export default function DoughLogsPage() {
                         record.예상수량 != null && Number.isFinite(record.예상수량)
                           ? `${Math.round(record.예상수량).toLocaleString()}개`
                           : "—";
+                      const 수분율텍스트 = hydrationSummary(record);
                       return (
                         <Fragment key={date}>
                           <tr
@@ -242,6 +252,7 @@ export default function DoughLogsPage() {
                             <td className="px-3 py-3 text-right text-slate-300 tabular-nums">
                               {totalG > 0 ? `${totalG.toLocaleString()}g (약 ${bags}포대 / ${kg.toFixed(1)}kg)` : "—"}
                             </td>
+                            <td className="px-3 py-3 text-right text-slate-300 tabular-nums">{수분율텍스트}</td>
                             <td className="px-3 py-3 text-right">
                               <Link
                                 href={`/production/dough-usage?date=${date}`}
@@ -261,7 +272,7 @@ export default function DoughLogsPage() {
                           </tr>
                           {isExpanded && (
                             <tr key={`${date}-detail`} className="bg-space-900/80 border-b border-slate-700">
-                              <td colSpan={7} className="px-4 py-4">
+                              <td colSpan={8} className="px-4 py-4">
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-sm">
                                   <div>
                                     <h4 className="text-slate-400 font-medium mb-2">반죽 원료 (사용량 g · LOT)</h4>
