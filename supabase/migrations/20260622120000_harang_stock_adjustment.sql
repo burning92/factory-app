@@ -10,11 +10,13 @@ SECURITY DEFINER
 STABLE
 SET search_path = public
 AS $$
-  SELECT (
-    public.is_harang_organization()
-    OR public.get_my_profile_role() = 'admin'
-  )
-  AND public.get_my_profile_role() IN ('manager', 'worker', 'assistant_manager', 'admin');
+  SELECT
+    (public.get_my_organization_code() = '000' AND public.get_my_profile_role() = 'admin')
+    OR (public.get_my_organization_code() = '100' AND public.get_my_profile_role() IN ('manager', 'admin'))
+    OR (
+      public.get_my_organization_code() = '200'
+      AND public.get_my_profile_role() IN ('worker', 'manager', 'assistant_manager', 'admin')
+    );
 $$;
 
 GRANT EXECUTE ON FUNCTION public.can_write_harang_stock_adjustment() TO authenticated;

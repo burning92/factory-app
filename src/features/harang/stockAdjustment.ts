@@ -1,6 +1,11 @@
 import type { HarangCategory } from "@/features/harang/types";
 import { supabase } from "@/lib/supabase";
 
+function throwSupabaseError(error: { message?: string } | null, fallback: string): never {
+  const msg = error?.message?.trim();
+  throw new Error(msg || fallback);
+}
+
 export type StockAdjustmentType = "production_cycle" | "packaging";
 export type StockAdjustmentStatus = "draft" | "confirmed";
 
@@ -1015,19 +1020,19 @@ export async function saveCycleDraft(input: SaveCycleDraftInput): Promise<string
       .update(payload)
       .eq("id", sessionId)
       .eq("status", "draft");
-    if (error) throw error;
+    if (error) throwSupabaseError(error, "조정 세션 저장에 실패했습니다.");
     const { error: delErr } = await supabase
       .from("harang_stock_adjustment_production_targets")
       .delete()
       .eq("session_id", sessionId);
-    if (delErr) throw delErr;
+    if (delErr) throwSupabaseError(delErr, "분배 대상 저장에 실패했습니다.");
   } else {
     const { data, error } = await supabase
       .from("harang_stock_adjustment_sessions")
       .insert(payload)
       .select("id")
       .single();
-    if (error) throw error;
+    if (error) throwSupabaseError(error, "조정 세션 생성에 실패했습니다.");
     sessionId = String(data.id);
   }
 
@@ -1038,14 +1043,14 @@ export async function saveCycleDraft(input: SaveCycleDraftInput): Promise<string
         production_header_id,
       })),
     );
-    if (insErr) throw insErr;
+    if (insErr) throwSupabaseError(insErr, "분배 대상 저장에 실패했습니다.");
   }
 
   const { error: delLotErr } = await supabase
     .from("harang_stock_adjustment_lot_physical")
     .delete()
     .eq("session_id", sessionId);
-  if (delLotErr) throw delLotErr;
+  if (delLotErr) throwSupabaseError(delLotErr, "실사 수량 임시저장에 실패했습니다.");
 
   if (input.lot_physical && input.lot_physical.length > 0) {
     const { error: lotInsErr } = await supabase.from("harang_stock_adjustment_lot_physical").insert(
@@ -1055,7 +1060,7 @@ export async function saveCycleDraft(input: SaveCycleDraftInput): Promise<string
         physical_qty: row.physical_qty,
       })),
     );
-    if (lotInsErr) throw lotInsErr;
+    if (lotInsErr) throwSupabaseError(lotInsErr, "실사 수량 임시저장에 실패했습니다.");
   }
 
   return sessionId;
