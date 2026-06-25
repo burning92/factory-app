@@ -75,10 +75,12 @@ export async function fetchCycleSurveyChecklistRows(
 
   const rawMaterials = rawMaterialsRes.data ?? [];
   for (const material of materials) {
-    for (const id of resolveEquivalentRawMaterialIds(
-      material.material_name,
-      material.material_id,
-      rawMaterials,
+    for (const id of Array.from(
+      resolveEquivalentRawMaterialIds(
+        material.material_name,
+        material.material_id,
+        rawMaterials,
+      ),
     )) {
       neededItemIds.add(id);
     }
@@ -146,10 +148,10 @@ export async function fetchCycleSurveyChecklistRows(
     };
 
     const lotDates = new Set<string>();
-    for (const lotDate of cycleByDate.keys()) {
+    for (const lotDate of Array.from(cycleByDate.keys())) {
       if (isSurveyableLotDate(lotDate)) lotDates.add(lotDate);
     }
-    for (const [lotDate, stock] of stockByDate.entries()) {
+    for (const [lotDate, stock] of Array.from(stockByDate.entries())) {
       if (stock.survey > 0 && isSurveyableLotDate(lotDate)) lotDates.add(lotDate);
     }
 
