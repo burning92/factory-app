@@ -15,6 +15,7 @@ const PLANNING_NEAR_EXPIRY_SEEN_STORAGE_KEY = "planning-near-expiry-alert-seen";
 const HARANG_INVENTORY_SUBMENU = [
   { href: "/harang/inventory", label: "원부자재 재고현황" },
   { href: "/harang/inventory/finished-products", label: "완제품 재고현황" },
+  { href: "/harang/stock-adjustment", label: "실사 재고조정", dividerBefore: true },
 ] as const;
 
 
@@ -139,7 +140,7 @@ export default function Header() {
         { href: "/", label: "홈" },
         { href: "/harang/inbound", label: "입고관리" },
         { href: "/harang/outbound", label: "출고관리" },
-        { href: "/harang/inventory", label: "재고현황" },
+        { href: "/harang/inventory", label: "재고관리" },
         { href: "/harang/production-requests", label: "생산요청" },
         { href: "/harang/production-input", label: "생산입력" },
         ...(isAdmin ? [{ href: "/harang/admin", label: "마스터관리" }] : []),
@@ -285,7 +286,11 @@ export default function Header() {
         {showDesktopCategoryMenu && (viewIsHarang ? (
           desktopNavItems.map(({ href, label }) => {
             const isInventoryMenu = href === "/harang/inventory";
-            const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
+            const isActive =
+              isInventoryMenu
+                ? pathname.startsWith("/harang/inventory") ||
+                  pathname.startsWith("/harang/stock-adjustment")
+                : pathname === href || (href !== "/" && pathname.startsWith(href));
 
             if (!isInventoryMenu) {
               return (
@@ -338,18 +343,22 @@ export default function Header() {
                   >
                     <div className="rounded-lg border border-slate-600 bg-slate-900 py-2 shadow-2xl shadow-black/50 ring-1 ring-slate-700/80">
                       {HARANG_INVENTORY_SUBMENU.map((item) => (
-                        <Link
-                          key={item.href}
-                          href={item.href}
-                          className={`block px-4 py-2 text-sm transition-colors ${
-                            pathname === item.href || pathname.startsWith(item.href + "/")
-                              ? "text-cyan-300 bg-cyan-500/10"
-                              : "text-slate-300 hover:bg-slate-700/80 hover:text-slate-100"
-                          }`}
-                          role="menuitem"
-                        >
-                          {item.label}
-                        </Link>
+                        <div key={item.href}>
+                          {"dividerBefore" in item && item.dividerBefore ? (
+                            <div className="my-1.5 border-t border-slate-600/70" role="presentation" />
+                          ) : null}
+                          <Link
+                            href={item.href}
+                            className={`block px-4 py-2 text-sm transition-colors ${
+                              pathname === item.href || pathname.startsWith(item.href + "/")
+                                ? "text-cyan-300 bg-cyan-500/10"
+                                : "text-slate-300 hover:bg-slate-700/80 hover:text-slate-100"
+                            }`}
+                            role="menuitem"
+                          >
+                            {item.label}
+                          </Link>
+                        </div>
                       ))}
                     </div>
                   </div>

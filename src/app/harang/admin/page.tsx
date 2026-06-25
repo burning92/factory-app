@@ -1,10 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { Box, Package, Layers3 } from "lucide-react";
+import { Box, Package, Layers3, Wrench } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 const ITEMS = [
+  {
+    href: "/harang/admin/inventory-repair",
+    label: "재고 데이터 정합",
+    description: "재고조정 되돌리기 · 원장↔생산입고 LOT 재연결 (작업 1)",
+    Icon: Wrench,
+  },
   {
     href: "/harang/admin/raw-materials",
     label: "하랑 원재료 마스터",
@@ -51,6 +57,16 @@ export default function HarangAdminHubPage() {
             </li>
           ))}
         </ul>
+
+        <p className="mt-8 text-xs text-slate-500">
+          <Link href="/harang/admin/inventory-repair" className="text-cyan-700 hover:text-cyan-900 underline">
+            재고 데이터 정합 (작업 1)
+          </Link>
+          {" · "}
+          <Link href="/harang/admin/production-lot-audit" className="text-slate-600 hover:text-slate-900 underline">
+            과거 생산입고 LOT 이력
+          </Link>
+        </p>
       </div>
     </div>
   );

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Factory, Inbox, Layers, ListOrdered, Settings, User } from "lucide-react";
+import { Factory, Inbox, Layers, ListOrdered, Scale, Settings, User } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 const HARANG_PEOPLE_ICON_SRC = "/harang/people-icon.png";
@@ -82,6 +82,12 @@ export default function DashboardPage() {
         Icon: ListOrdered,
       },
       { href: "/harang/production-input", title: "생산입력", hint: "생산·소모 등록", Icon: Factory },
+      {
+        href: "/harang/stock-adjustment",
+        title: "재고조정",
+        hint: "실사·분배·부자재",
+        Icon: Scale,
+      },
       { href: "/account", title: "계정", hint: "비밀번호·로그아웃", Icon: User },
     ];
     if (isHarangAdmin) {

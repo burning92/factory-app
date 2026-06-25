@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { HarangCategory, HarangInventoryLot, HarangInventoryTransaction } from "@/features/harang/types";
+import { fetchLotStockAsOfMap, isOnOrBeforeAsOf, todayIsoDate } from "@/features/harang/inventoryAsOf";
 
 type StockRow = {
   lot_id: string;
@@ -103,16 +105,19 @@ function groupRowsByItem(rows: StockRow[]): ItemStockGroup[] {
 }
 
 export default function HarangInventoryPage() {
+  const searchParams = useSearchParams();
   const [rows, setRows] = useState<StockRow[]>([]);
   const [category, setCategory] = useState<"" | InventoryViewCategory>("");
   const [keyword, setKeyword] = useState("");
   const [showDepleted, setShowDepleted] = useState(false);
+  const [asOfDate, setAsOfDate] = useState(() => searchParams.get("asOf")?.slice(0, 10) ?? "");
   const [loading, setLoading] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [lotsRes, usageRes] = await Promise.all([
+    const cut = asOfDate.slice(0, 10);
+    const [lotsRes, usageRes, stockAsOf] = await Promise.all([
       supabase
         .from("harang_inventory_lots")
         .select(`
@@ -125,13 +130,16 @@ export default function HarangInventoryPage() {
         .eq("tx_type", "usage")
         .order("tx_date", { ascending: false })
         .order("created_at", { ascending: false }),
+      cut ? fetchLotStockAsOfMap(cut) : Promise.resolve(null),
     ]);
     setLoading(false);
     if (lotsRes.error) return alert(lotsRes.error.message);
     if (usageRes.error) return alert(usageRes.error.message);
 
     const lots = (lotsRes.data ?? []) as HarangInventoryLot[];
-    const usageTx = (usageRes.data ?? []) as HarangInventoryTransaction[];
+    const usageTx = ((usageRes.data ?? []) as HarangInventoryTransaction[]).filter((tx) =>
+      isOnOrBeforeAsOf(cut, tx.tx_date),
+    );
     const usageMap = new Map<string, string>();
     for (const tx of usageTx) {
       const key = String(tx.lot_id ?? "");
@@ -141,6 +149,9 @@ export default function HarangInventoryPage() {
 
     const mappedRows = lots.map((lot) => {
       const shownUnit = displayUnit(lot.category, lot.item_name);
+      const qty = cut
+        ? (stockAsOf?.get(lot.id) ?? 0)
+        : Number(lot.current_quantity ?? 0);
       return {
         lot_id: lot.id,
         lot_date: lot.lot_date,
@@ -149,13 +160,13 @@ export default function HarangInventoryPage() {
         item_code: lot.item_code,
         item_name: lot.item_name,
         unit: shownUnit,
-        current_qty: Number(lot.current_quantity ?? 0),
+        current_qty: qty,
         inbound_date: lot.inbound_date ?? null,
         recent_usage_date: usageMap.get(lot.id) ?? null,
       } as StockRow;
     });
     setRows(mappedRows);
-  }, []);
+  }, [asOfDate]);
 
   useEffect(() => {
     void loadData();
@@ -211,49 +222,91 @@ export default function HarangInventoryPage() {
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">원부자재 재고현황</h1>
           <p className="mt-1 text-sm text-slate-600">
-            기본적으로 잔량이 있는 품목·LOT만 표시합니다. 소진된 LOT는 품목 상세에서 입출고 이력을 확인할 수 있습니다.
+            기본적으로 잔량이 있는 품목·LOT만 표시합니다. 기준일을 선택하면 그날 포함 당시 재고(원장 역산)를
+            봅니다. 재고조정 실사일과 맞추면 작업 3에 활용할 수 있습니다.
           </p>
         </div>
-
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <select
-              value={category}
-              onChange={(e) => setCategory((e.target.value || "") as "" | InventoryViewCategory)}
-              className="px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 text-sm"
-            >
-              <option value="">분류 전체</option>
-              <option value="parbake">파베이크</option>
-              <option value="raw_material">원재료</option>
-              <option value="packaging_material">부자재</option>
-            </select>
-            <input
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              placeholder="품목명/코드 검색 (소진 품목 포함)"
-              className="px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 text-sm"
-            />
-            <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm cursor-pointer">
+        <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-end">
+            <div className="w-full sm:w-[11.5rem] shrink-0">
+              <label
+                htmlFor="inventory-as-of-date"
+                className="mb-1.5 block text-xs font-medium text-slate-700"
+              >
+                기준일
+                <span className="ml-1 font-normal text-slate-500">(비우면 현재)</span>
+              </label>
               <input
-                type="checkbox"
-                checked={showDepleted}
-                onChange={(e) => setShowDepleted(e.target.checked)}
-                className="rounded border-slate-300"
+                id="inventory-as-of-date"
+                type="date"
+                value={asOfDate}
+                max={todayIsoDate()}
+                onChange={(e) => setAsOfDate(e.target.value)}
+                className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900"
               />
-              소진 LOT 포함
-            </label>
-            <button
-              type="button"
-              onClick={() => {
-                setCategory("");
-                setKeyword("");
-                setShowDepleted(false);
-              }}
-              className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm"
-            >
-              필터 초기화
-            </button>
+            </div>
+
+            <div className="w-full sm:w-[9.5rem] shrink-0">
+              <label htmlFor="inventory-category" className="mb-1.5 block text-xs font-medium text-slate-700">
+                분류
+              </label>
+              <select
+                id="inventory-category"
+                value={category}
+                onChange={(e) => setCategory((e.target.value || "") as "" | InventoryViewCategory)}
+                className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900"
+              >
+                <option value="">분류 전체</option>
+                <option value="parbake">파베이크</option>
+                <option value="raw_material">원재료</option>
+                <option value="packaging_material">부자재</option>
+              </select>
+            </div>
+
+            <div className="min-w-0 flex-1 lg:min-w-[14rem]">
+              <label htmlFor="inventory-keyword" className="mb-1.5 block text-xs font-medium text-slate-700">
+                검색
+              </label>
+              <input
+                id="inventory-keyword"
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                placeholder="품목명 / 코드 (소진 품목 포함)"
+                className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-end gap-3 sm:gap-4">
+              <label className="flex h-10 cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 text-sm text-slate-800">
+                <input
+                  type="checkbox"
+                  checked={showDepleted}
+                  onChange={(e) => setShowDepleted(e.target.checked)}
+                  className="size-4 rounded border-slate-300 text-cyan-600"
+                />
+                소진 LOT 포함
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setCategory("");
+                  setKeyword("");
+                  setShowDepleted(false);
+                  setAsOfDate("");
+                }}
+                className="h-10 shrink-0 rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                필터 초기화
+              </button>
+            </div>
           </div>
+
+          {asOfDate ? (
+            <p className="mt-3 text-xs text-cyan-900 bg-cyan-50 border border-cyan-100 rounded-lg px-3 py-2">
+              <span className="font-medium">조회 기준:</span>{" "}
+              {asOfDate.replaceAll("-", ".")} 포함 시점 재고 (원장 역산)
+            </p>
+          ) : null}
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -285,7 +338,8 @@ export default function HarangInventoryPage() {
                 {!loading &&
                   itemGroups.map((group) => {
                     const isExpanded = expandedItems.has(group.group_key);
-                    const detailHref = `/harang/inventory/${group.category}/${group.item_id}?itemName=${encodeURIComponent(group.item_name)}`;
+                    const asOfQuery = asOfDate ? `&asOf=${encodeURIComponent(asOfDate)}` : "";
+                    const detailHref = `/harang/inventory/${group.category}/${group.item_id}?itemName=${encodeURIComponent(group.item_name)}${asOfQuery}`;
                     return (
                       <Fragment key={group.group_key}>
                         <tr

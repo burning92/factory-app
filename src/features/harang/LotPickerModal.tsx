@@ -25,6 +25,12 @@ function isParbakeDoughName(name: string): boolean {
   return name.replace(/\s/g, "").includes("파베이크도우");
 }
 
+function isLotEligibleForProduction(lot: HarangInventoryLot, productionDate?: string | null): boolean {
+  if (!productionDate) return true;
+  if (!lot.inbound_date) return true;
+  return lot.inbound_date <= productionDate;
+}
+
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -36,6 +42,8 @@ type Props = {
   bomRequiredQty?: number | null;
   /** 표시 단위(예: g, EA). 없으면 재고 LOT의 unit을 쓸 수 있음 */
   bomUnit?: string | null;
+  /** 생산일. 입고일이 생산일보다 늦은 LOT는 선택 불가 */
+  productionDate?: string | null;
   /** 적용 시 LOT 입력 합계가 사용량이 되며, 표시용 날짜 요약 문자열이 함께 전달됩니다. */
   onApply: (allocations: LotAllocation[], lotDatesSummary: string) => void;
 };
@@ -49,6 +57,7 @@ export default function LotPickerModal({
   initialAllocations,
   bomRequiredQty,
   bomUnit,
+  productionDate,
   onApply,
 }: Props) {
   const [lots, setLots] = useState<HarangInventoryLot[]>([]);
@@ -165,8 +174,19 @@ export default function LotPickerModal({
   const canUseBoxInput = isParbake || (isRawWeightMode && boxWeightG != null && boxWeightG > 0);
   const canUseUnitInput = isParbake || (isRawWeightMode && unitWeightG != null && unitWeightG > 0);
 
+  const visibleLots = useMemo(() => {
+    if (!productionDate) return lots;
+    const allocatedIds = new Set(
+      initialAllocations.filter((a) => a.quantity_used > 0).map((a) => a.lot_id),
+    );
+    return lots.filter(
+      (lot) => isLotEligibleForProduction(lot, productionDate) || allocatedIds.has(lot.id),
+    );
+  }, [lots, productionDate, initialAllocations]);
+
   const rows = useMemo(() => {
-    return lots.map((lot) => {
+    return visibleLots.map((lot) => {
+      const eligible = isLotEligibleForProduction(lot, productionDate);
       const raw = inputs[lot.id] ?? "";
       const boxRaw = boxInputs[lot.id] ?? "";
       const unitRaw = unitInputs[lot.id] ?? "";
@@ -188,9 +208,20 @@ export default function LotPickerModal({
             ? qtyN
             : 0;
       const after = Math.max(0, Number(lot.current_quantity) - safeQty);
-      return { lot, inputRaw: raw, boxRaw, unitRaw, remainderRaw, qty: safeQty, after };
+      return { lot, eligible, inputRaw: raw, boxRaw, unitRaw, remainderRaw, qty: safeQty, after };
     });
-  }, [lots, inputs, boxInputs, unitInputs, remainderInputs, isParbake, isRawWeightMode, boxWeightG, unitWeightG]);
+  }, [
+    visibleLots,
+    productionDate,
+    inputs,
+    boxInputs,
+    unitInputs,
+    remainderInputs,
+    isParbake,
+    isRawWeightMode,
+    boxWeightG,
+    unitWeightG,
+  ]);
 
   const setQtyForLot = (lotId: string, value: string) => {
     setInputs((prev) => ({ ...prev, [lotId]: value }));
@@ -259,6 +290,12 @@ export default function LotPickerModal({
     const allocations: LotAllocation[] = [];
     for (const r of rows) {
       if (r.qty > 0) {
+        if (!r.eligible) {
+          alert(
+            `생산일(${productionDate})보다 늦게 입고된 LOT는 사용할 수 없습니다: ${formatLotNo(r.lot.lot_date)} (입고 ${r.lot.inbound_date})`,
+          );
+          return;
+        }
         if (r.qty > Number(r.lot.current_quantity)) {
           alert(`재고를 초과했습니다: ${formatLotNo(r.lot.lot_date)}`);
           return;
@@ -319,16 +356,23 @@ export default function LotPickerModal({
           </div>
         )}
 
-        <div className="px-4 py-2 border-b border-slate-100 flex items-center gap-2 text-xs text-slate-600">
-          <Search className="w-4 h-4 shrink-0" />
-          <span>목록은 유통기한·제조일자(LOT) 순입니다.</span>
+        <div className="px-4 py-2 border-b border-slate-100 flex flex-col gap-1 text-xs text-slate-600">
+          <div className="flex items-center gap-2">
+            <Search className="w-4 h-4 shrink-0" />
+            <span>목록은 유통기한·제조일자(LOT) 순입니다.</span>
+          </div>
+          {productionDate ? (
+            <p className="text-slate-600">
+              생산일({productionDate}) 이후 입고된 LOT는 선택할 수 없습니다.
+            </p>
+          ) : null}
         </div>
         <div className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-auto">
           {loading && <p className="p-6 text-center text-sm text-slate-500">불러오는 중…</p>}
-          {!loading && lots.length === 0 && (
+          {!loading && visibleLots.length === 0 && (
             <p className="p-6 text-center text-sm text-slate-600">사용 가능한 재고 LOT가 없습니다.</p>
           )}
-          {!loading && lots.length > 0 && (
+          {!loading && visibleLots.length > 0 && (
             <table
               className={`w-full ${isParbake ? "min-w-[920px]" : isRawWeightMode ? "min-w-[1080px]" : "min-w-[1020px]"} text-sm`}
             >
@@ -352,9 +396,19 @@ export default function LotPickerModal({
                 </tr>
               </thead>
               <tbody>
-                {rows.map(({ lot, inputRaw, boxRaw, unitRaw, remainderRaw, qty, after }) => (
-                  <tr key={lot.id} className="border-b border-slate-100">
-                    <td className="px-3 py-2 text-slate-900">{formatLotNo(lot.lot_date)}</td>
+                {rows.map(({ lot, eligible, inputRaw, boxRaw, unitRaw, remainderRaw, qty, after }) => (
+                  <tr
+                    key={lot.id}
+                    className={`border-b border-slate-100 ${eligible ? "" : "bg-amber-50"}`}
+                  >
+                    <td className="px-3 py-2 text-slate-900">
+                      <div>{formatLotNo(lot.lot_date)}</div>
+                      {!eligible && lot.inbound_date ? (
+                        <div className="text-[11px] text-amber-800">
+                          입고 {lot.inbound_date.replaceAll("-", ".")} · 생산일 이후 입고
+                        </div>
+                      ) : null}
+                    </td>
                     <td className="px-3 py-2 text-right tabular-nums text-slate-800">
                       {Number(lot.current_quantity).toLocaleString()}
                       <span className="ml-0.5 text-slate-500">{lot.unit}</span>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Box, ClipboardList, Layers, ListOrdered, Settings, ChevronRight, User } from "lucide-react";
+import { Box, ClipboardList, Layers, ListOrdered, Scale, Settings, ChevronRight, User } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 const HUB_ITEMS = [
@@ -46,6 +46,12 @@ const HUB_ITEMS = [
     label: "생산입력",
     description: "생산입고 등록 및 사용 LOT 상세 확인",
     Icon: ClipboardList,
+  },
+  {
+    href: "/harang/stock-adjustment",
+    label: "실사 재고조정",
+    description: "생산 사이클·부자재 실사 후 재고 맞춤",
+    Icon: Scale,
   },
   {
     href: "/account",
