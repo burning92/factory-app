@@ -18,6 +18,11 @@ const HARANG_INVENTORY_SUBMENU = [
   { href: "/harang/stock-adjustment", label: "실사 재고조정", dividerBefore: true },
 ] as const;
 
+const HARANG_DEFECT_SUBMENU = [
+  { href: "/harang/defect-disposal", label: "불량처리조회" },
+  { href: "/harang/defect-disposal/new", label: "불량처리입력" },
+] as const;
+
 
 type DropdownItem = { href: string; label: string } | { label: string; comingSoon: true };
 
@@ -87,7 +92,7 @@ const WORKER_DESKTOP_MATERIALS: DropdownItem[] = [
   { href: "/production/outbound-history", label: "생산 출고 현황" },
 ];
 
-type DropdownKey = "production" | "materials" | "daily" | "management";
+type DropdownKey = "production" | "materials" | "daily" | "management" | "defect";
 
 export default function Header() {
   const [activeDropdown, setActiveDropdown] = useState<DropdownKey | null>(null);
@@ -141,6 +146,7 @@ export default function Header() {
         { href: "/harang/inbound", label: "입고관리" },
         { href: "/harang/outbound", label: "출고관리" },
         { href: "/harang/inventory", label: "재고관리" },
+        { href: "/harang/defect-disposal", label: "불량처리" },
         { href: "/harang/production-requests", label: "생산요청" },
         { href: "/harang/production-input", label: "생산입력" },
         ...(isAdmin ? [{ href: "/harang/admin", label: "마스터관리" }] : []),
@@ -203,7 +209,7 @@ export default function Header() {
   const scheduleHarangInventoryClose = () => {
     cancelHarangInventoryClose();
     harangInventoryCloseTimeoutRef.current = window.setTimeout(() => {
-      setActiveDropdown((prev) => (prev === "materials" ? null : prev));
+      setActiveDropdown((prev) => (prev === "materials" || prev === "defect" ? null : prev));
       harangInventoryCloseTimeoutRef.current = null;
     }, 120);
   };
@@ -286,13 +292,15 @@ export default function Header() {
         {showDesktopCategoryMenu && (viewIsHarang ? (
           desktopNavItems.map(({ href, label }) => {
             const isInventoryMenu = href === "/harang/inventory";
-            const isActive =
-              isInventoryMenu
-                ? pathname.startsWith("/harang/inventory") ||
-                  pathname.startsWith("/harang/stock-adjustment")
+            const isDefectMenu = href === "/harang/defect-disposal";
+            const isActive = isInventoryMenu
+              ? pathname.startsWith("/harang/inventory") ||
+                pathname.startsWith("/harang/stock-adjustment")
+              : isDefectMenu
+                ? pathname.startsWith("/harang/defect-disposal")
                 : pathname === href || (href !== "/" && pathname.startsWith(href));
 
-            if (!isInventoryMenu) {
+            if (!isInventoryMenu && !isDefectMenu) {
               return (
                 <Link
                   key={href}
@@ -306,14 +314,16 @@ export default function Header() {
               );
             }
 
-            const isOpen = activeDropdown === "materials";
+            const dropdownKey: DropdownKey = isInventoryMenu ? "materials" : "defect";
+            const submenu = isInventoryMenu ? HARANG_INVENTORY_SUBMENU : HARANG_DEFECT_SUBMENU;
+            const isOpen = activeDropdown === dropdownKey;
             return (
               <div
                 key={href}
                 className="relative"
                 onMouseEnter={() => {
                   cancelHarangInventoryClose();
-                  setActiveDropdown("materials");
+                  setActiveDropdown(dropdownKey);
                 }}
                 onMouseLeave={() => {
                   scheduleHarangInventoryClose();
@@ -328,7 +338,7 @@ export default function Header() {
                   aria-expanded={isOpen}
                   onFocus={() => {
                     cancelHarangInventoryClose();
-                    setActiveDropdown("materials");
+                    setActiveDropdown(dropdownKey);
                   }}
                   onBlur={() => {
                     scheduleHarangInventoryClose();
@@ -342,7 +352,7 @@ export default function Header() {
                     role="menu"
                   >
                     <div className="rounded-lg border border-slate-600 bg-slate-900 py-2 shadow-2xl shadow-black/50 ring-1 ring-slate-700/80">
-                      {HARANG_INVENTORY_SUBMENU.map((item) => (
+                      {submenu.map((item) => (
                         <div key={item.href}>
                           {"dividerBefore" in item && item.dividerBefore ? (
                             <div className="my-1.5 border-t border-slate-600/70" role="presentation" />
@@ -350,7 +360,18 @@ export default function Header() {
                           <Link
                             href={item.href}
                             className={`block px-4 py-2 text-sm transition-colors ${
-                              pathname === item.href || pathname.startsWith(item.href + "/")
+                              (() => {
+                                if (item.href === "/harang/defect-disposal") {
+                                  return (
+                                    pathname === item.href ||
+                                    (pathname.startsWith("/harang/defect-disposal/") &&
+                                      !pathname.startsWith("/harang/defect-disposal/new"))
+                                  );
+                                }
+                                return (
+                                  pathname === item.href || pathname.startsWith(`${item.href}/`)
+                                );
+                              })()
                                 ? "text-cyan-300 bg-cyan-500/10"
                                 : "text-slate-300 hover:bg-slate-700/80 hover:text-slate-100"
                             }`}

@@ -54,6 +54,12 @@ const HUB_ITEMS = [
     Icon: Scale,
   },
   {
+    href: "/harang/defect-disposal",
+    label: "불량처리",
+    description: "폐기·불량 처리 조회 및 입력",
+    Icon: Scale,
+  },
+  {
     href: "/account",
     label: "계정",
     description: "로그아웃 및 비밀번호 변경",

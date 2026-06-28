@@ -85,7 +85,7 @@ export interface HarangInventoryTransaction {
   item_name: string;
   lot_id: string | null;
   tx_date: string;
-  tx_type: "inbound" | "usage" | "adjustment";
+  tx_type: "inbound" | "usage" | "adjustment" | "disposal";
   reference_no: string | null;
   quantity_delta: number;
   unit: string;
