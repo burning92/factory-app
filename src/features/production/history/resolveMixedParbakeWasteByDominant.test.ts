@@ -100,6 +100,32 @@ describe("resolveMixedParbakeWasteByDominantProduction", () => {
     ]);
   });
 
+  it("미니-only + standard lane → 일반 베샤멜 파베이크", () => {
+    const summaries = [
+      makeSummary({
+        displayProductLabel: "허니고르곤졸라 - 미니",
+        baseProductName: "허니고르곤졸라",
+        productStandardName: "미니",
+        finishedQty: 2412,
+        inferredParbakeName: "베샤멜 파베이크",
+      }),
+    ];
+    const state = emptyState({
+      productOutputs: [],
+      parbakeProductionByBase: [
+        { parbakeName: "베샤멜 파베이크", astronautQty: 1529, saleQty: 0 },
+      ],
+      astronautParbakeQty: 1529,
+      saleParbakeQty: 0,
+      astronautParbakeSizeLane: "standard",
+      extraParbakes: [],
+    });
+    const lines = buildParbakePurposeProductionLines(state, summaries, ["베샤멜 파베이크"]);
+    expect(lines).toEqual([
+      { role: "astronaut", parbakeName: "베샤멜 파베이크", qty: 1529 },
+    ]);
+  });
+
   it("일반+미니 혼합 + mini lane → 미니 토마토 파베이크", () => {
     const summaries = [
       makeSummary({

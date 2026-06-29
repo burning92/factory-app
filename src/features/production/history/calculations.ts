@@ -422,7 +422,7 @@ export function getDateParbakeTypes(productSummaries: ProductSummary[]): string[
   return Array.from(set);
 }
 
-/** 추가 파베이크 1행 → resolved (소스 베이스 확정) */
+/** 추가 파베이크 1행 → resolved (소스 베이스·규격 확정) */
 function resolveOneExtraParbakeRow(
   row: DateGroupInput["secondClosure"]["extraParbakes"][number],
   parbakeName: string,
@@ -431,13 +431,29 @@ function resolveOneExtraParbakeRow(
   const qty = toNum(row.qty);
   const manufacturedDate = extraParbakeManufacturedDateFromRow(row);
   const expiryDate = parbakeExpiryFromManufacturedDate(manufacturedDate) || "—";
-  const candidates = productSummaries.filter((p) => {
+  const journalParbakeName = resolveParbakeUseMini(productSummaries, row.sizeLane)
+    ? formatMiniParbakeJournalName(parbakeName)
+    : parbakeName;
+  let candidates = productSummaries.filter((p) => {
     if (!p.participatesInParbakeTypeInference) return false;
     if (p.inferredParbakeName === parbakeName) return true;
     // 파베이크사용 등 BOM 추론 실패 시 수동 선택 베이스와 연결
     if (p.usesStoredParbake && !p.inferredParbakeName) return true;
     return false;
   });
+  if (row.sizeLane === "mini") {
+    const mini = candidates.filter((p) => isMiniProductStandard(p.productStandardName));
+    if (mini.length > 0) candidates = mini;
+  } else if (row.sizeLane === "standard") {
+    const regular = candidates.filter((p) => !isMiniProductStandard(p.productStandardName));
+    if (regular.length > 0) candidates = regular;
+  } else if (resolveParbakeUseMini(productSummaries, row.sizeLane)) {
+    const mini = candidates.filter((p) => isMiniProductStandard(p.productStandardName));
+    if (mini.length > 0) candidates = mini;
+  } else {
+    const regular = candidates.filter((p) => !isMiniProductStandard(p.productStandardName));
+    if (regular.length > 0) candidates = regular;
+  }
   const productCandidates = candidates.map((p) => ({
     productKey: p.productKey,
     productName: p.productName,
@@ -447,11 +463,11 @@ function resolveOneExtraParbakeRow(
   }));
   const displayLabel =
     qty > 0
-      ? `${parbakeName} ${qty}개 (${expiryDate})`
-      : `${parbakeName} 0개 (${expiryDate})`;
+      ? `${journalParbakeName} ${qty}개 (${expiryDate})`
+      : `${journalParbakeName} 0개 (${expiryDate})`;
   return {
     extraParbakeId: row.extraParbakeId,
-    parbakeName,
+    parbakeName: journalParbakeName,
     qty,
     manufacturedDate,
     expiryDate,
@@ -511,6 +527,27 @@ export function formatMiniParbakeJournalName(baseParbakeName: string): string {
   return `미니 ${base}`;
 }
 
+/** 2차 마감 파베이크 규격: 명시 선택 우선, 미선택 시 미니-only일 때만 미니로 추론 */
+export function resolveParbakeUseMini(
+  productSummaries: ProductSummary[],
+  sizeLane: AstronautParbakeSizeLane | "" | undefined
+): boolean {
+  if (sizeLane === "mini") return true;
+  if (sizeLane === "standard") return false;
+  return summarizeDoughPizzaProductionBySize(productSummaries).isMiniOnly;
+}
+
+/** UI 셀렉트 표시용 기본값 (저장값 없을 때 완제품 규격에서 추론) */
+export function inferParbakeSizeLaneDisplayDefault(
+  sizeSummary: DoughPizzaSizeProductionSummary | null | undefined,
+  saved: AstronautParbakeSizeLane | "" | undefined
+): AstronautParbakeSizeLane | "" {
+  if (saved === "standard" || saved === "mini") return saved;
+  if (sizeSummary?.isMiniOnly) return "mini";
+  if (sizeSummary?.isRegularOnly) return "standard";
+  return "";
+}
+
 /** 우주인·판매용 필드 수량의 생산일지 파베이크 이름 (베이스 × 일반/미니) */
 export function resolveParbakeJournalLabelForRole(
   role: "astronaut" | "sale",
@@ -518,14 +555,7 @@ export function resolveParbakeJournalLabelForRole(
   productSummaries: ProductSummary[],
   sizeLane: AstronautParbakeSizeLane | "" | undefined
 ): string {
-  const summary = summarizeDoughPizzaProductionBySize(productSummaries);
-  const useMini =
-    summary.isMiniOnly ||
-    (summary.hasMixedMiniAndRegular && sizeLane === "mini");
-  if (role === "astronaut") {
-    if (useMini) return formatMiniParbakeJournalName(baseParbakeName);
-    return baseParbakeName;
-  }
+  const useMini = resolveParbakeUseMini(productSummaries, sizeLane);
   if (useMini) return formatMiniParbakeJournalName(baseParbakeName);
   return baseParbakeName;
 }

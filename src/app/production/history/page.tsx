@@ -11,6 +11,9 @@ import {
   mergeProductionParbakeTypes,
   resolveMixedParbakeWasteByDominantProduction,
   summarizeDoughPizzaProductionBySize,
+  inferParbakeSizeLaneDisplayDefault,
+  resolveParbakeUseMini,
+  formatMiniParbakeJournalName,
   resolveParbakeJournalLabelForRole,
   type ComputedResult,
 } from "@/features/production/history/calculations";
@@ -165,6 +168,7 @@ function migrateSingleState(cached: DateGroupState, defaultAuthor?: string): Dat
           extraParbakeId: r.extraParbakeId,
           qty: r.qty,
           parbakeName: r.parbakeName ?? "",
+          sizeLane: r.sizeLane ?? "",
           manufacturedDate: extraParbakeManufacturedDateFromRow(r),
         })),
       }
@@ -370,6 +374,8 @@ export type ExtraParbakeRow = {
   manufacturedDate: string;
   /** 추가 파베이크 소스 베이스 (토마토/베샤멜 등) */
   parbakeName: string;
+  /** 보관용 파베이크 규격(일반/미니) */
+  sizeLane?: "standard" | "mini" | "";
 };
 
 /** 혼합 베이스 날: 파베이크 종류별 폐기량(개). 자동 분배 없이 사용자 입력만 사용 */
@@ -389,9 +395,9 @@ export type SecondClosure = {
   astronautParbakeQty: number | "";
   saleParbakeQty: number | "";
   parbakeProductionByBase?: ParbakeProductionByBaseRow[];
-  /** 일반+미니 혼합일: 우주인 파베이크 규격 (생산일지 표기) */
+  /** 파베이크 규격(일반/미니). 미선택 시 미니-only 완제품일 때만 미니로 추론 */
   astronautParbakeSizeLane?: "standard" | "mini" | "";
-  /** 일반+미니 혼합일: 판매용 파베이크 규격 */
+  /** 판매용 파베이크 규격(일반/미니) */
   saleParbakeSizeLane?: "standard" | "mini" | "";
   extraParbakes: ExtraParbakeRow[];
   /** 베이스 2종 이상인 날만 사용. 타입별 파베이크 폐기량(개) */
@@ -992,8 +998,8 @@ function createInitialDateGroupState(
     parbakeProductionByBase: [],
     selectedParbakeBases: [],
     extraParbakes: [
-      { extraParbakeId: generateId(), qty: "", manufacturedDate: "", parbakeName: "" },
-      { extraParbakeId: generateId(), qty: "", manufacturedDate: "", parbakeName: "" },
+      { extraParbakeId: generateId(), qty: "", manufacturedDate: "", parbakeName: "", sizeLane: "" },
+      { extraParbakeId: generateId(), qty: "", manufacturedDate: "", parbakeName: "", sizeLane: "" },
     ],
     parbakeWasteByType: undefined,
   };
@@ -1288,8 +1294,8 @@ function UsageCalculationPageContent() {
             parbakeProductionByBase: [],
             selectedParbakeBases: [],
             extraParbakes: [
-              { extraParbakeId: generateId(), qty: "", manufacturedDate: "", parbakeName: "" },
-              { extraParbakeId: generateId(), qty: "", manufacturedDate: "", parbakeName: "" },
+              { extraParbakeId: generateId(), qty: "", manufacturedDate: "", parbakeName: "", sizeLane: "" },
+              { extraParbakeId: generateId(), qty: "", manufacturedDate: "", parbakeName: "", sizeLane: "" },
             ],
           };
           const migrated = migrateSingleState(
@@ -1306,8 +1312,8 @@ function UsageCalculationPageContent() {
                   secondClosure.extraParbakes?.length >= 2
                     ? secondClosure.extraParbakes
                     : [
-                        { extraParbakeId: generateId(), qty: "", manufacturedDate: "", parbakeName: "" },
-                        { extraParbakeId: generateId(), qty: "", manufacturedDate: "", parbakeName: "" },
+                        { extraParbakeId: generateId(), qty: "", manufacturedDate: "", parbakeName: "", sizeLane: "" },
+                        { extraParbakeId: generateId(), qty: "", manufacturedDate: "", parbakeName: "", sizeLane: "" },
                       ],
               },
             },
@@ -1874,6 +1880,7 @@ function UsageCalculationPageContent() {
         qty: "",
         manufacturedDate: "",
         parbakeName: "",
+        sizeLane: "",
       };
       setGroupState(date, {
         ...s,
@@ -1887,7 +1894,7 @@ function UsageCalculationPageContent() {
   );
 
   const updateExtraParbake = useCallback(
-    (date: string, extraParbakeId: string, patch: Partial<Pick<ExtraParbakeRow, "qty" | "manufacturedDate" | "parbakeName">>) => {
+    (date: string, extraParbakeId: string, patch: Partial<Pick<ExtraParbakeRow, "qty" | "manufacturedDate" | "parbakeName" | "sizeLane">>) => {
       const s = getOrInitGroupState(date);
       const extraParbakes = s.secondClosure.extraParbakes.map((r) =>
         r.extraParbakeId === extraParbakeId ? { ...r, ...patch } : r
@@ -2549,14 +2556,17 @@ function UsageCalculationPageContent() {
                               const sizeSummary = comp
                                 ? summarizeDoughPizzaProductionBySize(comp.productSummaries)
                                 : null;
-                              const astroTotal =
-                                state.secondClosure.astronautParbakeQty === ""
-                                  ? 0
-                                  : Number(state.secondClosure.astronautParbakeQty);
-                              const saleTotal =
-                                state.secondClosure.saleParbakeQty === ""
-                                  ? 0
-                                  : Number(state.secondClosure.saleParbakeQty);
+                              const astroTotal = rows.reduce((s, r) => s + toNumRow(r.astronautQty), 0);
+                              const saleTotal = rows.reduce((s, r) => s + toNumRow(r.saleQty), 0);
+                              const hasParbakeQty = astroTotal > 0 || saleTotal > 0;
+                              const astroSizeDisplay = inferParbakeSizeLaneDisplayDefault(
+                                sizeSummary,
+                                state.secondClosure.astronautParbakeSizeLane
+                              );
+                              const saleSizeDisplay = inferParbakeSizeLaneDisplayDefault(
+                                sizeSummary,
+                                state.secondClosure.saleParbakeSizeLane
+                              );
 
                               if (rows.length === 0) {
                                 return (
@@ -2629,16 +2639,15 @@ function UsageCalculationPageContent() {
                                     ))}
                                   </div>
 
-                                  {sizeSummary?.hasMixedMiniAndRegular && (
+                                  {hasParbakeQty && (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-700/80">
                                       <label className="flex flex-col gap-1.5">
                                         <span className="text-sm text-slate-400">
-                                          우주인 파베이크 규격{" "}
-                                          <span className="text-amber-400/90">(일반·미니)</span>
+                                          우주인 파베이크 규격
                                         </span>
                                         <select
                                           className="w-full rounded-lg border border-slate-600 bg-space-900 px-3 py-2.5 text-slate-100 focus:ring-2 focus:ring-cyan-500/50"
-                                          value={state.secondClosure.astronautParbakeSizeLane ?? ""}
+                                          value={astroSizeDisplay}
                                           onChange={(e) => {
                                             const v = e.target.value;
                                             updateSecondClosureParbake(date, {
@@ -2651,20 +2660,26 @@ function UsageCalculationPageContent() {
                                           <option value="standard">일반 파베이크</option>
                                           <option value="mini">미니 파베이크</option>
                                         </select>
-                                        {astroTotal > 0 && !state.secondClosure.astronautParbakeSizeLane && (
+                                        {sizeSummary?.hasMixedMiniAndRegular &&
+                                          astroTotal > 0 &&
+                                          !state.secondClosure.astronautParbakeSizeLane && (
                                           <p className="text-xs text-amber-400/90">
-                                            우주인 수량 입력 시 규격을 선택해 주세요.
+                                            일반·미니 혼합일: 우주인 파베이크 규격을 선택해 주세요.
+                                          </p>
+                                        )}
+                                        {sizeSummary?.isMiniOnly && (
+                                          <p className="text-xs text-slate-500">
+                                            미니 완제품과 다른 규격(일반) 파베이크를 생산한 경우 변경하세요.
                                           </p>
                                         )}
                                       </label>
                                       <label className="flex flex-col gap-1.5">
                                         <span className="text-sm text-slate-400">
-                                          판매용 파베이크 규격{" "}
-                                          <span className="text-amber-400/90">(일반·미니)</span>
+                                          판매용 파베이크 규격
                                         </span>
                                         <select
                                           className="w-full rounded-lg border border-slate-600 bg-space-900 px-3 py-2.5 text-slate-100 focus:ring-2 focus:ring-cyan-500/50"
-                                          value={state.secondClosure.saleParbakeSizeLane ?? ""}
+                                          value={saleSizeDisplay}
                                           onChange={(e) => {
                                             const v = e.target.value;
                                             updateSecondClosureParbake(date, {
@@ -2677,9 +2692,16 @@ function UsageCalculationPageContent() {
                                           <option value="standard">일반 파베이크</option>
                                           <option value="mini">미니 파베이크</option>
                                         </select>
-                                        {saleTotal > 0 && !state.secondClosure.saleParbakeSizeLane && (
+                                        {sizeSummary?.hasMixedMiniAndRegular &&
+                                          saleTotal > 0 &&
+                                          !state.secondClosure.saleParbakeSizeLane && (
                                           <p className="text-xs text-amber-400/90">
-                                            판매용 수량 입력 시 규격을 선택해 주세요.
+                                            일반·미니 혼합일: 판매용 파베이크 규격을 선택해 주세요.
+                                          </p>
+                                        )}
+                                        {sizeSummary?.isRegularOnly && (
+                                          <p className="text-xs text-slate-500">
+                                            일반 완제품과 다른 규격(미니) 파베이크를 생산한 경우 변경하세요.
                                           </p>
                                         )}
                                       </label>
@@ -2697,13 +2719,13 @@ function UsageCalculationPageContent() {
                                           "astronaut",
                                           row.parbakeName,
                                           comp.productSummaries,
-                                          state.secondClosure.astronautParbakeSizeLane || "standard"
+                                          state.secondClosure.astronautParbakeSizeLane
                                         );
                                         const saleLabel = resolveParbakeJournalLabelForRole(
                                           "sale",
                                           row.parbakeName,
                                           comp.productSummaries,
-                                          state.secondClosure.saleParbakeSizeLane || "standard"
+                                          state.secondClosure.saleParbakeSizeLane
                                         );
                                         return (
                                           <div key={`preview-${row.parbakeName}`}>
@@ -2740,6 +2762,10 @@ function UsageCalculationPageContent() {
                               finishedForBom
                             );
                             const baseOptions = baseCandidates.map((c) => c.parbakeName);
+                            const comp = computedByDate[date];
+                            const sizeSummary = comp
+                              ? summarizeDoughPizzaProductionBySize(comp.productSummaries)
+                              : null;
                             return (
                           <div className="space-y-3">
                             <div className="flex items-center justify-between gap-2">
@@ -2768,6 +2794,16 @@ function UsageCalculationPageContent() {
                                 const baseSelectValue =
                                   row.parbakeName ||
                                   (baseOptions.length === 1 ? baseOptions[0]! : "");
+                                const sizeDisplay = inferParbakeSizeLaneDisplayDefault(
+                                  sizeSummary,
+                                  row.sizeLane
+                                );
+                                const journalPreviewName =
+                                  baseSelectValue && comp
+                                    ? resolveParbakeUseMini(comp.productSummaries, row.sizeLane)
+                                      ? formatMiniParbakeJournalName(baseSelectValue)
+                                      : baseSelectValue
+                                    : null;
                                 return (
                                 <li
                                   key={row.extraParbakeId}
@@ -2796,6 +2832,23 @@ function UsageCalculationPageContent() {
                                       </select>
                                     </div>
                                   )}
+                                  <div className="min-w-[120px] flex-1 sm:flex-none sm:w-32">
+                                    <span className="text-xs text-slate-500 block mb-0.5">파베이크 규격</span>
+                                    <select
+                                      className="w-full rounded-lg border border-slate-600 bg-space-900 px-2 py-2 text-sm text-slate-100 focus:ring-2 focus:ring-cyan-500/50"
+                                      value={sizeDisplay}
+                                      onChange={(e) => {
+                                        const v = e.target.value;
+                                        updateExtraParbake(date, row.extraParbakeId, {
+                                          sizeLane: v === "standard" || v === "mini" ? v : "",
+                                        });
+                                      }}
+                                    >
+                                      <option value="">선택</option>
+                                      <option value="standard">일반 파베이크</option>
+                                      <option value="mini">미니 파베이크</option>
+                                    </select>
+                                  </div>
                                   <div className="w-24 sm:w-28">
                                     <span className="text-xs text-slate-500 block mb-0.5">수량</span>
                                     <input
@@ -2832,6 +2885,13 @@ function UsageCalculationPageContent() {
                                       placeholder="날짜 선택"
                                     />
                                   </div>
+                                  {journalPreviewName &&
+                                    row.qty !== "" &&
+                                    Number(row.qty) > 0 && (
+                                    <p className="w-full text-xs text-slate-500 -mt-1">
+                                      일지 표기: {journalPreviewName}
+                                    </p>
+                                  )}
                                   <button
                                     type="button"
                                     onClick={() => removeExtraParbake(date, row.extraParbakeId)}

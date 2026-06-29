@@ -52,6 +52,8 @@ export type ExtraParbakeRowInput = {
   manufacturedDate: string;
   /** 혼합 베이스일 추가 파베이크 소스(토마토/베샤멜 등). 단일 종류일 때는 자동 보완 가능 */
   parbakeName?: string;
+  /** 보관용 파베이크 규격(일반/미니). 미선택 시 미니-only 완제품일 때만 미니로 추론 */
+  sizeLane?: AstronautParbakeSizeLane | "";
   /** @deprecated 레거시: 과거에는 소비기한을 직접 저장 */
   expiryDate?: string;
 };
@@ -80,9 +82,9 @@ export type SecondClosureInput = {
   saleParbakeQty: number | "";
   /** 베이스별 우주인/판매용 파베이크 생산량 */
   parbakeProductionByBase?: ParbakeProductionByBaseInput[];
-  /** 일반+미니 혼합일만. 미니-only는 자동, 일반-only는 불필요 */
+  /** 파베이크 규격(일반/미니). 미선택 시 미니-only 완제품일 때만 미니로 추론 */
   astronautParbakeSizeLane?: AstronautParbakeSizeLane | "";
-  /** 일반+미니 혼합일 판매용 파베이크 표기 */
+  /** 판매용 파베이크 규격(일반/미니) */
   saleParbakeSizeLane?: AstronautParbakeSizeLane | "";
   extraParbakes: ExtraParbakeRowInput[];
   /** 베이스 2종 이상인 날만 사용. 타입별 파베이크 폐기량(개) */
