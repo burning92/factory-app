@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Factory, Inbox, Layers, ListOrdered, Scale, Settings, User } from "lucide-react";
+import { Factory, Inbox, Layers, ListOrdered, Scale, Settings, Trash2, User } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 const HARANG_PEOPLE_ICON_SRC = "/harang/people-icon.png";
@@ -87,6 +87,12 @@ export default function DashboardPage() {
         title: "재고조정",
         hint: "실사·분배·부자재",
         Icon: Scale,
+      },
+      {
+        href: "/harang/defect-disposal",
+        title: "불량처리",
+        hint: "폐기·불량 조회·입력",
+        Icon: Trash2,
       },
       { href: "/account", title: "계정", hint: "비밀번호·로그아웃", Icon: User },
     ];
