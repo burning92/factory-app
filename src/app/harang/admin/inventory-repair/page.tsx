@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, ArrowLeft, RefreshCw, Wrench } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -17,10 +17,16 @@ type MismatchRow = {
   issue_type: string;
 };
 
-type RevertRow = {
-  session_id: string;
-  product_name: string;
-  adjustment_date: string;
+type LotLedgerMismatch = {
+  category: string;
+  item_id: string;
+  item_name: string;
+  lot_id: string;
+  lot_date: string;
+  initial_quantity: number;
+  current_quantity: number;
+  ledger_sum: number;
+  diff: number;
 };
 
 const ISSUE_LABEL: Record<string, string> = {
@@ -38,22 +44,32 @@ function formatYmdDot(iso: string): string {
 export default function HarangInventoryRepairPage() {
   const { profile } = useAuth();
   const [mismatches, setMismatches] = useState<MismatchRow[]>([]);
+  const [lotMismatches, setLotMismatches] = useState<LotLedgerMismatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<string | null>(null);
+  const [showLegacyTools, setShowLegacyTools] = useState(false);
 
   const loadMismatches = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const { data, error: rpcError } = await supabase.rpc("harang_list_production_ledger_line_lot_mismatches");
+    const [prodRes, lotRes] = await Promise.all([
+      supabase.rpc("harang_list_production_ledger_line_lot_mismatches"),
+      supabase.rpc("harang_list_lot_current_vs_ledger_mismatches"),
+    ]);
     setLoading(false);
-    if (rpcError) {
-      setError(rpcError.message);
+    if (prodRes.error) {
+      setError(prodRes.error.message);
       setMismatches([]);
+      setLotMismatches([]);
       return;
     }
-    setMismatches((data ?? []) as MismatchRow[]);
+    setMismatches((prodRes.data ?? []) as MismatchRow[]);
+    setLotMismatches(lotRes.error ? [] : ((lotRes.data ?? []) as LotLedgerMismatch[]));
+    if (lotRes.error && !prodRes.error) {
+      setError(`생산 불일치는 조회됨. LOT 캐시 불일치 RPC 미적용: ${lotRes.error.message}`);
+    }
   }, []);
 
   useEffect(() => {
@@ -63,7 +79,7 @@ export default function HarangInventoryRepairPage() {
   const runRevertAll = async () => {
     if (
       !confirm(
-        "확정된 생산 사이클 재고조정을 모두 되돌립니다.\n원장 조정분·생산 usage_qty 변경이 복구됩니다.\n계속할까요?",
+        "[위험 · 레거시] 확정된 생산 사이클 재고조정을 모두 되돌립니다.\n원장 조정분·생산 usage_qty 변경이 복구됩니다.\n계속할까요?",
       )
     ) {
       return;
@@ -76,7 +92,7 @@ export default function HarangInventoryRepairPage() {
       alert(rpcError.message);
       return;
     }
-    const rows = (data ?? []) as RevertRow[];
+    const rows = (data ?? []) as Array<{ session_id: string }>;
     setLastResult(`재고조정 ${rows.length}건 되돌림 완료`);
     void loadMismatches();
   };
@@ -84,7 +100,7 @@ export default function HarangInventoryRepairPage() {
   const runCleanupOrphans = async () => {
     if (
       !confirm(
-        "되돌린 뒤에도 남은 SA- 조정 원장(인코딩 오류 등)을 제거하고 LOT 현재고를 원장 합산으로 맞춥니다.\n① 재고조정 되돌리기 후에 실행하세요.\n계속할까요?",
+        "[위험 · 레거시] SA- 조정 원장을 제거하고 LOT current를 전체 sync합니다.\n신규 운영에서는 사용하지 마세요.\n계속할까요?",
       )
     ) {
       return;
@@ -114,7 +130,7 @@ export default function HarangInventoryRepairPage() {
   const runReconcile = async () => {
     if (
       !confirm(
-        "생산입고 line_lots를 원장(소비기한 LOT) 기준으로 다시 연결합니다.\n유령 LOT·과대 usage_qty가 정리됩니다.\n계속할까요?",
+        "[위험 · 레거시] line_lots를 원장 기준으로 재구성합니다.\nproduction line_lots/usage_qty를 수정합니다.\n신규 정합 구조와 상충할 수 있습니다.\n계속할까요?",
       )
     ) {
       return;
@@ -138,6 +154,8 @@ export default function HarangInventoryRepairPage() {
     return <div className="px-6 py-10 text-slate-600">관리자만 접근할 수 있습니다.</div>;
   }
 
+  const negativeLedgerLots = lotMismatches.filter((r) => Number(r.ledger_sum) < -0.0005);
+
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8 text-slate-900">
       <div className="max-w-6xl mx-auto">
@@ -151,10 +169,10 @@ export default function HarangInventoryRepairPage() {
 
         <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">재고 데이터 정합 (작업 1)</h1>
+            <h1 className="text-2xl font-semibold text-slate-900">재고 정합 진단</h1>
             <p className="mt-1 text-sm text-slate-600">
-              재고조정 되돌리기 → 생산입고를 원장(소비기한 LOT)에 재연결합니다. 입고·사용·재고·상세보기가
-              맞춰진 뒤 작업 2(기준일 재고)·작업 3(재고조정)을 진행합니다.
+              읽기 전용 불일치 리포트입니다. 신규 생산은 원장 정본 + 저장 시 검증으로 보호됩니다.
+              데이터 복구는 별도 승인·dry-run 후에만 진행하세요.
             </p>
           </div>
           <button
@@ -164,17 +182,16 @@ export default function HarangInventoryRepairPage() {
             className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-            불일치 목록 새로고침
+            진단 새로고침
           </button>
         </div>
 
-        <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="mt-4 flex items-start gap-2 rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-950">
           <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
           <p>
-            순서: <strong>① 재고조정 전부 되돌리기</strong> →{" "}
-            <strong>② 유령 조정 원장 정리</strong> (마이그레이션{" "}
-            <code className="text-amber-950">20260623230000</code> 적용 후) →{" "}
-            <strong>③ 원장 기준 LOT 재연결</strong>.
+            <strong>신규 운영 원칙:</strong> 재고 정본 = <code>harang_inventory_transactions</code>.
+            생산 저장 시 line_lots와 usage 원장이 1:1로 생성·검증됩니다.
+            아래 레거시 복구 도구는 기존 꼬인 데이터 전용이며 기본 숨김입니다.
           </p>
         </div>
 
@@ -184,34 +201,137 @@ export default function HarangInventoryRepairPage() {
           </div>
         ) : null}
 
-        <div className="mt-6 flex flex-wrap gap-3">
+        <section className="mt-6 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-200 bg-slate-50">
+            <h2 className="text-sm font-semibold text-slate-800">
+              LOT 캐시 vs 원장 불일치 ({lotMismatches.length}건)
+            </h2>
+          </div>
+          {loading ? (
+            <p className="px-4 py-6 text-center text-slate-500 text-sm">불러오는 중…</p>
+          ) : lotMismatches.length === 0 ? (
+            <p className="px-4 py-6 text-center text-slate-500 text-sm">불일치 없음 (또는 마이그레이션 미적용)</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-100 border-b border-slate-300">
+                  <tr>
+                    <th className="px-3 py-2 text-left">품목</th>
+                    <th className="px-3 py-2 text-left">LOT</th>
+                    <th className="px-3 py-2 text-right">캐시</th>
+                    <th className="px-3 py-2 text-right">원장</th>
+                    <th className="px-3 py-2 text-right">차이</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {lotMismatches.slice(0, 50).map((row) => (
+                    <tr key={row.lot_id} className={Number(row.ledger_sum) < 0 ? "bg-red-50" : undefined}>
+                      <td className="px-3 py-2">{row.item_name}</td>
+                      <td className="px-3 py-2 tabular-nums">{formatYmdDot(row.lot_date)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{Number(row.current_quantity).toLocaleString()}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{Number(row.ledger_sum).toLocaleString()}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{Number(row.diff).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {negativeLedgerLots.length > 0 ? (
+            <p className="px-4 py-3 text-sm text-red-800 font-medium">
+              원장 음수 LOT {negativeLedgerLots.length}건 — 백필/전체 sync 없이 원인 분석 필요
+            </p>
+          ) : null}
+        </section>
+
+        <section className="mt-8 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-200 bg-slate-50">
+            <h2 className="text-sm font-semibold text-slate-800">
+              생산 ↔ 원장 line_lots 불일치 ({mismatches.length}건)
+            </h2>
+          </div>
+          {loading ? (
+            <p className="px-4 py-8 text-center text-slate-500 text-sm">불러오는 중…</p>
+          ) : mismatches.length === 0 ? (
+            <p className="px-4 py-8 text-center text-slate-500 text-sm">불일치 없음</p>
+          ) : (
+            <div className="overflow-x-auto bg-white">
+              <table className="min-w-full text-sm text-slate-900">
+                <thead className="bg-slate-100 text-slate-800 border-b-2 border-slate-300">
+                  <tr>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold">생산일</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold">No.</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold">품목</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold">LOT</th>
+                    <th className="px-3 py-2.5 text-right text-xs font-semibold">원장</th>
+                    <th className="px-3 py-2.5 text-right text-xs font-semibold">line_lots</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold">유형</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {mismatches.slice(0, 200).map((row, i) => (
+                    <tr key={`${row.production_header_id}-${row.lot_date}-${i}`} className={i % 2 === 0 ? "bg-white" : "bg-slate-50"}>
+                      <td className="px-3 py-2.5 tabular-nums">{row.production_date}</td>
+                      <td className="px-3 py-2.5 font-mono text-xs">{row.production_no}</td>
+                      <td className="px-3 py-2.5">{row.material_name}</td>
+                      <td className="px-3 py-2.5 tabular-nums">{formatYmdDot(row.lot_date)}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">{Number(row.ledger_qty).toLocaleString()}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">{Number(row.line_lot_qty).toLocaleString()}</td>
+                      <td className="px-3 py-2.5">
+                        <span className="inline-block rounded px-2 py-0.5 text-xs font-semibold bg-slate-200">
+                          {ISSUE_LABEL[row.issue_type] ?? row.issue_type}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <div className="mt-8 rounded-xl border border-red-200 bg-red-50/50 overflow-hidden">
           <button
             type="button"
-            onClick={() => void runRevertAll()}
-            disabled={busy !== null}
-            className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+            onClick={() => setShowLegacyTools((v) => !v)}
+            className="w-full flex items-center justify-between px-4 py-3 text-left text-sm font-semibold text-red-900 hover:bg-red-50"
           >
-            <Wrench className="w-4 h-4" />
-            {busy === "revert" ? "처리 중…" : "1. 재고조정 전부 되돌리기"}
+            <span>⚠ 레거시 복구 도구 (위험 · 기본 숨김)</span>
+            {showLegacyTools ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
-          <button
-            type="button"
-            onClick={() => void runCleanupOrphans()}
-            disabled={busy !== null}
-            className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-60"
-          >
-            <Wrench className="w-4 h-4" />
-            {busy === "cleanup" ? "처리 중…" : "2. 유령 조정 원장 정리"}
-          </button>
-          <button
-            type="button"
-            onClick={() => void runReconcile()}
-            disabled={busy !== null}
-            className="inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-cyan-700 disabled:opacity-60"
-          >
-            <Wrench className="w-4 h-4" />
-            {busy === "reconcile" ? "처리 중…" : "3. 원장 기준 LOT 재연결"}
-          </button>
+          {showLegacyTools ? (
+            <div className="px-4 pb-4 space-y-3 border-t border-red-200">
+              <p className="pt-3 text-xs text-red-800">
+                전체 revert / reconcile / sync는 기존 꼬인 데이터 복구용입니다. G03 등 개별 복구 전략 수립 전에는 실행하지 마세요.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => void runRevertAll()}
+                  disabled={busy !== null}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+                >
+                  {busy === "revert" ? "처리 중…" : "재고조정 전부 되돌리기"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void runCleanupOrphans()}
+                  disabled={busy !== null}
+                  className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-60"
+                >
+                  {busy === "cleanup" ? "처리 중…" : "유령 조정 + 전체 sync"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void runReconcile()}
+                  disabled={busy !== null}
+                  className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+                >
+                  {busy === "reconcile" ? "처리 중…" : "원장 기준 line_lots 재연결"}
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         {error ? (
@@ -219,75 +339,6 @@ export default function HarangInventoryRepairPage() {
             {error}
           </div>
         ) : null}
-
-        <section className="mt-8 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-200 bg-slate-50">
-            <h2 className="text-sm font-semibold text-slate-800">
-              원장 ↔ 생산입고 line_lots 불일치 ({mismatches.length}건)
-            </h2>
-            <p className="text-xs text-slate-700 mt-0.5">소비기한(lot_date) 단위. 정합 후 0건이 목표입니다.</p>
-          </div>
-          {loading ? (
-            <p className="px-4 py-8 text-center text-slate-500 text-sm">불러오는 중…</p>
-          ) : mismatches.length === 0 ? (
-            <p className="px-4 py-8 text-center text-slate-500 text-sm">불일치 없음 (또는 마이그레이션 미적용)</p>
-          ) : (
-            <div className="overflow-x-auto bg-white">
-              <table className="min-w-full text-sm text-slate-900">
-                <thead className="bg-slate-100 text-slate-800 border-b-2 border-slate-300">
-                  <tr>
-                    <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide">생산일</th>
-                    <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide">No.</th>
-                    <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide">품목</th>
-                    <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide">소비기한 LOT</th>
-                    <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide">원장</th>
-                    <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide">line_lots</th>
-                    <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide">유형</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {mismatches.slice(0, 200).map((row, i) => {
-                    const isPhantom = row.issue_type === "phantom_line_lot";
-                    const isMismatch = row.issue_type === "qty_mismatch";
-                    return (
-                    <tr
-                      key={`${row.production_header_id}-${row.lot_date}-${i}`}
-                      className={i % 2 === 0 ? "bg-white" : "bg-slate-50"}
-                    >
-                      <td className="px-3 py-2.5 tabular-nums text-slate-900 font-medium">{row.production_date}</td>
-                      <td className="px-3 py-2.5 font-mono text-xs text-slate-800">{row.production_no}</td>
-                      <td className="px-3 py-2.5 text-slate-900 font-medium">{row.material_name}</td>
-                      <td className="px-3 py-2.5 tabular-nums text-slate-900">{formatYmdDot(row.lot_date)}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-slate-900 font-medium">
-                        {Number(row.ledger_qty).toLocaleString()}
-                      </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-slate-900 font-medium">
-                        {Number(row.line_lot_qty).toLocaleString()}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <span
-                          className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${
-                            isPhantom
-                              ? "bg-red-100 text-red-900"
-                              : isMismatch
-                                ? "bg-amber-100 text-amber-950"
-                                : "bg-slate-200 text-slate-900"
-                          }`}
-                        >
-                          {ISSUE_LABEL[row.issue_type] ?? row.issue_type}
-                        </span>
-                      </td>
-                    </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              {mismatches.length > 200 ? (
-                <p className="px-4 py-3 text-sm text-slate-700 font-medium">… 외 {mismatches.length - 200}건</p>
-              ) : null}
-            </div>
-          )}
-        </section>
       </div>
     </div>
   );

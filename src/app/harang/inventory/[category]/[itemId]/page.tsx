@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { HarangInventoryLot, HarangInventoryTransaction } from "@/features/harang/types";
+import { ledgerMatchesCurrent, ledgerSumByLotId } from "@/features/harang/ledgerStock";
 import { fetchLotStockAsOfMap, isOnOrBeforeAsOf } from "@/features/harang/inventoryAsOf";
 
 function isParbakeDoughName(name: string): boolean {
@@ -84,13 +85,24 @@ export default function HarangInventoryItemDetailPage() {
     return list;
   }, [txs, lotId, asOfDate]);
 
+  const ledgerByLot = useMemo(() => ledgerSumByLotId(txs), [txs]);
+
   const lotQty = useCallback(
     (lot: HarangInventoryLot) => {
       if (asOfDate && stockAsOf) return stockAsOf.get(lot.id) ?? 0;
-      return Number(lot.current_quantity ?? 0);
+      return ledgerByLot.get(lot.id) ?? Number(lot.current_quantity ?? 0);
     },
-    [asOfDate, stockAsOf],
+    [asOfDate, stockAsOf, ledgerByLot],
   );
+
+  const ledgerMismatchLots = useMemo(() => {
+    if (asOfDate) return [];
+    return visibleLots.filter((lot) => {
+      const ledger = ledgerByLot.get(lot.id);
+      if (ledger === undefined) return false;
+      return !ledgerMatchesCurrent(ledger, Number(lot.current_quantity ?? 0));
+    });
+  }, [visibleLots, ledgerByLot, asOfDate]);
 
   const lotDateById = useMemo(() => {
     const map = new Map<string, string>();
@@ -152,6 +164,15 @@ export default function HarangInventoryItemDetailPage() {
           </div>
         </section>
 
+        {ledgerMismatchLots.length > 0 ? (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            <p className="font-semibold">캐시 vs 원장 불일치 ({ledgerMismatchLots.length}개 LOT)</p>
+            <p className="mt-1">
+              화면 재고는 원장 합계를 우선 표시합니다. current_quantity(캐시)와 원장이 다른 LOT가 있습니다.
+            </p>
+          </div>
+        ) : null}
+
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="text-sm font-semibold text-slate-800 mb-3">LOT별 잔량 목록</h2>
           <div className="overflow-x-auto">
@@ -161,7 +182,8 @@ export default function HarangInventoryItemDetailPage() {
                   <th className="px-3 py-2 text-left">LOT(제조일자/소비기한)</th>
                   <th className="px-3 py-2 text-left">입고일자</th>
                   <th className="px-3 py-2 text-right">최초수량</th>
-                  <th className="px-3 py-2 text-right">{asOfDate ? "기준일 수량" : "현재수량"}</th>
+                  <th className="px-3 py-2 text-right">{asOfDate ? "기준일 수량" : "원장 잔량"}</th>
+                  {!asOfDate && <th className="px-3 py-2 text-right">캐시(current)</th>}
                   <th className="px-3 py-2 text-left">단위</th>
                   <th className="px-3 py-2 text-left">입고경로</th>
                   <th className="px-3 py-2 text-left">참조번호(일자-No.)</th>
@@ -169,27 +191,38 @@ export default function HarangInventoryItemDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {loading && <tr><td colSpan={8} className="px-3 py-6 text-center text-slate-500">불러오는 중...</td></tr>}
-                {!loading && visibleLots.length === 0 && <tr><td colSpan={8} className="px-3 py-6 text-center text-slate-500">LOT가 없습니다.</td></tr>}
+                {loading && <tr><td colSpan={asOfDate ? 8 : 9} className="px-3 py-6 text-center text-slate-500">불러오는 중...</td></tr>}
+                {!loading && visibleLots.length === 0 && <tr><td colSpan={asOfDate ? 8 : 9} className="px-3 py-6 text-center text-slate-500">LOT가 없습니다.</td></tr>}
                 {!loading &&
                   visibleLots.map((lot) => {
                     const headerInboundNo = (lot as HarangInventoryLot & { headers?: { inbound_no?: string } | null }).headers?.inbound_no;
                     const qty = lotQty(lot);
+                    const ledger = ledgerByLot.get(lot.id);
+                    const cacheQty = Number(lot.current_quantity ?? 0);
+                    const mismatch = !asOfDate && ledger !== undefined && !ledgerMatchesCurrent(ledger, cacheQty);
                     const isDepleted = qty <= 0;
                     return (
                       <tr
                         key={lot.id}
-                        className={`border-b border-slate-100 ${isDepleted ? "bg-slate-50 text-slate-500" : "text-slate-900"}`}
+                        className={`border-b border-slate-100 ${isDepleted ? "bg-slate-50 text-slate-500" : "text-slate-900"} ${mismatch ? "bg-amber-50/60" : ""}`}
                       >
                         <td className="px-3 py-2">
                           {lot.lot_date}
                           {isDepleted && (
                             <span className="ml-2 px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 text-xs">소진</span>
                           )}
+                          {mismatch ? (
+                            <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 text-xs">원장≠캐시</span>
+                          ) : null}
                         </td>
                         <td className="px-3 py-2">{lot.inbound_date}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{Number(lot.initial_quantity).toLocaleString()}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{qty.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-medium">{qty.toLocaleString()}</td>
+                        {!asOfDate && (
+                          <td className={`px-3 py-2 text-right tabular-nums ${mismatch ? "text-amber-800" : "text-slate-600"}`}>
+                            {cacheQty.toLocaleString()}
+                          </td>
+                        )}
                         <td className="px-3 py-2">{lot.unit}</td>
                         <td className="px-3 py-2">{lot.inbound_route}</td>
                         <td className="px-3 py-2">{headerInboundNo ?? "-"}</td>
@@ -225,7 +258,7 @@ export default function HarangInventoryItemDetailPage() {
                   visibleTxs.map((tx) => (
                     <tr key={tx.id} className="border-b border-slate-100 text-slate-900">
                       <td className="px-3 py-2">{tx.tx_date}</td>
-                      <td className="px-3 py-2">{tx.tx_type === "inbound" ? "입고" : tx.tx_type === "usage" ? "사용" : "조정"}</td>
+                      <td className="px-3 py-2">{tx.tx_type === "inbound" ? "입고" : tx.tx_type === "usage" ? "사용" : tx.tx_type === "disposal" ? "폐기" : "조정"}</td>
                       {showLotOnTx && (
                         <td className="px-3 py-2 tabular-nums font-medium">
                           {formatLotDate(tx.lot_id ? lotDateById.get(tx.lot_id) : null)}

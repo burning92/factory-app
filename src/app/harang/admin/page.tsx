@@ -7,8 +7,8 @@ import { useAuth } from "@/contexts/AuthContext";
 const ITEMS = [
   {
     href: "/harang/admin/inventory-repair",
-    label: "재고 데이터 정합",
-    description: "재고조정 되돌리기 · 원장↔생산입고 LOT 재연결 (작업 1)",
+    label: "재고 정합 진단",
+    description: "원장↔생산 불일치 리포트 (레거시 복구는 관리자 전용)",
     Icon: Wrench,
   },
   {

@@ -10,6 +10,11 @@ import {
   formatYmdDot,
   harangProductExpiryFromProductionDate,
 } from "@/features/harang/finishedProductExpiry";
+import type { HarangInventoryTransaction } from "@/features/harang/types";
+import {
+  diagnoseProductionLineIntegrity,
+  INTEGRITY_ISSUE_LABEL,
+} from "@/features/harang/ledgerStock";
 
 type ProductionLine = {
   id: string;
@@ -32,8 +37,11 @@ function displayUnitForLine(line: ProductionLine): string {
 }
 
 type ProductionLotUsage = {
+  id: string;
   line_id: string;
   quantity_used: number;
+  inventory_transaction_id?: number | null;
+  lot_id?: string;
   lots?: Array<{ lot_date: string | null }> | null;
 };
 
@@ -59,6 +67,7 @@ export default function HarangProductionInputDetailPage() {
   const [header, setHeader] = useState<ProductionHeaderDetail | null>(null);
   const [lines, setLines] = useState<ProductionLine[]>([]);
   const [lotUsages, setLotUsages] = useState<ProductionLotUsage[]>([]);
+  const [usageTxs, setUsageTxs] = useState<HarangInventoryTransaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -68,7 +77,7 @@ export default function HarangProductionInputDetailPage() {
     const [headerRes, linesRes, lotsRes] = await Promise.all([
       supabase
         .from("harang_production_headers")
-        .select("id, production_date, production_no, product_name, finished_qty, finished_product_lot_date, note, created_at")
+        .select("id, production_date, production_no, product_name, finished_qty, finished_product_lot_date, note, created_at, request_id")
         .eq("id", id)
         .single(),
       supabase
@@ -78,7 +87,7 @@ export default function HarangProductionInputDetailPage() {
         .order("sort_order", { ascending: true }),
       supabase
         .from("harang_production_line_lots")
-        .select("line_id, quantity_used, lots:lot_id(lot_date)")
+        .select("id, line_id, lot_id, quantity_used, inventory_transaction_id, lots:lot_id(lot_date)")
         .in(
           "line_id",
           (
@@ -93,9 +102,31 @@ export default function HarangProductionInputDetailPage() {
     if (headerRes.error) return alert(headerRes.error.message);
     if (linesRes.error) return alert(linesRes.error.message);
     if (lotsRes.error) return alert(lotsRes.error.message);
-    setHeader(headerRes.data as ProductionHeaderDetail);
+
+    const headerData = headerRes.data as ProductionHeaderDetail & { request_id?: string | null };
+    let requestNo: string | null = null;
+    if (headerData.request_id) {
+      const { data: reqData } = await supabase
+        .from("harang_production_requests")
+        .select("request_no")
+        .eq("id", headerData.request_id)
+        .maybeSingle();
+      requestNo = reqData?.request_no ?? null;
+    }
+
+    const txFilters = [`reference_no.eq.${headerData.production_no}`];
+    if (requestNo) txFilters.push(`reference_no.eq.${requestNo}`);
+    const { data: txData, error: txError } = await supabase
+      .from("harang_inventory_transactions")
+      .select("id, lot_id, tx_date, tx_type, reference_no, quantity_delta, note")
+      .eq("tx_type", "usage")
+      .or(txFilters.join(","));
+    if (txError) return alert(txError.message);
+
+    setHeader(headerData);
     setLines((linesRes.data ?? []) as ProductionLine[]);
     setLotUsages((lotsRes.data ?? []) as ProductionLotUsage[]);
+    setUsageTxs((txData ?? []) as HarangInventoryTransaction[]);
   }, [id]);
 
   const handleDelete = async () => {
@@ -106,6 +137,10 @@ export default function HarangProductionInputDetailPage() {
     setBusy(false);
     if (error) {
       const msg = String(error.message ?? "");
+      if (msg.includes("레거시 생산입고")) {
+        alert(msg);
+        return;
+      }
       if (
         msg.includes("harang_finished_product_outbound_line_production_header_id_fkey") ||
         msg.includes("harang_finished_product_outbound_line_lots")
@@ -145,6 +180,26 @@ export default function HarangProductionInputDetailPage() {
     }
     return map;
   }, [lotUsages]);
+
+  const integrityByLine = useMemo(() => {
+    const map = new Map(diagnoseProductionLineIntegrity(lines, lotUsages, usageTxs).map((r) => [r.lineId, r]));
+    return map;
+  }, [lines, lotUsages, usageTxs]);
+
+  const hasIntegrityIssues = useMemo(
+    () => diagnoseProductionLineIntegrity(lines, lotUsages, usageTxs).some((r) => r.issues.length > 0),
+    [lines, lotUsages, usageTxs],
+  );
+
+  const isLegacyProduction = useMemo(
+    () =>
+      lotUsages.some(
+        (pl) => Number(pl.quantity_used) > 0.0005 && pl.inventory_transaction_id == null,
+      ),
+    [lotUsages],
+  );
+
+  const blockMutations = isLegacyProduction;
 
   const grouped = useMemo(() => {
     const parbake = lines.filter(
@@ -194,16 +249,24 @@ export default function HarangProductionInputDetailPage() {
               출력
             </button>
             <Link
-              href={`/harang/production-input/new?edit_id=${id}`}
-              className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm bg-white"
+              href={blockMutations ? "#" : `/harang/production-input/new?edit_id=${id}`}
+              aria-disabled={blockMutations}
+              onClick={(e) => {
+                if (blockMutations) e.preventDefault();
+              }}
+              className={`px-3 py-2 rounded-lg border text-sm bg-white ${
+                blockMutations
+                  ? "border-slate-200 text-slate-400 pointer-events-none cursor-not-allowed"
+                  : "border-slate-300 text-slate-700"
+              }`}
             >
               수정
             </Link>
             <button
               type="button"
               onClick={() => void handleDelete()}
-              disabled={busy}
-              className="px-3 py-2 rounded-lg border border-red-300 text-red-700 text-sm bg-white disabled:opacity-60"
+              disabled={busy || blockMutations}
+              className="px-3 py-2 rounded-lg border border-red-300 text-red-700 text-sm bg-white disabled:opacity-60 disabled:cursor-not-allowed"
             >
               삭제
             </button>
@@ -219,6 +282,26 @@ export default function HarangProductionInputDetailPage() {
           <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-500">내역을 찾을 수 없습니다.</div>
         ) : (
           <>
+            {isLegacyProduction ? (
+              <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-950 print:hidden">
+                <p className="font-semibold">레거시 생산입고 — 수정/삭제 불가</p>
+                <p className="mt-1 text-red-900">
+                  이 생산입고는 레거시 원장 미연결 데이터입니다. 재고 원장과 LOT 사용량이 1:1로 연결되어 있지 않아
+                  수정/삭제 시 재고가 더 꼬일 수 있습니다. 데이터 복구 전에는 조회만 가능합니다.
+                </p>
+              </div>
+            ) : null}
+
+            {hasIntegrityIssues && !isLegacyProduction ? (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 print:hidden">
+                <p className="font-semibold">원장 정합성 경고</p>
+                <p className="mt-1 text-amber-900">
+                  일부 소모품목에서 line_lots와 usage 원장이 일치하지 않습니다. 재고 정본은 원장이며, 아래 표에서
+                  원장 합계를 함께 확인하세요.
+                </p>
+              </div>
+            ) : null}
+
             <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm print:rounded-lg print:border-slate-300 print:p-3 print:shadow-none">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm print:gap-2 print:text-xs">
                 <div><p className="text-slate-500 text-xs">일자-No.</p><p className="mt-1 text-slate-900 break-words">{header.production_no}</p></div>
@@ -282,15 +365,17 @@ export default function HarangProductionInputDetailPage() {
                         <th className="px-3 py-2 text-left print:px-1.5 print:py-1">소모품목명</th>
                         <th className="px-3 py-2 text-right print:px-1.5 print:py-1">BOM(소요)</th>
                         <th className="px-3 py-2 text-right print:px-1.5 print:py-1">사용량</th>
+                        <th className="px-3 py-2 text-right print:px-1.5 print:py-1 print:hidden">원장 합계</th>
                         <th className="px-3 py-2 text-left print:px-1.5 print:py-1">LOT(소비기한/제조일자)</th>
                       </tr>
                     </thead>
                     <tbody>
                       {section.rows.length === 0 ? (
-                        <tr><td colSpan={4} className="px-3 py-6 text-center text-slate-500">내역 없음</td></tr>
+                        <tr><td colSpan={5} className="px-3 py-6 text-center text-slate-500">내역 없음</td></tr>
                       ) : (
                         section.rows.map((line) => {
                           const usage = usageMap.get(line.id);
+                          const integrity = integrityByLine.get(line.id);
                           const unitLabel = displayUnitForLine(line);
                           const lotDetailText =
                             usage && usage.details.length > 0
@@ -303,17 +388,36 @@ export default function HarangProductionInputDetailPage() {
                                   )
                                   .join("\n")
                               : "";
+                          const lotFallback = line.lot_dates_summary
+                            ? `(참고) ${line.lot_dates_summary}`
+                            : usage?.dates.join(" · ") || "-";
                           return (
                             <tr key={line.id} className="border-b border-slate-100 text-slate-900 print:border-slate-200">
-                              <td className="px-3 py-2 align-top break-words print:px-1.5 print:py-1.5">{line.material_name}</td>
+                              <td className="px-3 py-2 align-top break-words print:px-1.5 print:py-1.5">
+                                {line.material_name}
+                                {integrity && integrity.issues.length > 0 ? (
+                                  <div className="mt-1 space-y-0.5 print:hidden">
+                                    {integrity.issues.map((issue) => (
+                                      <p key={issue} className="text-xs text-amber-800 font-medium">
+                                        ⚠ {INTEGRITY_ISSUE_LABEL[issue]}
+                                      </p>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </td>
                               <td className="px-3 py-2 text-right tabular-nums align-top print:px-1.5 print:py-1.5">
                                 {Number(line.bom_qty).toLocaleString("ko-KR", { maximumFractionDigits: 3 })} {unitLabel}
                               </td>
                               <td className="px-3 py-2 text-right tabular-nums align-top print:px-1.5 print:py-1.5">
                                 {Number(line.usage_qty).toLocaleString("ko-KR", { maximumFractionDigits: 3 })} {unitLabel}
                               </td>
+                              <td className="px-3 py-2 text-right tabular-nums align-top print:hidden">
+                                {integrity
+                                  ? `${integrity.ledgerSum.toLocaleString("ko-KR", { maximumFractionDigits: 3 })} ${unitLabel}`
+                                  : "-"}
+                              </td>
                               <td className="px-3 py-2 whitespace-pre-line align-top break-words print:whitespace-pre-line print:px-1.5 print:py-1.5">
-                                {lotDetailText || line.lot_dates_summary || usage?.dates.join(" · ") || "-"}
+                                {lotDetailText || lotFallback}
                               </td>
                             </tr>
                           );

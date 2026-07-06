@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Search, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { HarangCategory, HarangInventoryLot } from "@/features/harang/types";
+import { ledgerSumByLotId } from "@/features/harang/ledgerStock";
 
 export type LotAllocation = { lot_id: string; quantity_used: number };
 const PARBAKE_BOX_EA = 40;
@@ -61,6 +62,7 @@ export default function LotPickerModal({
   onApply,
 }: Props) {
   const [lots, setLots] = useState<HarangInventoryLot[]>([]);
+  const [ledgerByLot, setLedgerByLot] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(false);
   /** 수량(차감 수량) — LOT 단위 */
   const [inputs, setInputs] = useState<Record<string, string>>({});
@@ -98,22 +100,53 @@ export default function LotPickerModal({
   const loadLots = useCallback(async () => {
     if (!materialId) return;
     setLoading(true);
-    const { data, error } = await supabase
-      .from("harang_inventory_lots")
-      .select(
-        "id, category, item_id, item_code, item_name, lot_date, inbound_date, inbound_route, current_quantity, unit, note",
-      )
-      .eq("category", category)
-      .eq("item_id", materialId)
-      .gt("current_quantity", 0)
-      .order("lot_date", { ascending: true });
+    const [lotsRes, txRes] = await Promise.all([
+      supabase
+        .from("harang_inventory_lots")
+        .select(
+          "id, category, item_id, item_code, item_name, lot_date, inbound_date, inbound_route, current_quantity, unit, note",
+        )
+        .eq("category", category)
+        .eq("item_id", materialId)
+        .order("lot_date", { ascending: true }),
+      supabase
+        .from("harang_inventory_transactions")
+        .select("id, lot_id, quantity_delta")
+        .eq("category", category)
+        .eq("item_id", materialId),
+    ]);
     setLoading(false);
-    if (error) {
-      alert(error.message);
+    if (lotsRes.error) {
+      alert(lotsRes.error.message);
       return;
     }
-    setLots((data ?? []) as HarangInventoryLot[]);
-  }, [category, materialId]);
+    if (txRes.error) {
+      alert(txRes.error.message);
+      return;
+    }
+    const ledger = ledgerSumByLotId(
+      (txRes.data ?? []).map((t) => ({
+        ...t,
+        category,
+        item_id: materialId,
+        item_code: "",
+        item_name: materialName,
+        tx_date: "",
+        tx_type: "usage" as const,
+        reference_no: null,
+        unit: "",
+        note: null,
+        created_at: "",
+      })),
+    );
+    const withStock = ((lotsRes.data ?? []) as HarangInventoryLot[]).filter((lot) => {
+      const ledgerQty = ledger.get(lot.id);
+      const qty = ledgerQty !== undefined ? ledgerQty : Number(lot.current_quantity ?? 0);
+      return qty > 0.0005;
+    });
+    setLedgerByLot(ledger);
+    setLots(withStock);
+  }, [category, materialId, materialName]);
 
   useEffect(() => {
     if (!open) return;
@@ -184,9 +217,18 @@ export default function LotPickerModal({
     );
   }, [lots, productionDate, initialAllocations]);
 
+  const lotAvailableQty = useCallback(
+    (lot: HarangInventoryLot) => {
+      const ledger = ledgerByLot.get(lot.id);
+      return ledger !== undefined ? ledger : Number(lot.current_quantity ?? 0);
+    },
+    [ledgerByLot],
+  );
+
   const rows = useMemo(() => {
     return visibleLots.map((lot) => {
       const eligible = isLotEligibleForProduction(lot, productionDate);
+      const available = lotAvailableQty(lot);
       const raw = inputs[lot.id] ?? "";
       const boxRaw = boxInputs[lot.id] ?? "";
       const unitRaw = unitInputs[lot.id] ?? "";
@@ -207,8 +249,8 @@ export default function LotPickerModal({
           : Number.isFinite(qtyN) && qtyN >= 0
             ? qtyN
             : 0;
-      const after = Math.max(0, Number(lot.current_quantity) - safeQty);
-      return { lot, eligible, inputRaw: raw, boxRaw, unitRaw, remainderRaw, qty: safeQty, after };
+      const after = Math.max(0, available - safeQty);
+      return { lot, eligible, available, inputRaw: raw, boxRaw, unitRaw, remainderRaw, qty: safeQty, after };
     });
   }, [
     visibleLots,
@@ -221,6 +263,7 @@ export default function LotPickerModal({
     isRawWeightMode,
     boxWeightG,
     unitWeightG,
+    lotAvailableQty,
   ]);
 
   const setQtyForLot = (lotId: string, value: string) => {
@@ -281,7 +324,7 @@ export default function LotPickerModal({
   }, [isParbake, isRawWeightMode, unitWeightG]);
 
   const totalCurrentStock = useMemo(
-    () => rows.reduce((s, r) => s + Number(r.lot.current_quantity || 0), 0),
+    () => rows.reduce((s, r) => s + Number(r.available || 0), 0),
     [rows],
   );
   const reflectedStock = useMemo(() => Math.max(0, totalCurrentStock - sumInput), [totalCurrentStock, sumInput]);
@@ -296,8 +339,8 @@ export default function LotPickerModal({
           );
           return;
         }
-        if (r.qty > Number(r.lot.current_quantity)) {
-          alert(`재고를 초과했습니다: ${formatLotNo(r.lot.lot_date)}`);
+        if (r.qty > Number(r.available)) {
+          alert(`재고를 초과했습니다 (원장 기준): ${formatLotNo(r.lot.lot_date)}`);
           return;
         }
         allocations.push({ lot_id: r.lot.id, quantity_used: r.qty });
@@ -396,7 +439,7 @@ export default function LotPickerModal({
                 </tr>
               </thead>
               <tbody>
-                {rows.map(({ lot, eligible, inputRaw, boxRaw, unitRaw, remainderRaw, qty, after }) => (
+                {rows.map(({ lot, eligible, available, inputRaw, boxRaw, unitRaw, remainderRaw, qty, after }) => (
                   <tr
                     key={lot.id}
                     className={`border-b border-slate-100 ${eligible ? "" : "bg-amber-50"}`}
@@ -410,7 +453,7 @@ export default function LotPickerModal({
                       ) : null}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums text-slate-800">
-                      {Number(lot.current_quantity).toLocaleString()}
+                      {Number(available).toLocaleString()}
                       <span className="ml-0.5 text-slate-500">{lot.unit}</span>
                     </td>
                     <td className="px-3 py-2 text-right">

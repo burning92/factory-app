@@ -10,6 +10,7 @@ import {
   deleteStockAdjustmentDrafts,
 } from "@/features/harang/stockAdjustment";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
 
 const TYPE_LABEL: Record<StockAdjustmentType, string> = {
   production_cycle: "생산 사이클",
@@ -24,7 +25,9 @@ const STATUS_LABEL: Record<string, string> = {
 type TabKey = "cycle" | "packaging";
 
 export default function HarangStockAdjustmentListPage() {
-  const [tab, setTab] = useState<TabKey>("cycle");
+  const { profile } = useAuth();
+  const isAdmin = profile?.role === "admin";
+  const [tab, setTab] = useState<TabKey>("packaging");
   const [rows, setRows] = useState<StockAdjustmentSessionRow[]>([]);
   const [targetCounts, setTargetCounts] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -76,6 +79,7 @@ export default function HarangStockAdjustmentListPage() {
   }, [load]);
 
   const newHref = tab === "cycle" ? "/harang/stock-adjustment/cycle/new" : "/harang/stock-adjustment/packaging/new";
+  const canCreateNew = tab === "packaging" || isAdmin;
 
   const emptyMessage = useMemo(() => {
     if (tab === "cycle") return "생산 사이클 재고조정 이력이 없습니다.";
@@ -126,14 +130,18 @@ export default function HarangStockAdjustmentListPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">재고조정</h1>
-            <p className="text-sm text-slate-600 mt-1">생산 사이클(원재료·파베이크) · 부자재 전체 조정</p>
+            <p className="text-sm text-slate-600 mt-1">
+              부자재 전체 조정 · 생산 사이클 조정(레거시·관리자)
+            </p>
           </div>
+          {canCreateNew ? (
           <Link
             href={newHref}
             className="px-4 py-2 rounded-lg bg-cyan-500 text-white text-sm font-medium hover:bg-cyan-400"
           >
             + 새 조정
           </Link>
+          ) : null}
         </div>
 
         {draftRows.length > 0 && (
@@ -153,17 +161,19 @@ export default function HarangStockAdjustmentListPage() {
         )}
 
         <div className="flex gap-2 border-b border-slate-200">
+          {isAdmin ? (
           <button
             type="button"
             onClick={() => setTab("cycle")}
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
               tab === "cycle"
-                ? "border-cyan-600 text-cyan-700"
+                ? "border-amber-600 text-amber-800"
                 : "border-transparent text-slate-500 hover:text-slate-800"
             }`}
           >
-            생산 사이클
+            생산 사이클 (레거시)
           </button>
+          ) : null}
           <button
             type="button"
             onClick={() => setTab("packaging")}
@@ -176,6 +186,13 @@ export default function HarangStockAdjustmentListPage() {
             부자재
           </button>
         </div>
+
+        {tab === "cycle" ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            생산 사이클 재고조정은 usage_qty·line_lots·원장을 동시에 수정하는 레거시 방식입니다.
+            신규 운영에서는 단순 실사조정(2차 개발 예정)을 사용하세요.
+          </div>
+        ) : null}
 
         <section className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           <table className="min-w-full text-sm text-slate-900">

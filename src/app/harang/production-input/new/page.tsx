@@ -639,6 +639,7 @@ export default function HarangProductionInputNewPage() {
   const [lotPickerKey, setLotPickerKey] = useState<string | null>(null);
   const [loadingCandidates, setLoadingCandidates] = useState(false);
   const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
+  const [isLegacyEdit, setIsLegacyEdit] = useState(false);
 
   const finishedQty = useMemo(() => {
     const n = Number(finishedQtyStr);
@@ -766,7 +767,10 @@ export default function HarangProductionInputNewPage() {
   }, [requestLineIdParam, requestIdParam, requestCandidates, applySelectedLine]);
 
   useEffect(() => {
-    if (!editIdParam) return;
+    if (!editIdParam) {
+      setIsLegacyEdit(false);
+      return;
+    }
     void (async () => {
       const headRes = await supabase
         .from("harang_production_headers")
@@ -790,9 +794,14 @@ export default function HarangProductionInputNewPage() {
         lineIds.length > 0
           ? await supabase
               .from("harang_production_line_lots")
-              .select("line_id, lot_id, quantity_used")
+              .select("line_id, lot_id, quantity_used, inventory_transaction_id")
               .in("line_id", lineIds)
-          : { data: [] as Array<{ line_id: string; lot_id: string; quantity_used: number }> };
+          : { data: [] as Array<{ line_id: string; lot_id: string; quantity_used: number; inventory_transaction_id: number | null }> };
+
+      const legacyUnlinked = (lotsRes.data ?? []).some(
+        (x) => Number(x.quantity_used) > 0.0005 && x.inventory_transaction_id == null,
+      );
+      setIsLegacyEdit(legacyUnlinked);
 
       const usageByMat = new Map<string, { usage_qty: number; lot_dates_summary: string; allocations: LotAllocation[] }>();
       for (const row of plRes.data ?? []) {
@@ -858,6 +867,12 @@ export default function HarangProductionInputNewPage() {
   const handleSave = async () => {
     if (!selectedLine) {
       alert("작업지시 라인을 먼저 선택하세요.");
+      return;
+    }
+    if (isLegacyEdit) {
+      alert(
+        "레거시 생산입고(원장 미연결 line_lot)는 수정할 수 없습니다. 데이터 복구 전에는 조회만 가능합니다.",
+      );
       return;
     }
     if (finishedQty <= 0) {
@@ -954,6 +969,22 @@ export default function HarangProductionInputNewPage() {
             목록으로
           </Link>
         </div>
+
+        {isLegacyEdit && editIdParam ? (
+          <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-950">
+            <p className="font-semibold">레거시 생산입고 — 수정 불가</p>
+            <p className="mt-1 text-red-900">
+              이 생산입고는 레거시 원장 미연결 데이터입니다. 재고 원장과 LOT 사용량이 1:1로 연결되어 있지 않아 수정 시
+              재고가 더 꼬일 수 있습니다. 데이터 복구 전에는 조회만 가능합니다.
+            </p>
+            <Link
+              href={`/harang/production-input/${editIdParam}`}
+              className="mt-2 inline-block text-sm font-medium text-red-800 underline hover:text-red-950"
+            >
+              생산입고 상세로 돌아가기
+            </Link>
+          </div>
+        ) : null}
 
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
           <h2 className="text-sm font-semibold text-slate-800">헤더 정보</h2>
@@ -1131,9 +1162,9 @@ export default function HarangProductionInputNewPage() {
         <div className="flex justify-end gap-2">
           <button
             type="button"
-            disabled={saving}
+            disabled={saving || isLegacyEdit}
             onClick={() => void handleSave()}
-            className="px-5 py-2.5 rounded-lg bg-cyan-600 text-white text-sm font-medium hover:bg-cyan-700 disabled:opacity-60"
+            className="px-5 py-2.5 rounded-lg bg-cyan-600 text-white text-sm font-medium hover:bg-cyan-700 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {saving ? "저장 중…" : editingHeaderId ? "생산입고 수정 저장" : "생산입고 저장"}
           </button>
