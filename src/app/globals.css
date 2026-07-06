@@ -36,6 +36,11 @@ input:focus, select:focus, textarea:focus {
   background-color: #ffffff;
 }
 
+/* 하랑 라이트 테마: 밝은 배경에서 본문·표 가독성 (body text-slate-100 상속 방지) */
+.harang-theme {
+  color: #0f172a;
+}
+
 /* 하랑 라이트 테마: 폼 컨트롤 가독성 통합 보정 */
 .harang-theme input,
 .harang-theme select,

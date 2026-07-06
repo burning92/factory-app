@@ -420,7 +420,7 @@ export default function HarangInventorySurveyDetailPage() {
 
             <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-x-auto">
               <table className="w-full min-w-[900px] text-sm">
-                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                <thead className="bg-slate-100 border-b border-slate-200 text-slate-800">
                   <tr>
                     <th className="px-3 py-2 text-left">품목</th>
                     <th className="px-3 py-2 text-left">소비기한</th>
@@ -440,12 +440,12 @@ export default function HarangInventorySurveyDetailPage() {
                   )}
                   {filteredLots.map((lot) => (
                     <tr key={lot.id} className="border-b border-slate-100">
-                      <td className="px-3 py-2">{lot.item_name}</td>
-                      <td className="px-3 py-2 tabular-nums">{formatYmdDot(lot.lot_date)}</td>
-                      <td className="px-3 py-2 text-slate-600">
+                      <td className="px-3 py-2 text-slate-900 font-medium">{lot.item_name}</td>
+                      <td className="px-3 py-2 tabular-nums text-slate-900">{formatYmdDot(lot.lot_date)}</td>
+                      <td className="px-3 py-2 text-slate-700">
                         {lot.category === "raw_material" ? "원재료" : "부자재"}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-600">
+                      <td className="px-3 py-2 text-right tabular-nums text-slate-800">
                         {lot.referenceQty != null ? (
                           <>
                             {Number(lot.referenceQty).toLocaleString()}
@@ -465,7 +465,7 @@ export default function HarangInventorySurveyDetailPage() {
                               prev.map((r) => (r.id === lot.id ? { ...r, physicalStr: e.target.value } : r)),
                             )
                           }
-                          className={`w-28 px-2 py-1 rounded border text-right tabular-nums text-sm ${
+                          className={`w-28 px-2 py-1 rounded border text-right tabular-nums text-sm text-slate-900 ${
                             lot.physicalStr.trim() === ""
                               ? "border-amber-300 bg-amber-50"
                               : !isLotInputFilled(lot.physicalStr)
@@ -474,7 +474,7 @@ export default function HarangInventorySurveyDetailPage() {
                           }`}
                         />
                       </td>
-                      <td className="px-3 py-2">{lot.unit}</td>
+                      <td className="px-3 py-2 text-slate-700">{lot.unit}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -484,7 +484,7 @@ export default function HarangInventorySurveyDetailPage() {
         ) : (
           <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-x-auto">
             <table className="w-full min-w-[800px] text-sm">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+              <thead className="bg-slate-100 border-b border-slate-200 text-slate-800">
                 <tr>
                   <th className="px-3 py-2 text-left">품목</th>
                   <th className="px-3 py-2 text-left">소비기한</th>
@@ -505,12 +505,12 @@ export default function HarangInventorySurveyDetailPage() {
                   .sort((a, b) => a.item_name.localeCompare(b.item_name) || a.lot_date.localeCompare(b.lot_date))
                   .map((line) => (
                     <tr key={line.id} className="border-b border-slate-100">
-                      <td className="px-3 py-2">{line.item_name}</td>
-                      <td className="px-3 py-2 tabular-nums">{formatYmdDot(line.lot_date)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums font-medium">
+                      <td className="px-3 py-2 text-slate-900 font-medium">{line.item_name}</td>
+                      <td className="px-3 py-2 tabular-nums text-slate-900">{formatYmdDot(line.lot_date)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums font-medium text-slate-900">
                         {Number(line.physical_qty).toLocaleString()}
                       </td>
-                      <td className="px-3 py-2">{line.unit}</td>
+                      <td className="px-3 py-2 text-slate-700">{line.unit}</td>
                     </tr>
                   ))}
               </tbody>
