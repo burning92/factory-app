@@ -10,8 +10,6 @@ import {
   CalendarDays,
   User,
   Inbox,
-  Factory,
-  Layers,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -22,14 +20,15 @@ const TAB_DAILY = { href: "/daily", label: "데일리", Icon: CalendarDays };
 /** 임원 대시보드 (/executive 및 하위 상세) — 100 조직 보기 시 전원 */
 const TAB_EXECUTIVE = { href: "/executive", label: "대시보드", Icon: LayoutDashboard };
 const TAB_ACCOUNT = { href: "/account", label: "계정", Icon: User };
+const TAB_HARANG_HOME = { href: "/harang", label: "홈", Icon: Home };
+const TAB_HARANG_SIMPLE = { href: "/harang/simple-inventory", label: "간편재고", Icon: Package };
 const TAB_HARANG_INBOUND = { href: "/harang/inbound", label: "입고", Icon: Inbox };
 const TAB_HARANG_OUTBOUND = { href: "/harang/outbound", label: "출고", Icon: Inbox };
-const TAB_HARANG_PRODUCTION = { href: "/harang/production-input", label: "생산", Icon: Factory };
-const TAB_HARANG_INVENTORY = { href: "/harang/inventory", label: "재고", Icon: Layers };
 const ECOUNT_NEAR_EXPIRY_SEEN_STORAGE_KEY = "ecount-near-expiry-alert-seen-key";
 const PLANNING_NEAR_EXPIRY_SEEN_STORAGE_KEY = "planning-near-expiry-alert-seen";
 
 function isActive(pathname: string, href: string): boolean {
+  if (href === "/harang") return pathname === "/harang";
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(href + "/");
 }
@@ -42,14 +41,7 @@ export default function MobileTabBar() {
   const isRestrictedWorker = profile?.role === "worker";
 
   const tabs = viewIsHarang
-    ? [
-        TAB_HOME,
-        TAB_HARANG_INBOUND,
-        TAB_HARANG_OUTBOUND,
-        TAB_HARANG_INVENTORY,
-        TAB_HARANG_PRODUCTION,
-        TAB_ACCOUNT,
-      ]
+    ? [TAB_HARANG_HOME, TAB_HARANG_SIMPLE, TAB_HARANG_INBOUND, TAB_HARANG_OUTBOUND, TAB_ACCOUNT]
     : isRestrictedWorker
       ? [TAB_HOME, TAB_PRODUCTION, TAB_MATERIALS, TAB_EXECUTIVE, TAB_ACCOUNT]
       : [TAB_HOME, TAB_PRODUCTION, TAB_MATERIALS, TAB_DAILY, TAB_EXECUTIVE, TAB_ACCOUNT];

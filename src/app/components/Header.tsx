@@ -12,12 +12,6 @@ const ARMORED_LOGO_SRC = "/apple-icon.png";
 const ECOUNT_NEAR_EXPIRY_SEEN_STORAGE_KEY = "ecount-near-expiry-alert-seen-key";
 const PLANNING_NEAR_EXPIRY_SEEN_STORAGE_KEY = "planning-near-expiry-alert-seen";
 
-const HARANG_INVENTORY_SUBMENU = [
-  { href: "/harang/inventory", label: "원부자재 재고현황" },
-  { href: "/harang/inventory/finished-products", label: "완제품 재고현황" },
-  { href: "/harang/stock-adjustment", label: "실사 재고조정", dividerBefore: true },
-] as const;
-
 const HARANG_DEFECT_SUBMENU = [
   { href: "/harang/defect-disposal", label: "불량처리조회" },
   { href: "/harang/defect-disposal/new", label: "불량처리입력" },
@@ -139,17 +133,15 @@ export default function Header() {
   const showExecutiveLink = !viewIsHarang;
 
 
-  /** 데스크탑 상단 카테고리: 100 = 기존, 200 = 하랑 운영 메뉴 */
+  /** 데스크탑 상단 카테고리: 200 = 하랑 간편 재고 중심 */
   const desktopNavItems = viewIsHarang
     ? [
-        { href: "/", label: "홈" },
+        { href: "/harang", label: "홈" },
+        { href: "/harang/simple-inventory", label: "간편재고" },
         { href: "/harang/inbound", label: "입고관리" },
         { href: "/harang/outbound", label: "출고관리" },
-        { href: "/harang/inventory", label: "재고관리" },
-        { href: "/harang/defect-disposal", label: "불량처리" },
-        { href: "/harang/production-requests", label: "생산요청" },
-        { href: "/harang/production-input", label: "생산입력" },
-        ...(isAdmin ? [{ href: "/harang/admin", label: "마스터관리" }] : []),
+        { href: "/harang/defect-disposal", label: "불량·폐기", defectDropdown: true as const },
+        { href: "/harang/inventory/finished-products", label: "완제품재고" },
         { href: "/account", label: "계정" },
       ]
     : isRestrictedWorker
@@ -168,12 +160,13 @@ export default function Header() {
   /**
    * 데스크탑 상단 카테고리 메뉴 노출 범위
    * - 100 보기: 허브 + 관련 작업 경로에서도 유지
-   * - 200 보기: 홈·입고·재고·생산입력·(관리자)마스터·계정
+   * - 200 보기: /harang·간편재고·입출고·계정
    */
   const showDesktopCategoryMenu = viewIsHarang
     ? pathname === "/" ||
       pathname.startsWith("/account") ||
-      pathname.startsWith("/harang")
+      pathname === "/harang" ||
+      pathname.startsWith("/harang/")
     : pathname === "/" ||
       ["/production", "/materials", "/daily", "/account", "/inventory", "/manage", "/executive", "/admin"].some(
         (prefix) => pathname === prefix || pathname.startsWith(prefix + "/")
@@ -222,8 +215,8 @@ export default function Header() {
 
   const handleSwitchToHarang = () => {
     setViewOrganizationCodeSafe("200");
-    if (pathname === "/" || pathname.startsWith("/harang")) return;
-    router.replace("/");
+    if (pathname === "/harang" || pathname.startsWith("/harang/")) return;
+    router.replace("/harang");
   };
 
   const handleHeaderNavClickCapture = (event: React.MouseEvent<HTMLElement>) => {
@@ -251,7 +244,7 @@ export default function Header() {
     >
       <div className="flex min-w-0 flex-1 items-center gap-2 md:flex-none md:min-w-0">
         <Link
-          href="/"
+          href={viewIsHarang ? "/harang" : "/"}
           className="flex min-w-0 items-center gap-2 text-slate-100 hover:text-white transition-colors shrink-0"
         >
           {effectiveLogoUrl.startsWith("http") ? (
@@ -290,17 +283,16 @@ export default function Header() {
 
       <nav className="hidden md:flex flex-1 justify-center items-center gap-6 min-w-0" aria-label="업무 카테고리">
         {showDesktopCategoryMenu && (viewIsHarang ? (
-          desktopNavItems.map(({ href, label }) => {
-            const isInventoryMenu = href === "/harang/inventory";
-            const isDefectMenu = href === "/harang/defect-disposal";
-            const isActive = isInventoryMenu
-              ? pathname.startsWith("/harang/inventory") ||
-                pathname.startsWith("/harang/stock-adjustment")
-              : isDefectMenu
-                ? pathname.startsWith("/harang/defect-disposal")
+          desktopNavItems.map((item) => {
+            const { href, label } = item;
+            const isDefectMenu = "defectDropdown" in item && item.defectDropdown;
+            const isActive = isDefectMenu
+              ? pathname.startsWith("/harang/defect-disposal")
+              : href === "/harang"
+                ? pathname === "/harang"
                 : pathname === href || (href !== "/" && pathname.startsWith(href));
 
-            if (!isInventoryMenu && !isDefectMenu) {
+            if (!isDefectMenu) {
               return (
                 <Link
                   key={href}
@@ -314,8 +306,7 @@ export default function Header() {
               );
             }
 
-            const dropdownKey: DropdownKey = isInventoryMenu ? "materials" : "defect";
-            const submenu = isInventoryMenu ? HARANG_INVENTORY_SUBMENU : HARANG_DEFECT_SUBMENU;
+            const dropdownKey: DropdownKey = "defect";
             const isOpen = activeDropdown === dropdownKey;
             return (
               <div
@@ -352,34 +343,28 @@ export default function Header() {
                     role="menu"
                   >
                     <div className="rounded-lg border border-slate-600 bg-slate-900 py-2 shadow-2xl shadow-black/50 ring-1 ring-slate-700/80">
-                      {submenu.map((item) => (
-                        <div key={item.href}>
-                          {"dividerBefore" in item && item.dividerBefore ? (
-                            <div className="my-1.5 border-t border-slate-600/70" role="presentation" />
-                          ) : null}
-                          <Link
-                            href={item.href}
-                            className={`block px-4 py-2 text-sm transition-colors ${
-                              (() => {
-                                if (item.href === "/harang/defect-disposal") {
-                                  return (
-                                    pathname === item.href ||
-                                    (pathname.startsWith("/harang/defect-disposal/") &&
-                                      !pathname.startsWith("/harang/defect-disposal/new"))
-                                  );
-                                }
+                      {HARANG_DEFECT_SUBMENU.map((subItem) => (
+                        <Link
+                          key={subItem.href}
+                          href={subItem.href}
+                          className={`block px-4 py-2 text-sm transition-colors ${
+                            (() => {
+                              if (subItem.href === "/harang/defect-disposal") {
                                 return (
-                                  pathname === item.href || pathname.startsWith(`${item.href}/`)
+                                  pathname === subItem.href ||
+                                  (pathname.startsWith("/harang/defect-disposal/") &&
+                                    !pathname.startsWith("/harang/defect-disposal/new"))
                                 );
-                              })()
-                                ? "text-cyan-300 bg-cyan-500/10"
-                                : "text-slate-300 hover:bg-slate-700/80 hover:text-slate-100"
-                            }`}
-                            role="menuitem"
-                          >
-                            {item.label}
-                          </Link>
-                        </div>
+                              }
+                              return pathname === subItem.href || pathname.startsWith(`${subItem.href}/`);
+                            })()
+                              ? "text-cyan-300 bg-cyan-500/10"
+                              : "text-slate-300 hover:bg-slate-700/80 hover:text-slate-100"
+                          }`}
+                          role="menuitem"
+                        >
+                          {subItem.label}
+                        </Link>
                       ))}
                     </div>
                   </div>

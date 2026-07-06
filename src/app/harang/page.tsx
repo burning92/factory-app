@@ -37,26 +37,14 @@ const PRIMARY_ITEMS = [
     Icon: ClipboardList,
   },
   {
-    href: "/harang/outbound/clients",
-    label: "출고처관리",
-    description: "출고처 마스터",
-    Icon: ClipboardList,
-  },
-  {
     href: "/harang/defect-disposal",
     label: "불량·폐기",
     description: "재고 감소 — 폐기 등록",
     Icon: Scale,
   },
   {
-    href: "/harang/inventory",
-    label: "원부자재 재고현황",
-    description: "레거시 원장·LOT 이력 조회 (간편 재고 정본 아님)",
-    Icon: Layers,
-  },
-  {
     href: "/harang/inventory/finished-products",
-    label: "완제품 재고현황",
+    label: "완제품 재고",
     description: "완제품 LOT 잔량 조회",
     Icon: Layers,
   },
@@ -69,6 +57,18 @@ const PRIMARY_ITEMS = [
 ] as const;
 
 const LEGACY_ITEMS = [
+  {
+    href: "/harang/inventory",
+    label: "원부자재 재고현황",
+    description: "레거시 원장·LOT 이력 조회 (간편 재고 정본 아님)",
+    Icon: Layers,
+  },
+  {
+    href: "/harang/outbound/clients",
+    label: "출고처관리",
+    description: "출고처 마스터 (레거시)",
+    Icon: ClipboardList,
+  },
   {
     href: "/harang/production-requests",
     label: "생산요청",
