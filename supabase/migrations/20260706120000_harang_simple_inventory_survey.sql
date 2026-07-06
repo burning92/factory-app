@@ -229,10 +229,10 @@ BEGIN
     SELECT
       p.curr_id,
       sl.category AS line_category,
-      sl.item_id,
-      sl.item_name,
-      sl.unit,
-      sl.lot_date,
+      sl.item_id AS line_item_id,
+      sl.item_name AS line_item_name,
+      sl.unit AS line_unit,
+      sl.lot_date AS line_lot_date,
       COALESCE(SUM(sl.physical_qty), 0)::NUMERIC(14, 3) AS qty
     FROM pairs p
     JOIN public.harang_inventory_survey_lines sl ON sl.survey_id = p.prev_id
@@ -242,28 +242,28 @@ BEGIN
     SELECT
       p.curr_id,
       sl.category AS line_category,
-      sl.item_id,
-      sl.item_name,
-      sl.unit,
-      sl.lot_date,
+      sl.item_id AS line_item_id,
+      sl.item_name AS line_item_name,
+      sl.unit AS line_unit,
+      sl.lot_date AS line_lot_date,
       COALESCE(SUM(sl.physical_qty), 0)::NUMERIC(14, 3) AS qty
     FROM pairs p
     JOIN public.harang_inventory_survey_lines sl ON sl.survey_id = p.curr_id
     GROUP BY p.curr_id, sl.category, sl.item_id, sl.item_name, sl.unit, sl.lot_date
   ),
   keys AS (
-    SELECT curr_id, line_category, item_id, item_name, unit, lot_date FROM prev_agg
+    SELECT curr_id, line_category, line_item_id, line_item_name, line_unit, line_lot_date FROM prev_agg
     UNION
-    SELECT curr_id, line_category, item_id, item_name, unit, lot_date FROM curr_agg
+    SELECT curr_id, line_category, line_item_id, line_item_name, line_unit, line_lot_date FROM curr_agg
     UNION
     -- 기간 중 inbound만 있고 전/현 조사 line에 없는 품목+소비기한 (케이스 B/D)
     SELECT
       p.curr_id,
       l.category AS line_category,
-      l.item_id,
-      l.item_name,
-      l.unit,
-      l.lot_date
+      l.item_id AS line_item_id,
+      l.item_name AS line_item_name,
+      l.unit AS line_unit,
+      l.lot_date AS line_lot_date
     FROM pairs p
     JOIN public.harang_inventory_transactions t
       ON t.tx_type = 'inbound'
@@ -276,8 +276,8 @@ BEGIN
     SELECT
       p.curr_id,
       l.category AS line_category,
-      l.item_id,
-      l.lot_date,
+      l.item_id AS line_item_id,
+      l.lot_date AS line_lot_date,
       COALESCE(SUM(t.quantity_delta), 0)::NUMERIC(14, 3) AS qty
     FROM pairs p
     JOIN public.harang_inventory_transactions t
@@ -289,15 +289,15 @@ BEGIN
   )
   SELECT
     to_char(p.prev_date, 'YYYY.MM.DD') || ' ~ ' || to_char(p.curr_date, 'YYYY.MM.DD') AS period_label,
-    p.prev_id,
-    p.prev_date,
-    p.curr_id,
-    p.curr_date,
+    p.prev_id AS prev_survey_id,
+    p.prev_date AS prev_survey_date,
+    p.curr_id AS curr_survey_id,
+    p.curr_date AS curr_survey_date,
     k.line_category AS category,
-    k.item_id,
-    k.item_name,
-    k.unit,
-    k.lot_date,
+    k.line_item_id AS item_id,
+    k.line_item_name AS item_name,
+    k.line_unit AS unit,
+    k.line_lot_date AS lot_date,
     COALESCE(pa.qty, 0) AS prev_physical,
     COALESCE(ib.qty, 0) AS period_inbound,
     COALESCE(ca.qty, 0) AS curr_physical,
@@ -307,21 +307,21 @@ BEGIN
   LEFT JOIN prev_agg pa
     ON pa.curr_id = k.curr_id
    AND pa.line_category = k.line_category
-   AND pa.item_id = k.item_id
-   AND pa.lot_date = k.lot_date
+   AND pa.line_item_id = k.line_item_id
+   AND pa.line_lot_date = k.line_lot_date
   LEFT JOIN curr_agg ca
     ON ca.curr_id = k.curr_id
    AND ca.line_category = k.line_category
-   AND ca.item_id = k.item_id
-   AND ca.lot_date = k.lot_date
+   AND ca.line_item_id = k.line_item_id
+   AND ca.line_lot_date = k.line_lot_date
   LEFT JOIN inbound ib
     ON ib.curr_id = k.curr_id
    AND ib.line_category = k.line_category
-   AND ib.item_id = k.item_id
-   AND ib.lot_date = k.lot_date
+   AND ib.line_item_id = k.line_item_id
+   AND ib.line_lot_date = k.line_lot_date
   WHERE (p_month IS NULL OR to_char(p.curr_date, 'YYYY-MM') = p_month)
-    AND (p_item_id IS NULL OR k.item_id = p_item_id)
-  ORDER BY p.curr_date DESC, k.item_name, k.lot_date;
+    AND (p_item_id IS NULL OR k.line_item_id = p_item_id)
+  ORDER BY p.curr_date DESC, k.line_item_name, k.line_lot_date;
 END;
 $$;
 
@@ -362,10 +362,10 @@ BEGIN
       d.curr_survey_id,
       d.curr_survey_date,
       d.category AS rpt_category,
-      d.item_id,
-      d.item_name,
-      d.unit,
-      d.lot_date,
+      d.item_id AS rpt_item_id,
+      d.item_name AS rpt_item_name,
+      d.unit AS rpt_unit,
+      d.lot_date AS rpt_lot_date,
       d.prev_physical,
       d.period_inbound,
       d.curr_physical,
@@ -373,15 +373,15 @@ BEGIN
     FROM public.harang_list_survey_consumption_report(p_month, NULL) AS d
   ),
   month_end AS (
-    SELECT DISTINCT ON (d.month_key, d.item_id)
+    SELECT DISTINCT ON (d.month_key, d.rpt_item_id)
       d.month_key,
-      d.item_id,
+      d.rpt_item_id,
       d.rpt_category,
-      d.item_name,
-      d.unit,
+      d.rpt_item_name,
+      d.rpt_unit,
       d.curr_survey_date,
       SUM(d.curr_physical) OVER (
-        PARTITION BY d.month_key, d.item_id, d.curr_survey_id
+        PARTITION BY d.month_key, d.rpt_item_id, d.curr_survey_id
       )::NUMERIC(14, 3) AS end_stock
     FROM (
       SELECT
@@ -389,14 +389,14 @@ BEGIN
         detail.*
       FROM detail
     ) d
-    ORDER BY d.month_key, d.item_id, d.curr_survey_date DESC
+    ORDER BY d.month_key, d.rpt_item_id, d.curr_survey_date DESC
   )
   SELECT
     d.month_key AS month_label,
     d.rpt_category AS category,
-    d.item_id,
-    d.item_name,
-    d.unit,
+    d.rpt_item_id AS item_id,
+    d.rpt_item_name AS item_name,
+    d.rpt_unit AS unit,
     SUM(d.calculated_consumption)::NUMERIC(14, 3) AS total_consumption,
     me.end_stock AS month_end_stock,
     me.curr_survey_date AS last_survey_date
@@ -404,9 +404,9 @@ BEGIN
     SELECT to_char(curr_survey_date, 'YYYY-MM') AS month_key, detail.*
     FROM detail
   ) d
-  LEFT JOIN month_end me ON me.month_key = d.month_key AND me.item_id = d.item_id
-  GROUP BY d.month_key, d.rpt_category, d.item_id, d.item_name, d.unit, me.end_stock, me.curr_survey_date
-  ORDER BY d.month_key DESC, d.item_name;
+  LEFT JOIN month_end me ON me.month_key = d.month_key AND me.rpt_item_id = d.rpt_item_id
+  GROUP BY d.month_key, d.rpt_category, d.rpt_item_id, d.rpt_item_name, d.rpt_unit, me.end_stock, me.curr_survey_date
+  ORDER BY d.month_key DESC, d.rpt_item_name;
 END;
 $$;
 
