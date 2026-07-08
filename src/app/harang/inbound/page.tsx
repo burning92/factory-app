@@ -4,13 +4,11 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { InboundEditModal } from "@/features/harang/InboundEditModal";
+import { downloadInboundHistoryExcel } from "@/features/harang/exportInboundHistory";
+import { sumInboundHeaderQuantity } from "@/features/harang/inboundDisplay";
 import type { HarangInboundHeader } from "@/features/harang/types";
 
 type CategoryLabel = "원재료" | "부자재" | "혼합";
-
-function isParbakeDoughName(name: string): boolean {
-  return name.replace(/\s/g, "").includes("파베이크도우");
-}
 
 function summarizeCategory(header: HarangInboundHeader): CategoryLabel {
   const categories = Array.from(new Set((header.items ?? []).map((item) => item.category)));
@@ -30,21 +28,7 @@ function summarizeItemName(header: HarangInboundHeader): string {
 }
 
 function sumQuantity(header: HarangInboundHeader): string {
-  const totals = new Map<string, number>();
-  for (const item of header.items ?? []) {
-    const unit =
-      item.category === "packaging_material"
-        ? "EA"
-        : isParbakeDoughName(String(item.item_name ?? ""))
-          ? "EA"
-          : "g";
-    const prev = totals.get(unit) ?? 0;
-    totals.set(unit, prev + Number(item.quantity ?? 0));
-  }
-  if (totals.size === 0) return "-";
-  return Array.from(totals.entries())
-    .map(([unit, qty]) => `${qty.toLocaleString("ko-KR")} ${unit}`)
-    .join(" / ");
+  return sumInboundHeaderQuantity(header);
 }
 
 function authorLabel(header: HarangInboundHeader): string {
@@ -201,12 +185,22 @@ export default function HarangInboundListPage() {
             <h1 className="text-2xl font-semibold text-slate-900">하랑 입고관리</h1>
             <p className="text-sm text-slate-600 mt-1">입고내역 조회 및 신규 입고 등록</p>
           </div>
-          <Link
-            href="/harang/inbound/new"
-            className="px-4 py-2 rounded-lg bg-cyan-500 text-white text-sm font-medium hover:bg-cyan-400"
-          >
-            입고입력
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={loading || filtered.length === 0}
+              onClick={() => downloadInboundHistoryExcel(filtered)}
+              className="px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-800 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+            >
+              엑셀 다운로드
+            </button>
+            <Link
+              href="/harang/inbound/new"
+              className="px-4 py-2 rounded-lg bg-cyan-500 text-white text-sm font-medium hover:bg-cyan-400"
+            >
+              입고입력
+            </Link>
+          </div>
         </div>
 
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -260,7 +254,11 @@ export default function HarangInboundListPage() {
             </select>
             <input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="품목명/비고 검색" className="px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 text-sm" />
           </div>
-          <div className="mt-3 flex items-center justify-end gap-2">
+          <div className="mt-3 flex items-center justify-between gap-2 flex-wrap">
+            <p className="text-xs text-slate-500">
+              {filtered.length}건 표시 · 엑셀 다운로드는 현재 검색 결과(품목별 상세)를 내려받습니다.
+            </p>
+            <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={resetFilters}
@@ -275,6 +273,7 @@ export default function HarangInboundListPage() {
             >
               검색
             </button>
+            </div>
           </div>
         </section>
 
