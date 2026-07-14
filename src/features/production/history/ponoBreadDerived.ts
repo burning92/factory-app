@@ -34,7 +34,7 @@ export type PonoBreadDerived = {
   ingredientUsageRows?: PonoBreadIngredientUsageRow[];
 };
 
-const PONO_BREAD_BASE_NAME = "포노부오노 시그니처 화덕 브레드";
+export const PONO_BREAD_BASE_NAME = "포노부오노 시그니처 화덕 브레드";
 
 export { applyIngredientWasteFifo };
 

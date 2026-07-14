@@ -10,6 +10,7 @@ import {
   fetchInventoryLotsForMaterial,
   resolveOutboundExpiry,
 } from "@/features/production/outbound/inventoryLots";
+import { getBomMaterialNamesForAdditionalOutbound } from "@/features/production/outbound/additionalOutboundMaterials";
 
 type MaterialLike = {
   materialName: string;
@@ -898,7 +899,7 @@ export default function OutboundHistoryPage() {
                       <DetailView
                         logs={group.logs}
                         materials={materialsList}
-                        bomMaterialNames={bomMaterialNamesByProduct.get(group.제품명) ?? []}
+                        bomMaterialNames={getBomMaterialNamesForAdditionalOutbound(group.제품명, bomMaterialNamesByProduct)}
                         onUpdateOutbound={handleUpdateOutbound}
                         onDeleteLine={handleDeleteLine}
                         onAddMaterialOutbound={(payload) => handleAddMaterialOutbound(group, payload)}
@@ -979,7 +980,7 @@ export default function OutboundHistoryPage() {
                               <DetailView
                                 logs={group.logs}
                                 materials={materialsList}
-                                bomMaterialNames={bomMaterialNamesByProduct.get(group.제품명) ?? []}
+                                bomMaterialNames={getBomMaterialNamesForAdditionalOutbound(group.제품명, bomMaterialNamesByProduct)}
                                 onUpdateOutbound={handleUpdateOutbound}
                                 onDeleteLine={handleDeleteLine}
                                 onAddMaterialOutbound={(payload) => handleAddMaterialOutbound(group, payload)}
