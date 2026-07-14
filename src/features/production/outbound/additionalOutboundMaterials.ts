@@ -11,7 +11,7 @@
  * 추가 출고 선택지에는 넣지 않는다.
  */
 
-import { PONO_BREAD_BASE_NAME } from "@/features/production/history/ponoBreadDerived";
+const PONO_BREAD_BASE_NAME = "포노부오노 시그니처 화덕 브레드";
 
 /** 캔(본품) + 팩 제품명 모두 포노브레드 계열로 취급 */
 function isPonoBreadFamily(productName: string): boolean {
@@ -33,7 +33,8 @@ export function getBomMaterialNamesForAdditionalOutbound(
   if (!isPonoBreadFamily(productName)) return direct;
 
   const set = new Set<string>();
-  for (const [bomProduct, materials] of bomMaterialNamesByProduct) {
+  // ES5 target: Map은 for...of 대신 Array.from 사용
+  for (const [bomProduct, materials] of Array.from(bomMaterialNamesByProduct.entries())) {
     if (!isPonoBreadFamily(bomProduct)) continue;
     for (const m of materials) {
       const name = (m ?? "").trim();
