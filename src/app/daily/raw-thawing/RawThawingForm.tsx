@@ -484,7 +484,7 @@ export function RawThawingForm({ mode, editLogId }: Props) {
   return (
     <div className="min-h-[calc(100vh-3.5rem)] md:min-h-0 p-4 md:p-6 max-w-2xl mx-auto pb-20 md:pb-6">
       <div className="flex items-center gap-2 mb-4">
-        <Link href="/daily" className="text-slate-400 hover:text-slate-200 text-sm">데일리</Link>
+        <Link href="/materials" className="text-slate-400 hover:text-slate-200 text-sm">원부자재</Link>
         <span className="text-slate-600">/</span>
         <Link href="/daily/raw-thawing" className="text-slate-400 hover:text-slate-200 text-sm">원료 해동 일지</Link>
         <span className="text-slate-600">/</span>

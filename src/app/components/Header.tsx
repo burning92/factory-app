@@ -391,7 +391,16 @@ export default function Header() {
                     : key === "daily"
                       ? null
                       : desktopManagementItems;
-              const isActive = pathname === href || pathname.startsWith(href + "/");
+              const isRawThawingPath =
+                pathname === "/daily/raw-thawing" || pathname.startsWith("/daily/raw-thawing/");
+              const isActive =
+                key === "materials"
+                  ? pathname === "/materials" ||
+                    pathname.startsWith("/materials/") ||
+                    isRawThawingPath
+                  : key === "daily"
+                    ? (pathname === "/daily" || pathname.startsWith("/daily/")) && !isRawThawingPath
+                    : pathname === href || pathname.startsWith(href + "/");
               const isOpen = activeDropdown === key;
               return (
                 <div

@@ -39,13 +39,25 @@ type LogHeader = {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * 해동 시작/종료는 폼에서 timezone 없이 `YYYY-MM-DDTHH:mm` 로컬 벽시계로 저장한다.
+ * `new Date(iso).toLocaleString` 은 timestamptz(+00:00)로 해석되어 KST(+9h)로 틀어지므로,
+ * 수정 화면(parseInitialLocalDatetime)과 같이 문자열 앞부분을 그대로 표시한다.
+ */
 function formatDt(iso: string | null): string {
   if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" });
-  } catch {
-    return iso;
-  }
+  const raw = String(iso).trim();
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2}))?/);
+  if (!m) return raw;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const hh = m[4] != null ? Number(m[4]) : 0;
+  const mm = m[5] != null ? Number(m[5]) : 0;
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return raw;
+  const ampm = hh < 12 ? "오전" : "오후";
+  const h12 = hh % 12 === 0 ? 12 : hh % 12;
+  return `${String(y).slice(2)}. ${mo}. ${d}. ${ampm} ${String(h12).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
 }
 
 function resultLabel(v: string | null): string {
@@ -96,7 +108,7 @@ export default function DailyRawThawingViewPage() {
   return (
     <div className="min-h-[calc(100vh-3.5rem)] p-4 md:p-6 max-w-2xl mx-auto pb-20 md:pb-6">
       <div className="flex items-center gap-2 mb-4">
-        <Link href="/daily" className="text-slate-400 hover:text-slate-200 text-sm">데일리</Link>
+        <Link href="/materials" className="text-slate-400 hover:text-slate-200 text-sm">원부자재</Link>
         <span className="text-slate-600">/</span>
         <Link href="/daily/raw-thawing" className="text-slate-400 hover:text-slate-200 text-sm">원료 해동 일지</Link>
         <span className="text-slate-600">/</span>
