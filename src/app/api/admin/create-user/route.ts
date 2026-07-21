@@ -27,7 +27,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "잘못된 요청" }, { status: 400 });
   }
   const { access_token, refresh_token, organization_code, login_id, display_name, password, role } = body;
-  const allowedRoles = new Set(["worker", "assistant_manager", "manager", "headquarters"]);
+  const allowedRoles = new Set([
+    "worker",
+    "assistant_manager",
+    "manager",
+    "quality_manager",
+    "headquarters",
+  ]);
   const profileRole = allowedRoles.has(String(role)) ? String(role) : "worker";
   if (!access_token || !refresh_token || !organization_code?.trim() || !login_id?.trim() || !password) {
     return NextResponse.json(

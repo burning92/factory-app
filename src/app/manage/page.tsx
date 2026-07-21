@@ -28,8 +28,11 @@ const ROLE_OPTIONS = [
   { value: "worker", label: "워커" },
   { value: "assistant_manager", label: "준매니저" },
   { value: "manager", label: "매니저" },
+  { value: "quality_manager", label: "품질팀장" },
   { value: "headquarters", label: "본사" },
 ] as const;
+
+type AssignableRole = (typeof ROLE_OPTIONS)[number]["value"];
 
 interface ProfileRow {
   id: string;
@@ -94,7 +97,7 @@ export default function ManagePage() {
   const [newDisplayName, setNewDisplayName] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newUserOrgCode, setNewUserOrgCode] = useState("");
-  const [newUserRole, setNewUserRole] = useState<"worker" | "assistant_manager" | "manager" | "headquarters">("worker");
+  const [newUserRole, setNewUserRole] = useState<AssignableRole>("worker");
   const [submitting, setSubmitting] = useState(false);
   const [showInitialPassword, setShowInitialPassword] = useState(false);
   const [savingRoleId, setSavingRoleId] = useState<string | null>(null);
@@ -183,11 +186,8 @@ export default function ManagePage() {
 
   const handleRoleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const v = e.target.value;
-    if (v === "assistant_manager" || v === "manager" || v === "headquarters") {
-      setNewUserRole(v);
-      return;
-    }
-    setNewUserRole("worker");
+    const matched = ROLE_OPTIONS.find((r) => r.value === v);
+    setNewUserRole(matched?.value ?? "worker");
   };
 
   async function handleResetPassword(userId: string) {
@@ -268,10 +268,7 @@ export default function ManagePage() {
     loadProfiles();
   }
 
-  async function handleSaveRole(
-    pro: ProfileRow,
-    newRole: "worker" | "assistant_manager" | "manager" | "headquarters"
-  ) {
+  async function handleSaveRole(pro: ProfileRow, newRole: AssignableRole) {
     if (pro.role === "admin") return;
     setError(null);
     setSavingRoleId(pro.id);
@@ -483,7 +480,7 @@ export default function ManagePage() {
                           <select
                             value={p.role}
                             onChange={(e) => {
-                              const v = e.target.value as "worker" | "assistant_manager" | "manager" | "headquarters";
+                              const v = e.target.value as AssignableRole;
                               handleSaveRole(p, v);
                             }}
                             disabled={savingRoleId === p.id}
