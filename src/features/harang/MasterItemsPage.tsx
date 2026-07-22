@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "@/lib/supabase";
+import { isAdminLikeRole } from "@/lib/roles";
 import { useAuth } from "@/contexts/AuthContext";
 import type { HarangMasterItem } from "./types";
 
@@ -237,7 +238,7 @@ export default function MasterItemsPage({ title, tableName, description, showWei
   const [fetching, setFetching] = useState(false);
   const [saving, setSaving] = useState(false);
   const [weightColumnsAvailable, setWeightColumnsAvailable] = useState(showWeightFields);
-  const isAdmin = profile?.role === "admin";
+  const isAdmin = isAdminLikeRole(profile?.role);
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);

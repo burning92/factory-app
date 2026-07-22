@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Clock3, PackageSearch, Siren } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { isManagerOrAbove } from "@/lib/roles";
 import { supabase } from "@/lib/supabase";
 import { computePurchasingRows } from "@/features/materials/purchasing/calculations";
 import type { PurchasingPeriodKey, PurchasingStatus, PurchasingSummaryData, PurchasingTableRow } from "@/features/materials/purchasing/types";
@@ -49,7 +50,7 @@ function fmtNum(value: number): string {
 export default function PurchasingClient() {
   const router = useRouter();
   const { profile, loading: authLoading } = useAuth();
-  const canView = profile?.role === "admin" || profile?.role === "manager" || profile?.role === "headquarters";
+  const canView = isManagerOrAbove(profile?.role);
 
   const [period, setPeriod] = useState<PurchasingPeriodKey>("month_next");
   const [viewTab, setViewTab] = useState<PurchasingViewTab>("immediate");

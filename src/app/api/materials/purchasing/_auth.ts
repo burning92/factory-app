@@ -52,7 +52,7 @@ export async function verifyPurchasingAccess(params: {
   return verifyRoleAccess({
     authorizationHeader: params.authorizationHeader,
     refreshTokenHeader: params.refreshTokenHeader,
-    allowedRoles: ["admin", "manager", "headquarters"],
+    allowedRoles: ["admin", "manager", "headquarters", "quality_manager"],
   });
 }
 

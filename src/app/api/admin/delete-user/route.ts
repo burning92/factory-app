@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { isAdminLikeRole } from "@/lib/roles";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
   });
 
   const { data: actorProfile } = await admin.from("profiles").select("role").eq("id", user.id).single();
-  if (actorProfile?.role !== "admin") {
+  if (!isAdminLikeRole(actorProfile?.role)) {
     return NextResponse.json({ error: "권한 없음" }, { status: 403 });
   }
 

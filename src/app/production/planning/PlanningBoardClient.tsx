@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { CalendarDays, Save, Copy, Plus, Trash2, Download, X, CalendarRange } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { isManagerOrAbove } from "@/lib/roles";
 import {
   computeActualManpower,
   computeMaterialRequirements,
@@ -178,8 +179,7 @@ export default function PlanningBoardClient() {
   });
 
   const { profile, loading: authLoading } = useAuth();
-  const canView =
-    profile?.role === "admin" || profile?.role === "manager" || profile?.role === "headquarters";
+  const canView = isManagerOrAbove(profile?.role);
   const canEdit = canView;
   const yearOptions = useMemo(() => {
     const start = 2026;

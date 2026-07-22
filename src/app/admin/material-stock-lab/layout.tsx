@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { isAdminLikeRole } from "@/lib/roles";
 
 const LAB_PAGE_WIDTH = "mx-auto w-full max-w-6xl lg:max-w-[min(100rem,calc(100vw-2.5rem))]";
 
@@ -12,10 +13,10 @@ export default function AdminMaterialStockLabLayout({ children }: { children: Re
 
   useEffect(() => {
     if (loading) return;
-    if (profile?.role !== "admin") router.replace("/");
+    if (!isAdminLikeRole(profile?.role)) router.replace("/");
   }, [loading, profile?.role, router]);
 
-  if (loading || profile?.role !== "admin") {
+  if (loading || !isAdminLikeRole(profile?.role)) {
     return (
       <div className="min-h-[40vh] flex items-center justify-center">
         <p className="text-slate-500 text-sm">확인 중…</p>

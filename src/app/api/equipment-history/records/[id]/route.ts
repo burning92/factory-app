@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { getEquipmentHistoryAuthedClient } from "@/lib/equipmentHistoryRequestAuth";
 import { writeAuditLog } from "@/lib/serverAuditLog";
+import { isAdminLikeRole } from "@/lib/roles";
 
 /**
- * 설비이력기록부 본문 삭제 — admin만 (RLS + API 역할 이중 검증)
+ * 설비이력기록부 본문 삭제 — admin급 (RLS + API 역할 이중 검증)
  * 연결된 equipment_history_updates는 FK ON DELETE CASCADE로 함께 삭제
  */
 export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -16,7 +17,7 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
-  if (auth.role !== "admin") {
+  if (!isAdminLikeRole(auth.role)) {
     return NextResponse.json({ error: "삭제 권한이 없습니다." }, { status: 403 });
   }
 

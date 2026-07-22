@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { isManagerOrAbove } from "@/lib/roles";
 import { supabase } from "@/lib/supabase";
 import { DashboardBackLink } from "../DashboardBackLink";
 
@@ -10,8 +11,7 @@ export default function ExecutiveEcountImportPage() {
   const router = useRouter();
   const { profile, loading: authLoading } = useAuth();
   const canView = !!profile;
-  const canPaste =
-    profile?.role === "admin" || profile?.role === "manager" || profile?.role === "headquarters";
+  const canPaste = isManagerOrAbove(profile?.role);
 
   const [paste, setPaste] = useState("");
   const [dateFrom, setDateFrom] = useState("2024-01-02");

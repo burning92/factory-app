@@ -33,6 +33,7 @@ import DateWheelPicker from "@/components/DateWheelPicker";
 import { getAppRecentValue, setAppRecentValue } from "@/lib/appRecentValues";
 import { createSafeId } from "@/lib/createSafeId";
 import { useAuth } from "@/contexts/AuthContext";
+import { isAdminLikeRole } from "@/lib/roles";
 import { requestSecondCloseLabSync } from "@/lib/materialStockLab/clientSyncFirstCloseReturn";
 import { extraParbakeManufacturedDateFromRow } from "@/features/production/history/extraParbakeDates";
 
@@ -1992,7 +1993,7 @@ function UsageCalculationPageContent() {
   );
 
   const canManageDateClosing =
-    profile?.role === "manager" || profile?.role === "admin";
+    profile?.role === "manager" || isAdminLikeRole(profile?.role);
 
   const resetDateClosingState = useCallback(
     async (date: string) => {

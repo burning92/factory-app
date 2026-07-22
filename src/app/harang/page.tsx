@@ -16,6 +16,7 @@ import {
   User,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { isAdminLikeRole } from "@/lib/roles";
 
 const PRIMARY_ITEMS = [
   {
@@ -140,7 +141,7 @@ function HubLink({
 
 export default function HarangHubPage() {
   const { profile } = useAuth();
-  const isAdmin = profile?.role === "admin";
+  const isAdmin = isAdminLikeRole(profile?.role);
   const [legacyOpen, setLegacyOpen] = useState(false);
 
   return (

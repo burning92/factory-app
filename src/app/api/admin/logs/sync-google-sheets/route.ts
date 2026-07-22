@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
+import { isAdminLikeRole } from "@/lib/roles";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
@@ -50,7 +51,7 @@ export async function POST(request: Request) {
     .select("role")
     .eq("id", user.id)
     .maybeSingle();
-  if (profileError || profile?.role !== "admin") {
+  if (profileError || !isAdminLikeRole(profile?.role)) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
   }
 

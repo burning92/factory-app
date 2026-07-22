@@ -14,6 +14,7 @@ import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { toAuthEmailLocal } from "@/lib/authEmail";
 import { SHOW_ORGANIZATION_VIEW_SWITCHER } from "@/lib/featureFlags";
+import { isManagerOrAbove } from "@/lib/roles";
 import type { Organization, OrganizationUISettings, Profile } from "@/types/auth";
 
 const AUTH_EMAIL_SUFFIX = ".local";
@@ -27,9 +28,7 @@ const SWITCHABLE_ORG_CODES = ["100", "200"] as const;
 function resolveViewOrganizationCode(organization: Organization | null, profile: Profile): string | null {
   if (!organization) return null;
   if (organization.organization_code === "200") return "200";
-  const canPersistView =
-    SHOW_ORGANIZATION_VIEW_SWITCHER &&
-    (profile.role === "manager" || profile.role === "headquarters" || profile.role === "admin");
+  const canPersistView = SHOW_ORGANIZATION_VIEW_SWITCHER && isManagerOrAbove(profile.role);
   if (canPersistView && typeof window !== "undefined") {
     try {
       const stored = sessionStorage.getItem(VIEW_ORGANIZATION_CODE_STORAGE_KEY);
@@ -355,7 +354,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (SHOW_ORGANIZATION_VIEW_SWITCHER) return;
     const role = state.profile?.role;
-    if (role !== "manager" && role !== "headquarters" && role !== "admin") return;
+    if (!isManagerOrAbove(role)) return;
     if (state.viewOrganizationCode === "100" || state.viewOrganizationCode == null) return;
     setState((prev) => ({ ...prev, viewOrganizationCode: "100" }));
   }, [
@@ -386,10 +385,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const canSwitchOrganization =
-    (state.profile?.role === "manager" ||
-      state.profile?.role === "headquarters" ||
-      state.profile?.role === "admin") &&
-    state.organization?.organization_code !== "200";
+    isManagerOrAbove(state.profile?.role) && state.organization?.organization_code !== "200";
 
   const setViewOrganizationCodeSafe = useCallback((code: string) => {
     if (!SHOW_ORGANIZATION_VIEW_SWITCHER || !canSwitchOrganization) return;

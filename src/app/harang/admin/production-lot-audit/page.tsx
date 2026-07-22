@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, Info, RefreshCw } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { isAdminLikeRole } from "@/lib/roles";
 import { useAuth } from "@/contexts/AuthContext";
 
 type ViolationRow = {
@@ -44,10 +45,10 @@ export default function ProductionLotAuditPage() {
   }, []);
 
   useEffect(() => {
-    if (profile?.role === "admin") void load();
+    if (isAdminLikeRole(profile?.role)) void load();
   }, [profile?.role, load]);
 
-  if (profile?.role !== "admin") {
+  if (!isAdminLikeRole(profile?.role)) {
     return <div className="px-6 py-10 text-slate-600">관리자만 접근할 수 있습니다.</div>;
   }
 

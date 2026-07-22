@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, ArrowLeft, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { isAdminLikeRole } from "@/lib/roles";
 import { useAuth } from "@/contexts/AuthContext";
 
 type MismatchRow = {
@@ -73,7 +74,7 @@ export default function HarangInventoryRepairPage() {
   }, []);
 
   useEffect(() => {
-    if (profile?.role === "admin") void loadMismatches();
+    if (isAdminLikeRole(profile?.role)) void loadMismatches();
   }, [profile?.role, loadMismatches]);
 
   const runRevertAll = async () => {
@@ -150,7 +151,7 @@ export default function HarangInventoryRepairPage() {
     void loadMismatches();
   };
 
-  if (profile?.role !== "admin") {
+  if (!isAdminLikeRole(profile?.role)) {
     return <div className="px-6 py-10 text-slate-600">관리자만 접근할 수 있습니다.</div>;
   }
 

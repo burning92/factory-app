@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import Header from "./Header";
 import MobileTabBar from "./MobileTabBar";
 import { isAffRestrictedWorkerRole, isAffWorkerAllowedPath } from "@/lib/affWorkerRouteAccess";
+import { isAdminLikeRole, isManagerOrAbove } from "@/lib/roles";
 
 const LOGIN_PATH = "/login";
 const CHANGE_PASSWORD_PATH = "/login/change-password";
@@ -58,9 +59,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   } = useAuth();
   const isHarangOrgAccount = organization?.organization_code === "200";
   const isHeadquartersOpsUser =
-    organization?.organization_code === "100" &&
-    (profile?.role === "manager" || profile?.role === "headquarters" || profile?.role === "admin");
-  const isGlobalAdmin000 = organization?.organization_code === "000" && profile?.role === "admin";
+    organization?.organization_code === "100" && isManagerOrAbove(profile?.role);
+  const isGlobalAdmin000 = organization?.organization_code === "000" && isAdminLikeRole(profile?.role);
   const isLoginPage = pathname === LOGIN_PATH;
   const isChangePasswordPage = pathname === CHANGE_PASSWORD_PATH;
 
@@ -85,7 +85,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (viewOrganizationCode === "200") return;
     const path = uiSettings.default_landing_path.trim();
     // admin은 공통 진입("/") 유지. 기존 admin 전용 /manage 직행만 예외 처리.
-    if (profile.role === "admin" && path === "/manage") return;
+    if (isAdminLikeRole(profile.role) && path === "/manage") return;
     // 조직 200(하랑): AFF 쪽 기본 랜딩으로 보내지 않음
     if (isHarangOrgAccount && path && path !== "/" && !path.startsWith("/harang") && !path.startsWith("/account")) {
       return;
@@ -199,29 +199,29 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       router.replace("/");
       return null;
     }
-    if ((pathname === "/harang/admin" || pathname.startsWith("/harang/admin/")) && profile?.role !== "admin") {
+    if ((pathname === "/harang/admin" || pathname.startsWith("/harang/admin/")) && !isAdminLikeRole(profile?.role)) {
       router.replace("/harang");
       return null;
     }
   }
 
   const isManagePage = pathname === "/manage";
-  if (isManagePage && profile?.role !== "admin") {
+  if (isManagePage && !isAdminLikeRole(profile?.role)) {
     router.replace("/");
     return null;
   }
   const isProductionAdminPage = pathname === "/production/admin";
-  if (isProductionAdminPage && profile?.role !== "admin") {
+  if (isProductionAdminPage && !isAdminLikeRole(profile?.role)) {
     router.replace("/");
     return null;
   }
   const isAdminEquipmentPath = pathname === "/admin/equipment" || pathname.startsWith("/admin/equipment/");
-  if (isAdminEquipmentPath && profile?.role !== "admin") {
+  if (isAdminEquipmentPath && !isAdminLikeRole(profile?.role)) {
     router.replace("/");
     return null;
   }
   const isAdminLogsPath = pathname === "/admin/logs" || pathname.startsWith("/admin/logs/");
-  if (isAdminLogsPath && profile?.role !== "admin") {
+  if (isAdminLogsPath && !isAdminLikeRole(profile?.role)) {
     router.replace("/");
     return null;
   }

@@ -48,6 +48,10 @@ const BASE_NAME_TO_CLASS: Record<string, ProductClassification> = {
   "우주인 파베이크_베샤멜": { major: "parbake_storage", pizzaSubtype: null },
   멜팅치즈: { major: "pizza", pizzaSubtype: "heavy" },
   구운가지리코타: { major: "pizza", pizzaSubtype: "heavy" },
+  불고기풀토핑: { major: "pizza", pizzaSubtype: "light" },
+  리치슈프림: { major: "pizza", pizzaSubtype: "heavy" },
+  "오지치즈 포테이토": { major: "pizza", pizzaSubtype: "heavy" },
+  오지치즈포테이토: { major: "pizza", pizzaSubtype: "heavy" },
   /** 현장/ BOM 에서 쓰이는 변형 표기 (스크린샷·생산계획 동기화 기준) */
   "포노부오노 시그니처 화덕 브레드": { major: "bread", pizzaSubtype: null },
   우주인토마토파베이크: { major: "parbake_storage", pizzaSubtype: null },

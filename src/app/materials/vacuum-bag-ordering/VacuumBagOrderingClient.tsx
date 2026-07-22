@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Package, RefreshCw } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { isManagerOrAbove } from "@/lib/roles";
 import { supabase } from "@/lib/supabase";
 import { DEFAULT_VACUUM_BAG_WEEKS, VACUUM_BAG_WEEK_OPTIONS } from "@/features/materials/vacuum-bag-ordering/calculations";
 import type { VacuumBagMovementType, VacuumBagSummaryData } from "@/features/materials/vacuum-bag-ordering/types";
@@ -30,10 +31,7 @@ export default function VacuumBagOrderingClient() {
   const router = useRouter();
   const { profile, loading: authLoading } = useAuth();
   const canView =
-    profile?.role === "admin" ||
-    profile?.role === "headquarters" ||
-    profile?.role === "manager" ||
-    profile?.role === "assistant_manager";
+    isManagerOrAbove(profile?.role) || profile?.role === "assistant_manager";
 
   const [weeks, setWeeks] = useState<number>(DEFAULT_VACUUM_BAG_WEEKS);
   const [loading, setLoading] = useState(false);

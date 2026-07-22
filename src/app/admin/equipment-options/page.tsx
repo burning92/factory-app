@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
+import { isAdminLikeRole } from "@/lib/roles";
 import { supabase } from "@/lib/supabase";
 
 type OptionRow = {
@@ -250,7 +251,7 @@ function OptionTable({
 export default function AdminEquipmentOptionsPage() {
   const { profile, viewOrganizationCode } = useAuth();
   const orgCode = viewOrganizationCode ?? "100";
-  const canEdit = profile?.role === "admin";
+  const canEdit = isAdminLikeRole(profile?.role);
 
   const [typeOptions, setTypeOptions] = useState<OptionRow[]>([]);
   const [groupOptions, setGroupOptions] = useState<OptionRow[]>([]);

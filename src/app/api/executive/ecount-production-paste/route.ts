@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
+import { isManagerOrAbove } from "@/lib/roles";
 import {
   parseEcountSpreadsheetPaste,
   filterRawRowsForEcountDatabase,
@@ -55,7 +56,7 @@ export async function POST(request: Request) {
   }
 
   const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  if (!profile || (profile.role !== "admin" && profile.role !== "manager" && profile.role !== "headquarters")) {
+  if (!profile || !isManagerOrAbove(profile.role)) {
     return NextResponse.json({ error: "관리자·매니저만 업로드할 수 있습니다." }, { status: 403 });
   }
 

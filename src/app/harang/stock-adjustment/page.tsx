@@ -10,6 +10,7 @@ import {
   deleteStockAdjustmentDrafts,
 } from "@/features/harang/stockAdjustment";
 import { supabase } from "@/lib/supabase";
+import { isAdminLikeRole } from "@/lib/roles";
 import { useAuth } from "@/contexts/AuthContext";
 
 const TYPE_LABEL: Record<StockAdjustmentType, string> = {
@@ -26,7 +27,7 @@ type TabKey = "cycle" | "packaging";
 
 export default function HarangStockAdjustmentListPage() {
   const { profile } = useAuth();
-  const isAdmin = profile?.role === "admin";
+  const isAdmin = isAdminLikeRole(profile?.role);
   const [tab, setTab] = useState<TabKey>("packaging");
   const [rows, setRows] = useState<StockAdjustmentSessionRow[]>([]);
   const [targetCounts, setTargetCounts] = useState<Map<string, number>>(new Map());

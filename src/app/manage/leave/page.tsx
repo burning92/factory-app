@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { isAdminLikeRole } from "@/lib/roles";
 import ManageAnnualLeaveSection, { type ManageLeaveProfileRow } from "../ManageAnnualLeaveSection";
 
 type OrgRow = {
@@ -62,7 +63,7 @@ export default function ManageLeavePage() {
   }, []);
 
   useEffect(() => {
-    if (profile?.role !== "admin") return;
+    if (!isAdminLikeRole(profile?.role)) return;
     load();
   }, [profile?.role, load]);
 
@@ -71,7 +72,7 @@ export default function ManageLeavePage() {
     [profiles, selectedOrgId]
   );
 
-  if (profile?.role !== "admin") {
+  if (!isAdminLikeRole(profile?.role)) {
     return (
       <div className="p-6">
         <p className="text-slate-500">권한이 없습니다.</p>

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
+import { isAdminLikeRole } from "@/lib/roles";
 import { supabase } from "@/lib/supabase";
 import {
   DEFAULT_DASHBOARD_GROUPS,
@@ -215,7 +216,7 @@ export function EquipmentMasterForm({
   const [typeOptions, setTypeOptions] = useState<{ code: string; label: string }[]>([]);
   const [groupOptions, setGroupOptions] = useState<{ code: string; label: string }[]>([]);
   const [optErr, setOptErr] = useState<string | null>(null);
-  const isAdmin = profile?.role === "admin";
+  const isAdmin = isAdminLikeRole(profile?.role);
 
   const loadPeers = useCallback(async () => {
     const { data, error } = await supabase

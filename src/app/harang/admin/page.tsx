@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Box, Package, Layers3, Wrench } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { isAdminLikeRole } from "@/lib/roles";
 
 const ITEMS = [
   {
@@ -33,7 +34,7 @@ const ITEMS = [
 
 export default function HarangAdminHubPage() {
   const { profile } = useAuth();
-  if (profile?.role !== "admin") {
+  if (!isAdminLikeRole(profile?.role)) {
     return <div className="px-6 py-10 text-slate-600">관리자만 접근할 수 있습니다.</div>;
   }
 

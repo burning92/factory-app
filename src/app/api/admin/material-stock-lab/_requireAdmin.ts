@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
+import { isAdminLikeRole } from "@/lib/roles";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -11,7 +12,7 @@ export type AdminLabAuthResult =
   | { ok: false; response: NextResponse };
 
 /**
- * Bearer(+선택 refresh) 인증 후 profiles.role === 'admin' 만 통과.
+ * Bearer(+선택 refresh) 인증 후 admin급(품질팀장 포함)만 통과.
  * manager / headquarters / worker 는 403.
  */
 export async function requireAdminMaterialStockLab(req: Request): Promise<AdminLabAuthResult> {
@@ -50,7 +51,7 @@ export async function requireAdminMaterialStockLab(req: Request): Promise<AdminL
   if (meErr || !profile) {
     return { ok: false, response: NextResponse.json({ error: "forbidden" }, { status: 403 }) };
   }
-  if (profile.role !== "admin") {
+  if (!isAdminLikeRole(profile.role)) {
     return { ok: false, response: NextResponse.json({ error: "forbidden", message: "admin only" }, { status: 403 }) };
   }
 

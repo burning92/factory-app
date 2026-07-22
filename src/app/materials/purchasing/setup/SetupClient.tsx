@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { isManagerOrAbove } from "@/lib/roles";
 import { supabase } from "@/lib/supabase";
 
 type MaterialType = "raw_material" | "submaterial";
@@ -78,7 +79,7 @@ function formatThousands(input: string): string {
 export default function SetupClient() {
   const router = useRouter();
   const { profile, loading: authLoading } = useAuth();
-  const canView = profile?.role === "admin" || profile?.role === "manager" || profile?.role === "headquarters";
+  const canView = isManagerOrAbove(profile?.role);
 
   const [vendorId, setVendorId] = useState("");
   const [materialType, setMaterialType] = useState<MaterialType>("raw_material");

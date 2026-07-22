@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { isAdminLikeRole } from "@/lib/roles";
 import { supabase } from "@/lib/supabase";
 import type {
   MaterialStockLabMappingStatus,
@@ -126,7 +127,7 @@ function toDatetimeLocalValue(iso: string): string {
 export default function MaterialStockLabClient() {
   const router = useRouter();
   const { profile, loading: authLoading } = useAuth();
-  const isAdmin = profile?.role === "admin";
+  const isAdmin = isAdminLikeRole(profile?.role);
 
   const [loading, setLoading] = useState(true);
   const [savingBaseline, setSavingBaseline] = useState(false);

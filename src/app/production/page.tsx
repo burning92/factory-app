@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Calculator, FileText, Plus, List, CalendarDays, ChevronRight, Package } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { isManagerOrAbove } from "@/lib/roles";
 
 const HUB_ITEMS = [
   {
@@ -67,8 +68,7 @@ const WORKER_HUB_HREFS = new Set<string>(["/production/plan"]);
 
 export default function ProductionHubPage() {
   const { profile } = useAuth();
-  const canViewPlanningBoard =
-    profile?.role === "admin" || profile?.role === "manager" || profile?.role === "headquarters";
+  const canViewPlanningBoard = isManagerOrAbove(profile?.role);
   const isRestrictedWorker = profile?.role === "worker";
   const todayLabel = new Intl.DateTimeFormat("ko-KR", {
     month: "long",

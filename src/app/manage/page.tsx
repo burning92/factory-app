@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Eye, EyeOff, Copy, KeyRound, Search } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { isAdminLikeRole } from "@/lib/roles";
 
 function generateTempPassword(length = 12): string {
   const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -87,7 +88,7 @@ export default function ManagePage() {
   }, []);
 
   useEffect(() => {
-    if (profile?.role !== "admin") return;
+    if (!isAdminLikeRole(profile?.role)) return;
     Promise.all([loadOrgs(), loadProfiles()]).finally(() => setLoading(false));
   }, [profile?.role, loadOrgs, loadProfiles]);
 
@@ -303,7 +304,7 @@ export default function ManagePage() {
     return [...list].sort((a, b) => a.login_id.localeCompare(b.login_id, "ko"));
   }, [orgFilteredProfiles, userSearch, roleFilter]);
 
-  if (profile?.role !== "admin") {
+  if (!isAdminLikeRole(profile?.role)) {
     return (
       <div className="p-6">
         <p className="text-slate-500">권한이 없습니다.</p>

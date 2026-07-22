@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { isAdminLikeRole } from "@/lib/roles";
 import { supabase } from "@/lib/supabase";
 import type { HarangBomRow, HarangMasterItem } from "@/features/harang/types";
 import { effectiveRawMaterialUnit } from "@/features/harang/rawMaterialUnit";
@@ -57,7 +58,7 @@ export default function HarangProductBomPage() {
   });
   const [fetching, setFetching] = useState(false);
   const [saving, setSaving] = useState(false);
-  const isAdmin = profile?.role === "admin";
+  const isAdmin = isAdminLikeRole(profile?.role);
 
   const loadAll = useCallback(async () => {
     setFetching(true);

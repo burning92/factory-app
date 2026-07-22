@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   const auth = await verifyRoleAccess({
     authorizationHeader: req.headers.get("authorization"),
     refreshTokenHeader: req.headers.get("x-refresh-token"),
-    allowedRoles: ["admin", "headquarters", "manager", "assistant_manager"],
+    allowedRoles: ["admin", "headquarters", "manager", "assistant_manager", "quality_manager"],
   });
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 

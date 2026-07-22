@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Printer, RefreshCw } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { isManagerOrAbove } from "@/lib/roles";
 import { supabase } from "@/lib/supabase";
 import { getKoreanHolidayName, isKoreanPublicHoliday, monthDays, weekdayOfFirstDay, ymd } from "@/features/production/planning/calculations";
 import { computeMonthlyCategoryTotals } from "@/features/production/planning/computeMonthlyCategoryTotals";
@@ -88,8 +89,7 @@ export default function PlanningPrintPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { profile, loading: authLoading } = useAuth();
-  const canView =
-    profile?.role === "admin" || profile?.role === "manager" || profile?.role === "headquarters";
+  const canView = isManagerOrAbove(profile?.role);
 
   const loadMonth = useCallback(async () => {
     if (authLoading) return;

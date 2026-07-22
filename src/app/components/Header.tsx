@@ -6,6 +6,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { SHOW_ORGANIZATION_VIEW_SWITCHER } from "@/lib/featureFlags";
+import { isAdminLikeRole, isManagerOrAbove } from "@/lib/roles";
 
 const HARANG_PEOPLE_ICON_SRC = "/harang/people-icon.png";
 const ARMORED_LOGO_SRC = "/apple-icon.png";
@@ -107,9 +108,8 @@ export default function Header() {
 
   const effectiveLogoUrl = viewIsHarang ? HARANG_PEOPLE_ICON_SRC : ARMORED_LOGO_SRC;
   const primaryColor = uiSettings?.primary_color?.trim() || "#06b6d4";
-  const isAdmin = profile?.role === "admin";
-  const isManagerOrAdmin =
-    profile?.role === "admin" || profile?.role === "manager" || profile?.role === "headquarters";
+  const isAdmin = isAdminLikeRole(profile?.role);
+  const isManagerOrAdmin = isManagerOrAbove(profile?.role);
   const isRestrictedWorker = profile?.role === "worker";
   const desktopProductionItems: DropdownItem[] = isRestrictedWorker
     ? WORKER_DESKTOP_PRODUCTION

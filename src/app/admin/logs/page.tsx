@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
+import { isAdminLikeRole } from "@/lib/roles";
 import { supabase } from "@/lib/supabase";
 
 type AccessLogRow = {
@@ -204,7 +205,7 @@ export default function AdminLogsPage() {
   }, [days]);
 
   useEffect(() => {
-    if (loading || profile?.role !== "admin") return;
+    if (loading || !isAdminLikeRole(profile?.role)) return;
     load();
   }, [loading, profile?.role, load]);
 
@@ -270,7 +271,7 @@ export default function AdminLogsPage() {
     setSyncing(false);
   }, [days]);
 
-  if (loading || profile?.role !== "admin") {
+  if (loading || !isAdminLikeRole(profile?.role)) {
     return (
       <div className="p-6">
         <p className="text-slate-500 text-sm">확인 중…</p>
