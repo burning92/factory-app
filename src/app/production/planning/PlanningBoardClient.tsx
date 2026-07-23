@@ -27,8 +27,11 @@ import {
   rollupQtyForPlanning,
 } from "@/features/production/planning/productClassification";
 import { listUnclassifiedProductBases } from "@/features/production/planning/listUnclassifiedProductBases";
+import { fetchPlanningClassificationOverrides } from "@/features/production/planning/fetchPlanningClassifications";
+import type { ClassificationOverrides } from "@/features/production/planning/productClassification";
 import type { MaterialRequirementRow, PlanningDayEntryInput, PlanningMonthData } from "@/features/production/planning/types";
 import { supabase } from "@/lib/supabase";
+import Link from "next/link";
 
 type DayDraft = {
   entries: Array<{
@@ -169,6 +172,7 @@ export default function PlanningBoardClient() {
   const [rangeError, setRangeError] = useState<string | null>(null);
   const [rangeConflictDates, setRangeConflictDates] = useState<string[]>([]);
   const [nearExpiryOpen, setNearExpiryOpen] = useState(false);
+  const [classificationOverrides, setClassificationOverrides] = useState<ClassificationOverrides>({});
   const [rangeDraft, setRangeDraft] = useState<RangeDraft>({
     person_name: "",
     entry_type: "other",
@@ -196,6 +200,19 @@ export default function PlanningBoardClient() {
       router.replace("/production");
     }
   }, [authLoading, canView, router]);
+
+  useEffect(() => {
+    if (authLoading || !canView) return;
+    let cancelled = false;
+    void (async () => {
+      const res = await fetchPlanningClassificationOverrides();
+      if (cancelled) return;
+      setClassificationOverrides(res.overrides);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, canView]);
 
   const loadMonth = useCallback(async () => {
     if (authLoading) return;
@@ -465,13 +482,19 @@ export default function PlanningBoardClient() {
   );
 
   const unclassifiedBases = useMemo(
-    () => (data?.entries ? listUnclassifiedProductBases(data.entries) : []),
-    [data?.entries]
+    () => (data?.entries ? listUnclassifiedProductBases(data.entries, classificationOverrides) : []),
+    [data?.entries, classificationOverrides]
   );
 
-  const categoryRollup = useMemo(() => (data ? computeMonthlyCategoryTotals(data.entries) : null), [data]);
+  const categoryRollup = useMemo(
+    () => (data ? computeMonthlyCategoryTotals(data.entries, classificationOverrides) : null),
+    [data, classificationOverrides]
+  );
 
-  const productTotals = useMemo(() => (data ? computeMonthlyProductTotals(data.entries) : []), [data]);
+  const productTotals = useMemo(
+    () => (data ? computeMonthlyProductTotals(data.entries, classificationOverrides) : []),
+    [data, classificationOverrides]
+  );
 
   const productRowsForPanel = useMemo(
     () => (productPlanExpanded ? productTotals : productTotals.slice(0, 5)),
@@ -898,7 +921,7 @@ export default function PlanningBoardClient() {
                             return (
                               <div
                                 key={`${p.product_name_snapshot}-${i}`}
-                                className={`rounded-md px-1.5 py-1 text-[10px] leading-snug ${getPlanningEntryToneClass(p.product_name_snapshot)}`}
+                                className={`rounded-md px-1.5 py-1 text-[10px] leading-snug ${getPlanningEntryToneClass(p.product_name_snapshot, classificationOverrides)}`}
                               >
                                 <p className="font-medium break-words whitespace-normal leading-tight">{titleLine}</p>
                                 {!isMini ? <p className="text-[10px] opacity-90">{d.kind || "기본"}</p> : null}
@@ -1066,8 +1089,11 @@ export default function PlanningBoardClient() {
                               <span className="tabular-nums font-medium">{categoryRollup.unclassifiedQty.toLocaleString("ko-KR")}</span>
                               <span className="text-rose-200/70">
                                 {" "}
-                                · 조건 <span className="text-rose-100/90">미니</span> 피자는 피자·미니 집계 ·{" "}
-                                <code className="text-rose-100/90">productClassification.ts</code>에 베이스명 추가 시 반영
+                                ·{" "}
+                                <Link href="/manage/planning-classification" className="underline hover:text-rose-50">
+                                  관리 &gt; 플래닝 제품 분류
+                                </Link>
+                                에서 등록 · 조건 <span className="text-rose-100/90">미니</span>는 피자·미니
                               </span>
                             </p>
                             {unclassifiedBases.length > 0 ? (

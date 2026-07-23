@@ -9,7 +9,9 @@ import { isManagerOrAbove } from "@/lib/roles";
 import { supabase } from "@/lib/supabase";
 import { getKoreanHolidayName, isKoreanPublicHoliday, monthDays, weekdayOfFirstDay, ymd } from "@/features/production/planning/calculations";
 import { computeMonthlyCategoryTotals } from "@/features/production/planning/computeMonthlyCategoryTotals";
+import { fetchPlanningClassificationOverrides } from "@/features/production/planning/fetchPlanningClassifications";
 import { formatMiniPlanningLabel, isMiniProductKind, rollupQtyForPlanning } from "@/features/production/planning/productClassification";
+import type { ClassificationOverrides } from "@/features/production/planning/productClassification";
 import type { PlanningMonthData } from "@/features/production/planning/types";
 
 type LeaveTag = { type: "annual" | "half"; person: string };
@@ -88,8 +90,21 @@ export default function PlanningPrintPage() {
   const [data, setData] = useState<PlanningMonthData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [classificationOverrides, setClassificationOverrides] = useState<ClassificationOverrides>({});
   const { profile, loading: authLoading } = useAuth();
   const canView = isManagerOrAbove(profile?.role);
+
+  useEffect(() => {
+    if (authLoading || !canView) return;
+    let cancelled = false;
+    void (async () => {
+      const res = await fetchPlanningClassificationOverrides();
+      if (!cancelled) setClassificationOverrides(res.overrides);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, canView]);
 
   const loadMonth = useCallback(async () => {
     if (authLoading) return;
@@ -254,7 +269,10 @@ export default function PlanningPrintPage() {
     });
   }, [entriesByDate, leavesByDate, notesByDate, weekGroups]);
 
-  const rollup = useMemo(() => (data ? computeMonthlyCategoryTotals(data.entries) : null), [data]);
+  const rollup = useMemo(
+    () => (data ? computeMonthlyCategoryTotals(data.entries, classificationOverrides) : null),
+    [data, classificationOverrides]
+  );
 
   const printDate = useMemo(() => {
     const d = new Date();

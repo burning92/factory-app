@@ -328,6 +328,10 @@ export default function ManagePage() {
           연월차관리
         </Link>
         <span className="text-slate-600 mx-2">·</span>
+        <Link href="/manage/planning-classification" className="text-cyan-400 hover:text-cyan-300 font-medium">
+          플래닝 제품 분류
+        </Link>
+        <span className="text-slate-600 mx-2">·</span>
         <Link href="/admin/equipment" className="text-cyan-400 hover:text-cyan-300 font-medium">
           제조설비등록
         </Link>

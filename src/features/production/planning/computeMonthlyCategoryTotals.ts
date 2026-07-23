@@ -2,6 +2,7 @@ import type { PlanningEntryRow } from "./types";
 import {
   classifyPlanningSnapshotForRollup,
   rollupQtyForPlanning,
+  type ClassificationOverrides,
   type ProductClassification,
 } from "./productClassification";
 
@@ -54,7 +55,10 @@ function addQty(roll: MonthlyCategoryRollup, c: ProductClassification, qty: numb
 /**
  * 월간 계획 행을 제품 베이스 기준으로 분류 합산한다.
  */
-export function computeMonthlyCategoryTotals(entries: PlanningEntryRow[]): MonthlyCategoryRollup {
+export function computeMonthlyCategoryTotals(
+  entries: PlanningEntryRow[],
+  overrides?: ClassificationOverrides | null
+): MonthlyCategoryRollup {
   const roll: MonthlyCategoryRollup = {
     pizzaQty: 0,
     parbakeStorageQty: 0,
@@ -73,7 +77,7 @@ export function computeMonthlyCategoryTotals(entries: PlanningEntryRow[]): Month
     const snap = e.product_name_snapshot.trim();
     const qty = rollupQtyForPlanning(snap, e.qty);
     if (qty <= 0) continue;
-    const c = classifyPlanningSnapshotForRollup(snap);
+    const c = classifyPlanningSnapshotForRollup(snap, overrides);
     addQty(roll, c, qty);
   }
 

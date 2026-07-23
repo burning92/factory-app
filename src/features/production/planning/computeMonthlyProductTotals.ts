@@ -7,6 +7,7 @@ import {
   formatMiniPlanningLabel,
   isMiniProductKind,
   rollupQtyForPlanning,
+  type ClassificationOverrides,
   type ProductClassification,
 } from "./productClassification";
 
@@ -47,7 +48,10 @@ export type MonthlyProductTotalRow = {
 /**
  * 월 합계: 같은 베이스에서 일반·파베이크(및 미니 제외 조건)는 한 줄로, 미니는 별도 줄.
  */
-export function computeMonthlyProductTotals(entries: PlanningEntryRow[]): MonthlyProductTotalRow[] {
+export function computeMonthlyProductTotals(
+  entries: PlanningEntryRow[],
+  overrides?: ClassificationOverrides | null
+): MonthlyProductTotalRow[] {
   const byKey = new Map<string, number>();
   for (const e of entries) {
     const snap = e.product_name_snapshot.trim();
@@ -61,8 +65,8 @@ export function computeMonthlyProductTotals(entries: PlanningEntryRow[]): Monthl
   const rows: MonthlyProductTotalRow[] = Array.from(byKey.entries()).map(([groupKey, monthQty]) => {
     const { baseName, isMiniVariant } = parseProductGroupKey(groupKey);
     const c: ProductClassification = isMiniVariant
-      ? classifyPlanningSnapshotForRollup(`${baseName} - 미니`)
-      : classifyProductBaseName(baseName);
+      ? classifyPlanningSnapshotForRollup(`${baseName} - 미니`, overrides)
+      : classifyProductBaseName(baseName, overrides);
     const displayName = isMiniVariant ? formatMiniPlanningLabel(baseName) : baseName;
     return {
       groupKey,
