@@ -387,8 +387,6 @@ function JournalPageContent() {
   const expiryDate = addDays(date, 364);
 
   const hasBreadDerived = breadDerived?.applicable === true;
-  const hasParbakeProductWaste =
-    parbakeProductWasteDerived?.applicable === true;
   /** 브레드+보관 파베이크만, 또는 파베이크사용만(당일 반죽 없음)이면 베이스 블록 생략 */
   const storedParbakeOnlyNoDough =
     isStoredParbakeOnlyDay(comp.productSummaries ?? []) &&
@@ -569,71 +567,80 @@ function JournalPageContent() {
                     ...journalWasteGramLines(breadIngredientUsageRows),
                     ...journalWasteGramLines(parbakeIngredientUsageRows),
                   ];
-                  if (wasteLines.length > 0) {
-                    return (
-                      <div className="journal-section">
-                        <p className="journal-section-title">원료 폐기량</p>
-                        <ul className="journal-section-body journal-section-list list-none pl-0 space-y-1">
-                          {wasteLines.map((line) => (
-                            <li key={line.key}>
-                              {line.materialName}{" "}
-                              {line.grams.toLocaleString()}g ({line.expiryDate})
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    );
-                  }
-                  if (
+                  const hasIngredientWaste = wasteLines.length > 0;
+                  const hasBaseWasteQty =
                     showBaseOnSummary &&
-                    baseWasteRows.some((r) => r.resolved && (r.baseWasteQty ?? 0) > 0)
-                  ) {
-                    return (
-                      <div className="journal-section">
-                        <p className="journal-section-title">베이스 폐기량</p>
-                        <div className="journal-section-body journal-section-list">
-                          <ul className="list-none pl-0 space-y-1">
-                            {baseWasteRows.map((wasteRow, i) => {
-                              if (!wasteRow.resolved || !wasteRow.baseSauceMaterialName) return null;
-                              const qty = wasteRow.baseWasteQty ?? 0;
-                              if (qty <= 0) return null;
-                              const usageRow = baseUsageRows[i];
-                              const wasteLotRows =
-                                usageRow?.fifoLots?.filter((l) => l.fifoDeductedWasteQty > 0) ?? [];
-                              if (wasteLotRows.length > 0) {
-                                return wasteLotRows.map((lot) => (
-                                  <li key={`${wasteRow.baseSauceMaterialName}-${lot.lotRowId}`}>
-                                    {wasteRow.baseSauceMaterialName}{" "}
-                                    {lot.fifoDeductedWasteQty.toLocaleString()}g (
-                                    {lot.expiryDate || "—"})
-                                  </li>
-                                ));
-                              }
-                              return (
-                                <li key={wasteRow.baseSauceMaterialName ?? wasteRow.parbakeName ?? i}>
-                                  {wasteRow.baseSauceMaterialName} {qty.toLocaleString()}g ({date})
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        </div>
-                      </div>
+                    baseWasteRows.some(
+                      (r) => r.resolved && (r.baseWasteQty ?? 0) > 0
                     );
-                  }
                   const dateParbakeTypes = comp.productSummaries
                     ? getDateParbakeTypes(comp.productSummaries)
                     : [];
-                  if (showBaseOnSummary && dateParbakeTypes.length > 1) {
-                    return (
-                      <div className="journal-section">
-                        <p className="journal-section-title">베이스 폐기량</p>
-                        <p className="journal-section-body text-slate-500 print:text-gray-600">
-                          혼합 베이스 생산일입니다. 사용량 계산에서 파베이크 폐기량 상세(종류별)를 입력해 주세요.
-                        </p>
-                      </div>
-                    );
+                  const showMixedBasePrompt =
+                    showBaseOnSummary &&
+                    !hasBaseWasteQty &&
+                    dateParbakeTypes.length > 1;
+
+                  if (!hasIngredientWaste && !hasBaseWasteQty && !showMixedBasePrompt) {
+                    return null;
                   }
-                  return null;
+
+                  return (
+                    <>
+                      {hasIngredientWaste ? (
+                        <div className="journal-section">
+                          <p className="journal-section-title">원료 폐기량</p>
+                          <ul className="journal-section-body journal-section-list list-none pl-0 space-y-1">
+                            {wasteLines.map((line) => (
+                              <li key={line.key}>
+                                {line.materialName}{" "}
+                                {line.grams.toLocaleString()}g ({line.expiryDate})
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                      {hasBaseWasteQty ? (
+                        <div className="journal-section">
+                          <p className="journal-section-title">베이스 폐기량</p>
+                          <div className="journal-section-body journal-section-list">
+                            <ul className="list-none pl-0 space-y-1">
+                              {baseWasteRows.map((wasteRow, i) => {
+                                if (!wasteRow.resolved || !wasteRow.baseSauceMaterialName) return null;
+                                const qty = wasteRow.baseWasteQty ?? 0;
+                                if (qty <= 0) return null;
+                                const usageRow = baseUsageRows[i];
+                                const wasteLotRows =
+                                  usageRow?.fifoLots?.filter((l) => l.fifoDeductedWasteQty > 0) ?? [];
+                                if (wasteLotRows.length > 0) {
+                                  return wasteLotRows.map((lot) => (
+                                    <li key={`${wasteRow.baseSauceMaterialName}-${lot.lotRowId}`}>
+                                      {wasteRow.baseSauceMaterialName}{" "}
+                                      {lot.fifoDeductedWasteQty.toLocaleString()}g (
+                                      {lot.expiryDate || "—"})
+                                    </li>
+                                  ));
+                                }
+                                return (
+                                  <li key={wasteRow.baseSauceMaterialName ?? wasteRow.parbakeName ?? i}>
+                                    {wasteRow.baseSauceMaterialName} {qty.toLocaleString()}g ({date})
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </div>
+                        </div>
+                      ) : null}
+                      {showMixedBasePrompt ? (
+                        <div className="journal-section">
+                          <p className="journal-section-title">베이스 폐기량</p>
+                          <p className="journal-section-body text-slate-500 print:text-gray-600">
+                            혼합 베이스 생산일입니다. 사용량 계산에서 파베이크 폐기량 상세(종류별)를 입력해 주세요.
+                          </p>
+                        </div>
+                      ) : null}
+                    </>
+                  );
                 })()}
 
                 {(() => {
