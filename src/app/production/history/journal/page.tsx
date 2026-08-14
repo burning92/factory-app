@@ -412,6 +412,44 @@ function JournalPageContent() {
   }] : []);
   const authorName =
     (stored.dateGroup as { authorName?: string }).authorName?.trim() || "—";
+  const wasteLines = [
+    ...journalWasteGramLines(breadIngredientUsageRows),
+    ...journalWasteGramLines(parbakeIngredientUsageRows),
+  ];
+  const usageLines = [
+    ...journalUsageGramLines(breadIngredientUsageRows),
+    ...journalUsageGramLines(parbakeIngredientUsageRows),
+  ];
+  const hasIngredientWaste = wasteLines.length > 0;
+  const hasBaseWasteQty =
+    showBaseOnSummary &&
+    baseWasteRows.some((r) => r.resolved && (r.baseWasteQty ?? 0) > 0);
+  const dateParbakeTypes = comp.productSummaries
+    ? getDateParbakeTypes(comp.productSummaries)
+    : [];
+  const showMixedBasePrompt =
+    showBaseOnSummary && !hasBaseWasteQty && dateParbakeTypes.length > 1;
+  const hasBaseUsage =
+    showBaseOnSummary &&
+    baseUsageRows.some((r) => {
+      if (!r.resolved || !r.baseSauceMaterialName) return false;
+      const lotRows =
+        r.fifoLots?.filter((l) => l.effectiveUsageAfterWasteQty > 0) ?? [];
+      if (lotRows.length > 0) return true;
+      return (r.totalBaseUsageAfterWasteQty ?? 0) > 0;
+    });
+  const hasParbakePurpose = (comp.parbakePurposeProductionLines?.length ?? 0) > 0;
+  const hasExtraParbake =
+    (comp.resolvedExtraParbakes?.some((r) => r.qty > 0) ?? false) ||
+    (comp.unresolvedExtraParbakes?.some((r) => r.qty > 0) ?? false);
+  const hasSummaryRightColumn =
+    hasIngredientWaste ||
+    hasBaseWasteQty ||
+    showMixedBasePrompt ||
+    usageLines.length > 0 ||
+    hasBaseUsage ||
+    hasParbakePurpose ||
+    hasExtraParbake;
 
   return (
     <div className="min-h-screen bg-slate-100 print:bg-white text-slate-900">
@@ -448,16 +486,16 @@ function JournalPageContent() {
       </div>
 
       <div className="w-full py-8 print:py-0 bg-slate-100 print:bg-white">
-        <div className="journal-container max-w-[210mm] mx-auto w-full px-6 py-8 print:py-8 print:px-0 bg-white print:shadow-none shadow-md print:shadow-none rounded-none print:rounded-none">
+        <div className="journal-container max-w-[210mm] mx-auto w-full px-6 py-8 print:py-0 print:px-0 bg-white print:shadow-none shadow-md print:shadow-none rounded-none print:rounded-none">
         {journalPages.map((page, idx) => {
           if (page.type === "summary") {
             return (
               <section
                 key={`summary-${idx}`}
-                className="journal-page flex flex-col pb-8 print:pb-4"
+                className="journal-page flex flex-col pb-8 print:pb-0"
               >
                 {/* 상단: 좌측 기본정보 / 우측 승인 도장 */}
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-6 mb-6">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-6 mb-6 print:mb-4 print:gap-4">
                   <div className="flex-1 min-w-0">
                     <h1 className="text-xl font-bold border-b border-slate-300 pb-2 mb-4 print:text-black">
                       생산일지 총괄
@@ -494,7 +532,7 @@ function JournalPageContent() {
                   </div>
                 </div>
 
-                <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-4 text-sm print:text-black leading-relaxed">
+                <div className="mt-6 print:mt-4 grid grid-cols-2 gap-x-8 gap-y-4 print:gap-y-2 text-sm print:text-black leading-relaxed">
                   <div>
                     <span className="text-slate-600 print:text-gray-700 font-medium block mb-0.5">도우 반죽량</span>
                     <p className="font-medium text-slate-900 print:text-black">{comp.doughMixQty.toLocaleString()}개</p>
@@ -545,48 +583,32 @@ function JournalPageContent() {
                   )}
                 </div>
 
-                <div className="journal-section mt-6">
-                  <p className="journal-section-title">반죽 사용량</p>
-                  <div className="journal-section-body journal-section-list">
-                    {doughUsageLines.length > 0 ? (
-                      <ul className="list-none pl-0 space-y-1">
-                        {doughUsageLines.map((line, i) => (
-                          <li key={`${line.name}-${line.lot}-${i}`}>
-                            {line.name}: {line.g.toLocaleString()}g ({line.lot})
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-slate-500 print:text-gray-600">없음</p>
-                    )}
-                  </div>
-                </div>
-
-                {(() => {
-                  const wasteLines = [
-                    ...journalWasteGramLines(breadIngredientUsageRows),
-                    ...journalWasteGramLines(parbakeIngredientUsageRows),
-                  ];
-                  const hasIngredientWaste = wasteLines.length > 0;
-                  const hasBaseWasteQty =
-                    showBaseOnSummary &&
-                    baseWasteRows.some(
-                      (r) => r.resolved && (r.baseWasteQty ?? 0) > 0
-                    );
-                  const dateParbakeTypes = comp.productSummaries
-                    ? getDateParbakeTypes(comp.productSummaries)
-                    : [];
-                  const showMixedBasePrompt =
-                    showBaseOnSummary &&
-                    !hasBaseWasteQty &&
-                    dateParbakeTypes.length > 1;
-
-                  if (!hasIngredientWaste && !hasBaseWasteQty && !showMixedBasePrompt) {
-                    return null;
+                <div
+                  className={
+                    hasSummaryRightColumn
+                      ? "journal-summary-split mt-6 print:mt-4 grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 gap-x-8 gap-y-2 items-start"
+                      : "mt-6 print:mt-4"
                   }
+                >
+                  <div className="journal-section">
+                    <p className="journal-section-title">반죽 사용량</p>
+                    <div className="journal-section-body journal-section-list">
+                      {doughUsageLines.length > 0 ? (
+                        <ul className="list-none pl-0 space-y-1">
+                          {doughUsageLines.map((line, i) => (
+                            <li key={`${line.name}-${line.lot}-${i}`}>
+                              {line.name}: {line.g.toLocaleString()}g ({line.lot})
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-slate-500 print:text-gray-600">없음</p>
+                      )}
+                    </div>
+                  </div>
 
-                  return (
-                    <>
+                  {hasSummaryRightColumn ? (
+                    <div>
                       {hasIngredientWaste ? (
                         <div className="journal-section">
                           <p className="journal-section-title">원료 폐기량</p>
@@ -639,113 +661,94 @@ function JournalPageContent() {
                           </p>
                         </div>
                       ) : null}
-                    </>
-                  );
-                })()}
-
-                {(() => {
-                  const usageLines = [
-                    ...journalUsageGramLines(breadIngredientUsageRows),
-                    ...journalUsageGramLines(parbakeIngredientUsageRows),
-                  ];
-                  if (usageLines.length === 0) return null;
-                  return (
-                    <div className="journal-section">
-                      <p className="journal-section-title">원료 사용량 (폐기 반영)</p>
-                      <ul className="journal-section-body journal-section-list list-none pl-0 space-y-1">
-                        {usageLines.map((line) => (
-                          <li key={line.key}>
-                            {line.materialName}{" "}
-                            {line.grams.toLocaleString()}g ({line.expiryDate})
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  );
-                })()}
-
-                {showBaseOnSummary &&
-                baseUsageRows.some((r) => {
-                  if (!r.resolved || !r.baseSauceMaterialName) return false;
-                  const lotRows =
-                    r.fifoLots?.filter((l) => l.effectiveUsageAfterWasteQty > 0) ?? [];
-                  if (lotRows.length > 0) return true;
-                  return (r.totalBaseUsageAfterWasteQty ?? 0) > 0;
-                }) ? (
-                  <div className="journal-section">
-                    <p className="journal-section-title">베이스 사용량</p>
-                    <div className="journal-section-body journal-section-list">
-                      <ul className="list-none pl-0 space-y-1">
-                        {baseUsageRows.map((usageRow, i) => {
-                          if (!usageRow.resolved || !usageRow.baseSauceMaterialName) return null;
-                          const lotRows = usageRow.fifoLots?.filter((l) => l.effectiveUsageAfterWasteQty > 0) ?? [];
-                          if (lotRows.length > 0) {
-                            return lotRows.map((lot) => (
-                              <li key={`${usageRow.baseSauceMaterialName}-${lot.lotRowId}`}>
-                                {usageRow.baseSauceMaterialName} {lot.effectiveUsageAfterWasteQty.toLocaleString()}g ({lot.expiryDate || "—"})
+                      {usageLines.length > 0 ? (
+                        <div className="journal-section">
+                          <p className="journal-section-title">원료 사용량 (폐기 반영)</p>
+                          <ul className="journal-section-body journal-section-list list-none pl-0 space-y-1">
+                            {usageLines.map((line) => (
+                              <li key={line.key}>
+                                {line.materialName}{" "}
+                                {line.grams.toLocaleString()}g ({line.expiryDate})
                               </li>
-                            ));
-                          }
-                          const total = usageRow.totalBaseUsageAfterWasteQty ?? 0;
-                          if (total <= 0) return null;
-                          return (
-                            <li key={usageRow.baseSauceMaterialName ?? i}>
-                              {usageRow.displayLabel ?? `${usageRow.baseSauceMaterialName} ${total.toLocaleString()}g`}
-                            </li>
-                          );
-                        })}
-                      </ul>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                      {hasBaseUsage ? (
+                        <div className="journal-section">
+                          <p className="journal-section-title">베이스 사용량</p>
+                          <div className="journal-section-body journal-section-list">
+                            <ul className="list-none pl-0 space-y-1">
+                              {baseUsageRows.map((usageRow, i) => {
+                                if (!usageRow.resolved || !usageRow.baseSauceMaterialName) return null;
+                                const lotRows = usageRow.fifoLots?.filter((l) => l.effectiveUsageAfterWasteQty > 0) ?? [];
+                                if (lotRows.length > 0) {
+                                  return lotRows.map((lot) => (
+                                    <li key={`${usageRow.baseSauceMaterialName}-${lot.lotRowId}`}>
+                                      {usageRow.baseSauceMaterialName} {lot.effectiveUsageAfterWasteQty.toLocaleString()}g ({lot.expiryDate || "—"})
+                                    </li>
+                                  ));
+                                }
+                                const total = usageRow.totalBaseUsageAfterWasteQty ?? 0;
+                                if (total <= 0) return null;
+                                return (
+                                  <li key={usageRow.baseSauceMaterialName ?? i}>
+                                    {usageRow.displayLabel ?? `${usageRow.baseSauceMaterialName} ${total.toLocaleString()}g`}
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </div>
+                        </div>
+                      ) : null}
+                      {hasParbakePurpose ? (
+                        <div className="journal-section">
+                          <p className="journal-section-title">파베이크 목적별 생산량</p>
+                          <ul className="journal-section-body journal-section-list list-none pl-0 space-y-1">
+                            {comp.parbakePurposeProductionLines
+                              .filter((l) => l.role === "astronaut")
+                              .map((l) => (
+                                <li key={`astro-${l.parbakeName}`}>
+                                  우주인 파베이크(보관용): {l.parbakeName}{" "}
+                                  {l.qty.toLocaleString()}개
+                                </li>
+                              ))}
+                            {comp.parbakePurposeProductionLines
+                              .filter((l) => l.role === "sale")
+                              .map((l) => (
+                                <li key={`sale-${l.parbakeName}`}>
+                                  판매용 파베이크(납품용): {l.parbakeName}{" "}
+                                  {l.qty.toLocaleString()}개
+                                </li>
+                              ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                      {hasExtraParbake ? (
+                        <div className="journal-section">
+                          <p className="journal-section-title">추가 파베이크 사용량</p>
+                          <ul className="journal-section-body journal-section-list list-none pl-0 space-y-1">
+                            {comp.resolvedExtraParbakes
+                              ?.filter((r) => r.qty > 0)
+                              .map((r) => (
+                                <li key={r.extraParbakeId}>
+                                  {r.parbakeName} {r.qty}개 ({r.expiryDate || "—"})
+                                </li>
+                              ))}
+                            {comp.unresolvedExtraParbakes
+                              ?.filter((r) => r.qty > 0)
+                              .map((r) => (
+                                <li key={r.extraParbakeId} className="text-amber-800 print:text-amber-900">
+                                  추가 파베이크 {r.qty}개 (
+                                  {parbakeExpiryFromManufacturedDate(r.manufacturedDate) || "—"}) — {r.reason}
+                                </li>
+                              ))}
+                          </ul>
+                        </div>
+                      ) : null}
                     </div>
-                  </div>
-                ) : null}
-
-                {(comp.parbakePurposeProductionLines?.length ?? 0) > 0 && (
-                <div className="journal-section">
-                  <p className="journal-section-title">파베이크 목적별 생산량</p>
-                  <ul className="journal-section-body journal-section-list list-none pl-0 space-y-1">
-                    {comp.parbakePurposeProductionLines
-                      .filter((l) => l.role === "astronaut")
-                      .map((l) => (
-                        <li key={`astro-${l.parbakeName}`}>
-                          우주인 파베이크(보관용): {l.parbakeName}{" "}
-                          {l.qty.toLocaleString()}개
-                        </li>
-                      ))}
-                    {comp.parbakePurposeProductionLines
-                      .filter((l) => l.role === "sale")
-                      .map((l) => (
-                        <li key={`sale-${l.parbakeName}`}>
-                          판매용 파베이크(납품용): {l.parbakeName}{" "}
-                          {l.qty.toLocaleString()}개
-                        </li>
-                      ))}
-                  </ul>
+                  ) : null}
                 </div>
-                )}
-
-                {((comp.resolvedExtraParbakes?.length > 0 && comp.resolvedExtraParbakes.some((r) => r.qty > 0)) ||
-                  (comp.unresolvedExtraParbakes?.length > 0 && comp.unresolvedExtraParbakes.some((r) => r.qty > 0))) && (
-                  <div className="journal-section">
-                    <p className="journal-section-title">추가 파베이크 사용량</p>
-                    <ul className="journal-section-body journal-section-list list-none pl-0 space-y-1">
-                      {comp.resolvedExtraParbakes
-                        ?.filter((r) => r.qty > 0)
-                        .map((r) => (
-                          <li key={r.extraParbakeId}>
-                            {r.parbakeName} {r.qty}개 ({r.expiryDate || "—"})
-                          </li>
-                        ))}
-                      {comp.unresolvedExtraParbakes
-                        ?.filter((r) => r.qty > 0)
-                        .map((r) => (
-                          <li key={r.extraParbakeId} className="text-amber-800 print:text-amber-900">
-                            추가 파베이크 {r.qty}개 (
-                            {parbakeExpiryFromManufacturedDate(r.manufacturedDate) || "—"}) — {r.reason}
-                          </li>
-                        ))}
-                    </ul>
-                  </div>
-                )}
               </section>
             );
           }
@@ -754,7 +757,7 @@ function JournalPageContent() {
           return (
             <section
               key={`product-${product.productKey}-${idx}`}
-              className="journal-page flex flex-col pb-8 print:pb-4 print:text-black"
+              className="journal-page flex flex-col pb-8 print:pb-0 print:text-black"
             >
               <h1 className="text-lg font-bold border-b border-slate-300 pb-2 mb-3 print:text-black">
                 제품별 원료 사용량
@@ -777,21 +780,21 @@ function JournalPageContent() {
                 </dd>
               </dl>
 
-              <div className="mt-5">
-                <h3 className="journal-section-title mb-2">원료 사용량</h3>
-                <table className="w-full text-sm border border-slate-300 border-collapse print:text-black">
+              <div className="mt-5 print:mt-3">
+                <h3 className="journal-section-title mb-2 print:mb-1">원료 사용량</h3>
+                <table className="w-full text-sm border border-slate-300 border-collapse print:text-black print:text-[12px]">
                   <thead>
                     <tr className="bg-slate-100 print:bg-slate-100">
-                      <th className="border border-slate-300 px-3 py-2 text-left font-semibold text-slate-800 print:text-black">
+                      <th className="border border-slate-300 px-3 py-2 print:px-2 print:py-1 text-left font-semibold text-slate-800 print:text-black">
                         원료명
                       </th>
-                      <th className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-800 print:text-black">
+                      <th className="border border-slate-300 px-3 py-2 print:px-2 print:py-1 text-right font-semibold text-slate-800 print:text-black">
                         BOM
                       </th>
-                      <th className="border border-slate-300 px-3 py-2 text-left font-semibold text-slate-800 print:text-black">
+                      <th className="border border-slate-300 px-3 py-2 print:px-2 print:py-1 text-left font-semibold text-slate-800 print:text-black">
                         LOT(소비기한)
                       </th>
-                      <th className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-800 print:text-black">
+                      <th className="border border-slate-300 px-3 py-2 print:px-2 print:py-1 text-right font-semibold text-slate-800 print:text-black">
                         사용량
                       </th>
                     </tr>
@@ -847,13 +850,13 @@ function JournalPageContent() {
                       return sorted.map(({ materialName, bomDisplayQty, usageType, lots }) => (
                         <tr key={materialName}>
                           <td
-                            className="border border-slate-300 px-3 py-2 align-top leading-relaxed"
+                            className="border border-slate-300 px-3 py-2 print:px-2 print:py-1 align-top leading-relaxed"
                             style={{ verticalAlign: "top" }}
                           >
                             {materialName}
                           </td>
                           <td
-                            className="border border-slate-300 px-3 py-2 text-right align-top leading-relaxed"
+                            className="border border-slate-300 px-3 py-2 print:px-2 print:py-1 text-right align-top leading-relaxed"
                             style={{ verticalAlign: "top" }}
                           >
                             {usageType === "summary-reference"
@@ -863,7 +866,7 @@ function JournalPageContent() {
                                 : "—"}
                           </td>
                           <td
-                            className="border border-slate-300 px-3 py-2 align-top"
+                            className="border border-slate-300 px-3 py-2 print:px-2 print:py-1 align-top"
                             style={{ verticalAlign: "top" }}
                           >
                             <div className="flex flex-col">
@@ -878,7 +881,7 @@ function JournalPageContent() {
                             </div>
                           </td>
                           <td
-                            className="border border-slate-300 px-3 py-2 text-right align-top"
+                            className="border border-slate-300 px-3 py-2 print:px-2 print:py-1 text-right align-top"
                             style={{ verticalAlign: "top" }}
                           >
                             <div className="flex flex-col text-right">

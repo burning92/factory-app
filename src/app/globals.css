@@ -58,35 +58,76 @@ input:focus, select:focus, textarea:focus {
   background-color: #ffffff;
 }
 
-/* 관리일지 인쇄: A4 세로, 화이트 배경, 네비/버튼 숨김 */
+/* 기본 인쇄: A4 세로. 월간 플래닝은 아래 named page(planning-a3)만 A3 가로 */
+@page {
+  size: A4 portrait;
+  margin: 10mm;
+}
+
 @media print {
+  html,
   body {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
     background: #fff !important;
     color: #111 !important;
+  }
+  .min-h-screen {
+    min-height: 0 !important;
   }
   .print\\:hidden {
     display: none !important;
   }
-  /* A4 세로 인쇄: 페이지 크기 및 여백 */
-  @page {
-    size: A4 portrait;
-    margin: 15mm;
+  .journal-container {
+    width: auto;
+    max-width: none;
+    margin: 0;
+    padding: 0;
   }
   .journal-page {
+    display: block;
     width: 100%;
-    max-width: 210mm;
-    min-height: 257mm; /* 297 - 40mm 여백 */
-    padding-bottom: 1rem;
+    max-width: none;
+    min-height: 0;
+    height: auto;
+    padding-bottom: 0;
     box-sizing: border-box;
   }
   .journal-page + .journal-page {
-    page-break-before: always;
+    break-before: auto;
+    page-break-before: auto;
+    margin-top: 6mm;
+    padding-top: 4mm;
+    border-top: 1px solid #94a3b8;
   }
-  .journal-container {
-    width: 210mm;
-    max-width: 210mm;
-    margin: 0 auto;
-    padding: 0 12mm;
+  .journal-section {
+    margin-top: 0.45rem;
+  }
+  .journal-section-title {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  .journal-section-list li {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .journal-page table {
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+  .journal-page thead {
+    display: table-header-group;
+  }
+  .journal-page tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .journal-summary-split {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 8mm;
+    align-items: start;
   }
 }
 
@@ -231,11 +272,12 @@ input:focus, select:focus, textarea:focus {
 }
 .planning-a3-legend span em { font-style: normal; font-weight: 900; color: #0f172a; }
 
+@page planning-a3 {
+  size: A3 landscape;
+  margin: 10mm;
+}
+
 @media print {
-  @page {
-    size: A3 landscape;
-    margin: 10mm;
-  }
   body {
     margin: 0;
     padding: 0;
@@ -245,6 +287,7 @@ input:focus, select:focus, textarea:focus {
     print-color-adjust: exact;
   }
   .planning-a3-wrap {
+    page: planning-a3;
     padding: 0 !important;
     margin: 0 !important;
   }
