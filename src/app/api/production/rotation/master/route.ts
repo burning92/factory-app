@@ -93,6 +93,7 @@ type ProfileRow = {
   login_id: string | null;
   role: string | null;
   is_active: boolean | null;
+  hire_date: string | null;
 };
 
 async function factoryProfiles() {
@@ -105,7 +106,7 @@ async function factoryProfiles() {
   if (!org?.id) return { admin, profiles: [] as ProfileRow[] };
   const { data } = await admin
     .from("profiles")
-    .select("id,display_name,login_id,role,is_active")
+    .select("id,display_name,login_id,role,is_active,hire_date")
     .eq("organization_id", org.id)
     .eq("is_active", true);
   const profiles = ((data ?? []) as ProfileRow[]).filter(
@@ -129,7 +130,7 @@ async function syncWorkersFromProfiles() {
     .from("rotation_workers")
     .select("worker_id,preferred,shift,worker_group,sort_order,is_active")
     .eq("organization_code", org);
-  if (eErr) return { admin, error: eErr.message, workerRows: [] as { worker_id: string; name: string; preferred: string; shift: string; worker_group: string; sort_order: number }[] };
+  if (eErr) return { admin, error: eErr.message, workerRows: [] as { worker_id: string; name: string; preferred: string; shift: string; worker_group: string; sort_order: number }[], profiles };
 
   const byId = new Map((existing ?? []).map((r) => [String(r.worker_id), r]));
   const keep = new Set(profiles.map((p) => p.id));
@@ -151,7 +152,7 @@ async function syncWorkersFromProfiles() {
   });
   if (upserts.length > 0) {
     const { error } = await admin.from("rotation_workers").upsert(upserts, { onConflict: "organization_code,worker_id" });
-    if (error) return { admin, error: error.message, workerRows: [] as typeof upserts };
+    if (error) return { admin, error: error.message, workerRows: [] as typeof upserts, profiles };
   }
   const gone = (existing ?? []).filter((r) => !keep.has(String(r.worker_id)));
   if (gone.length > 0) {
@@ -170,8 +171,8 @@ async function syncWorkersFromProfiles() {
     .eq("organization_code", org)
     .eq("is_active", true)
     .order("sort_order");
-  if (wErr) return { admin, error: wErr.message, workerRows: [] as NonNullable<typeof workerRows> };
-  return { admin, error: null as string | null, workerRows: workerRows ?? [] };
+  if (wErr) return { admin, error: wErr.message, workerRows: [] as NonNullable<typeof workerRows>, profiles };
+  return { admin, error: null as string | null, workerRows: workerRows ?? [], profiles };
 }
 
 export async function GET(req: NextRequest) {
@@ -211,7 +212,10 @@ export async function GET(req: NextRequest) {
     .eq("organization_code", org);
   if (priErr) return NextResponse.json({ error: priErr.message }, { status: 500 });
 
-  const workers = workersFromRows(synced.workerRows);
+  const workers = workersFromRows(synced.workerRows).map((w) => {
+    const hire = synced.profiles.find((p) => p.id === w.id)?.hire_date;
+    return { ...w, hireDate: hire ? String(hire).slice(0, 10) : null };
+  });
   const catalog = catalogFromRows(posRows);
   const skills = skillsFromRows(priRows ?? [], workers, catalog);
   return NextResponse.json({ ok: true, data: { workers, catalog, skills } satisfies RotationMasterPayload });

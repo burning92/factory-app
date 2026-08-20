@@ -70,6 +70,38 @@ export function getPriority(
   return 0;
 }
 
+/** 이 제품군에서 배치 가능한 숙련(상~비상)이 하나라도 있으면 true */
+export function hasAssignableSkill(
+  skills: SkillMatrix,
+  personId: string,
+  catalog: PositionCatalog,
+  group: ProductGroup
+): boolean {
+  return catalog[group].some((pos) => getPriority(skills, personId, group, pos.id) > 0);
+}
+
+/** 숙련이 모두 비었거나, 아직 입사 전이면 당일 배치에서 뺀다 */
+export function isRotationEligible(
+  person: Person,
+  skills: SkillMatrix,
+  catalog: PositionCatalog,
+  group: ProductGroup,
+  workDate?: string
+): boolean {
+  if (workDate && person.hireDate && person.hireDate > workDate) return false;
+  return hasAssignableSkill(skills, person.id, catalog, group);
+}
+
+export function eligibleRotationRoster(
+  roster: Person[],
+  skills: SkillMatrix,
+  catalog: PositionCatalog,
+  group: ProductGroup,
+  workDate?: string
+): Person[] {
+  return roster.filter((p) => isRotationEligible(p, skills, catalog, group, workDate));
+}
+
 export function setPriority(
   skills: SkillMatrix,
   personId: string,

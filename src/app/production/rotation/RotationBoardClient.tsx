@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Printer, RefreshCw, Settings2, Users } from "lucide-react";
-import { DEFAULT_CATALOG, getPriority, heatingPositions } from "@/features/production/rotation/catalog";
+import { DEFAULT_CATALOG, eligibleRotationRoster, getPriority, heatingPositions } from "@/features/production/rotation/catalog";
 import { processNeedsStaffing, staffingForPosition, staffingRangeLabel } from "@/features/production/rotation/staffing";
 import { fetchRotationDay, fetchRotationMaster, saveRotationDay } from "@/features/production/rotation/clientApi";
 import { HOURLY_QTY, PRODUCT_LINES, productGroup } from "@/features/production/rotation/seedRoster";
@@ -175,9 +175,13 @@ export default function RotationBoardClient() {
   }, [hydrated, rosterIdKey]);
 
   const group = productGroup(line);
+  const boardRoster = useMemo(
+    () => eligibleRotationRoster(roster, skills, catalog, group, date),
+    [roster, skills, catalog, group, date]
+  );
   const result = useMemo(
-    () => generateRotation({ roster, line, modes, catalog, skills }),
-    [roster, line, modes, catalog, skills]
+    () => generateRotation({ roster: boardRoster, line, modes, catalog, skills, workDate: date }),
+    [boardRoster, line, modes, catalog, skills]
   );
 
   useEffect(() => {
@@ -212,30 +216,30 @@ export default function RotationBoardClient() {
     for (const period of PERIODS) {
       const seen = new Set<string>();
       for (const row of base[period.id]) {
-        const person = roster.find((p) => p.id === row.personId);
+        const person = boardRoster.find((p) => p.id === row.personId);
         if (!person || seen.has(person.id)) continue;
         seen.add(person.id);
         next[period.id].push(isAvailableInPeriod(person, period.id) ? row : { personId: person.id, station: "off" });
       }
-      for (const person of roster) {
+      for (const person of boardRoster) {
         if (seen.has(person.id) || isAvailableInPeriod(person, period.id)) continue;
         next[period.id].push({ personId: person.id, station: "off" });
       }
     }
     return next;
-  }, [overrides, result.assignments, roster]);
+  }, [overrides, result.assignments, boardRoster]);
 
-  const presentCount = roster.filter((p) => p.present).length;
+  const presentCount = boardRoster.filter((p) => p.present).length;
   const heatN = heatingTarget(catalog, group);
   const heatReady = heatingPositions(catalog, group).every((pos) =>
-    roster.some((p) => p.present && getPriority(skills, p.id, group, pos.id) > 0)
+    boardRoster.some((p) => p.present && getPriority(skills, p.id, group, pos.id) > 0)
   );
   const blocking = result.warnings.filter((w) => w.kind === "unfilled" || w.kind === "lunchCoverage" || w.kind === "emergency");
 
   const handleMove = useCallback(
     (period: PeriodId, personId: string, station: StationId, positionId?: string) => {
       const base = overrides ?? result.assignments;
-      const moved = movePerson(base, period, personId, station, positionId, skills, group, roster);
+      const moved = movePerson(base, period, personId, station, positionId, skills, group, boardRoster);
       if (moved.error) {
         setMoveError(moved.error);
         return;
@@ -244,7 +248,7 @@ export default function RotationBoardClient() {
       setOverrides(moved.assignments);
       setEditing(null);
     },
-    [overrides, result.assignments, skills, group, roster]
+    [overrides, result.assignments, skills, group, boardRoster]
   );
 
   const productLabel = PRODUCT_LINES.find((p) => p.id === line)?.label ?? line;
@@ -420,7 +424,7 @@ export default function RotationBoardClient() {
       <BoardTable
         catalog={catalog}
         group={group}
-        roster={roster}
+        roster={boardRoster}
         assignments={assignments}
         targets={result.targets}
         skills={skills}
@@ -430,9 +434,9 @@ export default function RotationBoardClient() {
       />
 
       <details className="no-print mt-4 rounded-xl border border-slate-700/70 bg-slate-800/30 px-4 py-3">
-        <summary className="cursor-pointer text-sm text-slate-300">출근 인원 {presentCount}/{roster.length}명 · 누르면 조정</summary>
+        <summary className="cursor-pointer text-sm text-slate-300">출근 인원 {presentCount}/{boardRoster.length}명 · 누르면 조정</summary>
         <ul className="mt-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5">
-          {roster.map((person) => (
+          {boardRoster.map((person) => (
             <li key={person.id}>
               <label className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 text-sm ${person.present ? "border-slate-600 text-slate-200" : "border-slate-700 text-slate-500"}`}>
                 <input

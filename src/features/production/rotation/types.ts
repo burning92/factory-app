@@ -65,6 +65,8 @@ export type Person = {
   present: boolean;
   /** 생산계획 연월차·반차·기타. 날짜별로만 채움 */
   leaveKind?: "none" | "annual" | "other" | "half" | "half_am" | "half_pm";
+  /** 프로필 입사일. 당일보다 뒤면 배치표에서 제외 */
+  hireDate?: string | null;
 };
 
 export type PeriodStaffRange = {
@@ -145,6 +147,7 @@ export type GenerateInput = {
   modes: RotationModes;
   catalog: PositionCatalog;
   skills: SkillMatrix;
+  workDate?: string;
 };
 
 export type GenerateResult = {

@@ -1,4 +1,4 @@
-import { getPriority, heatingPositions, isNormalRank, positionsForProcess } from "./catalog";
+import { eligibleRotationRoster, getPriority, heatingPositions, isNormalRank, positionsForProcess } from "./catalog";
 import { HOURLY_QTY, productGroup } from "./seedRoster";
 import { isAvailableInPeriod, isDoughCorePerson, isFullDayLeave } from "./planningLeave";
 import { processNeedsStaffing, staffingForPosition } from "./staffing";
@@ -679,8 +679,9 @@ function onDuty(roster: Person[], period: PeriodId, group: "floor" | "office"): 
 }
 
 export function generateRotation(input: GenerateInput): GenerateResult {
-  const { roster, line, modes, catalog, skills } = input;
+  const { line, modes, catalog, skills } = input;
   const group = productGroup(line);
+  const roster = eligibleRotationRoster(input.roster, skills, catalog, group, input.workDate);
   const impact = computeImpact(line, modes);
   const warnings: RotationWarning[] = [];
   const present = roster.filter((p) => p.present);
