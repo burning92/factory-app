@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Printer, RefreshCw, Settings2, Users } from "lucide-react";
 import { DEFAULT_CATALOG, getPriority, heatingPositions } from "@/features/production/rotation/catalog";
+import { processNeedsStaffing, staffingForPosition, staffingRangeLabel } from "@/features/production/rotation/staffing";
 import { fetchRotationDay, fetchRotationMaster, saveRotationDay } from "@/features/production/rotation/clientApi";
 import { HOURLY_QTY, PRODUCT_LINES, productGroup } from "@/features/production/rotation/seedRoster";
 import {
@@ -29,16 +30,14 @@ import {
   type PeriodId,
   type Person,
   type PositionCatalog,
-  type ProcessId,
   type ProductGroup,
   type ProductLine,
   type RotationModes,
   type SkillMatrix,
+  type StaffingTarget,
   type StationId,
 } from "@/features/production/rotation/types";
 import { useAuth } from "@/contexts/AuthContext";
-
-const OTHER_PROCESSES: ProcessId[] = ["inner", "outer", "dough", "cleanup", "topping", "rnd", "office"];
 
 function todayStr() {
   const d = new Date();
@@ -423,6 +422,7 @@ export default function RotationBoardClient() {
         group={group}
         roster={roster}
         assignments={assignments}
+        targets={result.targets}
         skills={skills}
         editing={editing}
         setEditing={setEditing}
@@ -467,7 +467,8 @@ type BoardRow = {
   key: string;
   title: string;
   match: { station?: StationId; positionId?: string };
-  required: boolean;
+  heating?: boolean;
+  staffed?: boolean;
 };
 
 function BoardTable(props: {
@@ -475,33 +476,47 @@ function BoardTable(props: {
   group: ProductGroup;
   roster: Person[];
   assignments: ReturnType<typeof generateRotation>["assignments"];
+  targets: Record<PeriodId, StaffingTarget>;
   skills: SkillMatrix;
   editing: { period: PeriodId; personId: string } | null;
   setEditing: (v: { period: PeriodId; personId: string } | null) => void;
   onMove: (period: PeriodId, personId: string, station: StationId, positionId?: string) => void;
 }) {
-  const { catalog, group, roster, assignments, skills } = props;
+  const { catalog, group, roster, assignments, targets, skills } = props;
   const heat = heatingPositions(catalog, group);
+  const staffed = catalog[group].filter((p) => processNeedsStaffing(p.process));
+  const rndShown = catalog[group].some((p) => p.process === "rnd");
   const allRows: BoardRow[] = [
     ...heat.map((pos) => ({
       key: pos.id,
       title: pos.label,
       match: { station: "heating" as const, positionId: pos.id },
-      required: true,
+      heating: true,
     })),
-    ...OTHER_PROCESSES.filter((process) => catalog[group].some((p) => p.process === process)).map((process) => ({
-      key: process,
-      title: processLabel(process),
-      match: { station: process },
-      required: process === "inner" || process === "outer",
+    ...staffed.map((pos) => ({
+      key: pos.id,
+      title: pos.label,
+      match: { station: pos.process as StationId, positionId: pos.id },
+      staffed: true,
     })),
-    { key: "lunch", title: "식사", match: { station: "lunch" as const }, required: false },
-    { key: "off", title: "휴무", match: { station: "off" as const }, required: false },
-    { key: "unassigned", title: "미배치", match: { station: "unassigned" as const }, required: false },
+    ...(rndShown
+      ? [{ key: "rnd", title: processLabel("rnd"), match: { station: "rnd" as const } }]
+      : []),
+    { key: "lunch", title: "식사", match: { station: "lunch" as const } },
+    { key: "off", title: "휴무", match: { station: "off" as const } },
+    { key: "unassigned", title: "미배치", match: { station: "unassigned" as const } },
   ];
   const rows = allRows.filter((row) => {
-    if (row.required || row.key === "lunch" || row.key === "off") return true;
-    return PERIODS.some((period) => peopleOn(assignments[period.id], roster, row.match).length > 0);
+    if (row.heating || row.key === "lunch" || row.key === "off") return true;
+    const hasPeople = PERIODS.some((period) => peopleOn(assignments[period.id], roster, row.match).length > 0);
+    if (row.staffed && row.match.positionId) {
+      const hasNeed = PERIODS.some((period) => {
+        const need = targets[period.id].positions.find((n) => n.positionId === row.match.positionId);
+        return Boolean(need && (need.min > 0 || need.max > 0));
+      });
+      return hasNeed || hasPeople;
+    }
+    return hasPeople;
   });
 
   return (
@@ -535,14 +550,26 @@ function BoardTable(props: {
                 </th>
                 {PERIODS.map((period) => {
                   const people = peopleOn(assignments[period.id], roster, row.match);
-                  const emptyRequired = row.required && people.length === 0;
+                  const pos = row.staffed && row.match.positionId
+                    ? catalog[group].find((p) => p.id === row.match.positionId)
+                    : undefined;
+                  const range = pos ? staffingForPosition(pos, period.id) : null;
+                  const n = people.length;
+                  const under = Boolean(range && range.min > 0 && n < range.min);
+                  const over = Boolean(range && n > range.max);
+                  const emptyRequired = under || (row.heating && n === 0);
                   return (
                     <td
                       key={period.id}
                       className={`px-2 py-2 border-t border-l border-slate-700/80 align-top ${
-                        emptyRequired ? "bg-rose-950/50" : isLunch ? "bg-yellow-400/90" : ""
+                        emptyRequired || over ? "bg-rose-950/50" : isLunch ? "bg-yellow-400/90" : ""
                       }`}
                     >
+                      {range && (range.min > 0 || range.max > 0 || n > 0) && (
+                        <p className={`mb-1 text-[11px] ${under || over ? "text-rose-200 font-medium" : "text-slate-500"}`}>
+                          {n}/{staffingRangeLabel(range.min, range.max)}
+                        </p>
+                      )}
                       {people.length === 0 ? (
                         <span className={`text-xs ${emptyRequired ? "text-rose-300 font-medium" : isLunch ? "text-slate-700" : "text-slate-600"}`}>
                           {emptyRequired ? "비어 있음" : "—"}

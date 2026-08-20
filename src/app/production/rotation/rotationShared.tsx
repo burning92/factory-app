@@ -9,13 +9,17 @@ import {
   setPriorityUnique,
   type GroupReadiness,
 } from "@/features/production/rotation/catalog";
+import { processNeedsStaffing } from "@/features/production/rotation/staffing";
 import { PRODUCT_GROUPS } from "@/features/production/rotation/seedRoster";
 import { processLabel } from "@/features/production/rotation/rotationEngine";
 import {
+  PERIODS,
   PRIORITY_OPTIONS,
   PROCESSES,
+  type PeriodId,
   type Person,
   type PositionCatalog,
+  type PositionDef,
   type Priority,
   type ProcessId,
   type ProductGroup,
@@ -31,7 +35,8 @@ export const PRIORITY_CELL: Record<Priority, string> = {
   5: "bg-rose-950 text-rose-200",
 };
 
-export function CopyFromSignatureBar(props: { onCopy: (to: ProductGroup) => void }) {
+export function CopyFromSignatureBar(props: { onCopy: (to: ProductGroup) => void; locked?: boolean }) {
+  if (props.locked) return null;
   return (
     <div className="flex flex-wrap items-center gap-2 mb-3">
       <p className="text-xs text-slate-400">시그니처에서 복사</p>
@@ -110,9 +115,12 @@ export function PositionEditor(props: {
   onAdd: (g: ProductGroup, process: ProcessId) => void;
   onRename: (g: ProductGroup, id: string, label: string) => void;
   onRemove: (g: ProductGroup, id: string) => void;
+  onStaffingChange: (g: ProductGroup, id: string, period: PeriodId, field: "min" | "max", value: number) => void;
   onCopyFromSignature: (to: ProductGroup) => void;
+  locked?: boolean;
 }) {
   const g = props.skillGroup;
+  const locked = Boolean(props.locked);
   const heatN = heatingPositions(props.catalog, g).length;
   const expect = g === "phono_ricotta" ? 8 : 7;
   return (
@@ -131,37 +139,58 @@ export function PositionEditor(props: {
           </button>
         ))}
       </div>
-      <CopyFromSignatureBar onCopy={props.onCopyFromSignature} />
+      <CopyFromSignatureBar onCopy={props.onCopyFromSignature} locked={locked} />
       <p className="text-sm text-slate-400 mb-4">
-        가열 필수 포지션 {heatN}개 (리코타는 8, 그 외 7이 기본). 이름을 현장 용어로 바꾸고, 자리를 추가·삭제할 수 있습니다. 파베이크는 도우따기·누르기·스피너 전·스피너 후·소스·자르기·받기가 들어 있습니다.
-        {heatN !== expect ? ` 현재 ${heatN}개라 기본 ${expect}개와 다릅니다.` : ""}
+        가열 필수 포지션 {heatN}개 (리코타는 8, 그 외 7이 기본). 내포장·외포장·토핑·반죽·반죽 마감·사무는 시간대별 최소·최대 인원을 둡니다. 가열은 자리당 1명이라 인원수를 두지 않고, R&D는 제외합니다.
+        {heatN !== expect ? ` 현재 가열 ${heatN}개라 기본 ${expect}개와 다릅니다.` : ""}
       </p>
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-      {PROCESSES.filter((p) => p.id !== "office").map((process) => {
+      {PROCESSES.map((process) => {
         const list = props.catalog[g].filter((p) => p.process === process.id);
+        const needsStaff = processNeedsStaffing(process.id);
         return (
           <div key={process.id}>
             <div className="flex items-center justify-between mb-2">
               <p className="text-base font-medium text-slate-200">{process.label}</p>
-              <button
-                type="button"
-                onClick={() => props.onAdd(g, process.id)}
-                className="inline-flex items-center gap-1 text-sm text-cyan-300 hover:text-cyan-200"
-              >
-                <Plus className="w-4 h-4" /> 추가
-              </button>
+              {!locked && (
+                <button
+                  type="button"
+                  onClick={() => props.onAdd(g, process.id)}
+                  className="inline-flex items-center gap-1 text-sm text-cyan-300 hover:text-cyan-200"
+                >
+                  <Plus className="w-4 h-4" /> 추가
+                </button>
+              )}
             </div>
-            <ul className="space-y-2">
+            {process.id === "heating" && (
+              <p className="mb-2 text-xs text-slate-500">자리당 1명이라 인원수 설정이 없습니다.</p>
+            )}
+            {process.id === "rnd" && (
+              <p className="mb-2 text-xs text-slate-500">R&D는 인원수 설정에서 제외합니다.</p>
+            )}
+            <ul className="space-y-3">
               {list.map((pos) => (
-                <li key={pos.id} className="flex items-center gap-2">
-                  <input
-                    value={pos.label}
-                    onChange={(e) => props.onRename(g, pos.id, e.target.value)}
-                    className="flex-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-100"
-                  />
-                  <button type="button" onClick={() => props.onRemove(g, pos.id)} className="text-slate-500 hover:text-rose-300" aria-label="삭제">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                <li key={pos.id} className="rounded-lg border border-slate-700/80 bg-slate-900/40 p-2.5">
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={pos.label}
+                      disabled={locked}
+                      onChange={(e) => props.onRename(g, pos.id, e.target.value)}
+                      className="flex-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
+                    />
+                    {!locked && (
+                      <button type="button" onClick={() => props.onRemove(g, pos.id)} className="text-slate-500 hover:text-rose-300" aria-label="삭제">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                  {needsStaff && (
+                    <PositionStaffingFields
+                      position={pos}
+                      locked={locked}
+                      onChange={(period, field, value) => props.onStaffingChange(g, pos.id, period, field, value)}
+                    />
+                  )}
                 </li>
               ))}
               {list.length === 0 && <li className="text-sm text-slate-500">없음</li>}
@@ -171,6 +200,63 @@ export function PositionEditor(props: {
       })}
       </div>
     </section>
+  );
+}
+
+function PositionStaffingFields(props: {
+  position: PositionDef;
+  locked: boolean;
+  onChange: (period: PeriodId, field: "min" | "max", value: number) => void;
+}) {
+  return (
+    <div className="mt-2 overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-slate-500">
+            <th className="py-1 pr-2 text-left font-medium">시간대</th>
+            <th className="px-1 py-1 text-center font-medium">최소</th>
+            <th className="px-1 py-1 text-center font-medium">최대</th>
+          </tr>
+        </thead>
+        <tbody>
+          {PERIODS.map((period) => {
+            const range = props.position.staffing?.[period.id] ?? { min: 0, max: 0 };
+            return (
+              <tr key={period.id}>
+                <td className="py-1 pr-2 text-slate-400 whitespace-nowrap">
+                  {period.short}
+                  <span className="ml-1 text-[10px] text-slate-600">{period.label}</span>
+                </td>
+                <td className="px-1 py-1">
+                  <input
+                    type="number"
+                    min={0}
+                    max={20}
+                    value={range.min}
+                    disabled={props.locked}
+                    onChange={(e) => props.onChange(period.id, "min", Number(e.target.value))}
+                    className="w-14 rounded border border-slate-600 bg-slate-950 px-1.5 py-1 text-center text-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
+                    aria-label={`${period.short} 최소`}
+                  />
+                </td>
+                <td className="px-1 py-1">
+                  <input
+                    type="number"
+                    min={0}
+                    max={20}
+                    value={range.max}
+                    disabled={props.locked}
+                    onChange={(e) => props.onChange(period.id, "max", Number(e.target.value))}
+                    className="w-14 rounded border border-slate-600 bg-slate-950 px-1.5 py-1 text-center text-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
+                    aria-label={`${period.short} 최대`}
+                  />
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -184,8 +270,10 @@ export function SkillMatrixEditor(props: {
   setSkillGroup: (g: ProductGroup) => void;
   onCopyFromSignature: (to: ProductGroup) => void;
   onRankError: (message: string | null) => void;
+  locked?: boolean;
 }) {
   const g = props.skillGroup;
+  const locked = Boolean(props.locked);
   const cols = props.catalog[g];
   const heat = cols.filter((p) => p.process === "heating");
   const rest = cols.filter((p) => p.process !== "heating");
@@ -208,7 +296,7 @@ export function SkillMatrixEditor(props: {
         ))}
       </div>
       <div className="shrink-0 px-4">
-        <CopyFromSignatureBar onCopy={props.onCopyFromSignature} />
+        <CopyFromSignatureBar onCopy={props.onCopyFromSignature} locked={locked} />
       </div>
       <p className="shrink-0 px-4 pb-3 text-sm text-slate-400">
         1순위 최우선 · 2순위 1순위 부재·식사 시 · 3순위 1·2 불가 시 · 4순위 최종 정상 대체 · 비상은 정상 후보가 모두 없을 때만 · 불가는 배치 금지.
@@ -238,12 +326,13 @@ export function SkillMatrixEditor(props: {
                 <td className="px-2 py-2 border-t border-slate-800">
                   <select
                     value={person.preferred}
+                    disabled={locked}
                     onChange={(e) =>
                       props.setRoster((rows) =>
                         rows.map((r) => (r.id === person.id ? { ...r, preferred: e.target.value as Person["preferred"] } : r))
                       )
                     }
-                    className="w-full rounded-md border border-slate-600 bg-slate-900 px-2 py-2 text-sm text-slate-200"
+                    className="w-full rounded-md border border-slate-600 bg-slate-900 px-2 py-2 text-sm text-slate-200 disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {PROCESSES.map((process) => (
                       <option key={process.id} value={process.id}>{process.label}</option>
@@ -253,12 +342,13 @@ export function SkillMatrixEditor(props: {
                 <td className="px-2 py-2 border-t border-slate-800">
                   <select
                     value={person.shift}
+                    disabled={locked}
                     onChange={(e) =>
                       props.setRoster((rows) =>
                         rows.map((r) => (r.id === person.id ? { ...r, shift: e.target.value as Person["shift"] } : r))
                       )
                     }
-                    className="w-full rounded-md border border-slate-600 bg-slate-900 px-2 py-2 text-sm text-slate-200"
+                    className="w-full rounded-md border border-slate-600 bg-slate-900 px-2 py-2 text-sm text-slate-200 disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     <option value="0800-1800">08–18</option>
                     <option value="0900-1900">09–19</option>
@@ -270,6 +360,7 @@ export function SkillMatrixEditor(props: {
                     <td key={pos.id} className="px-1 py-1.5 text-center border-t border-slate-800">
                       <select
                         value={v}
+                        disabled={locked}
                         onChange={(e) => {
                           const n = Number(e.target.value) as Priority;
                           const next = setPriorityUnique(props.skills, props.roster, person.id, g, pos.id, n);
@@ -280,7 +371,7 @@ export function SkillMatrixEditor(props: {
                           props.onRankError(null);
                           props.setSkills(next.skills);
                         }}
-                        className={`w-full min-h-10 rounded-md border border-slate-700 px-1 py-2 text-sm font-medium ${PRIORITY_CELL[v]}`}
+                        className={`w-full min-h-10 rounded-md border border-slate-700 px-1 py-2 text-sm font-medium disabled:cursor-not-allowed ${PRIORITY_CELL[v]}`}
                       >
                         {PRIORITY_OPTIONS.map((o) => {
                           const taken = rankTakenBy(props.skills, props.roster, g, pos.id, o.value, person.id);

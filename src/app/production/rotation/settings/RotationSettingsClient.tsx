@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, Pencil, Save, SlidersHorizontal, X } from "lucide-react";
 import {
   DEFAULT_CATALOG,
   buildGroupReadiness,
@@ -14,8 +14,19 @@ import {
 import { fetchRotationMaster, saveRotationMaster } from "@/features/production/rotation/clientApi";
 import { PRODUCT_GROUPS } from "@/features/production/rotation/seedRoster";
 import { processLabel } from "@/features/production/rotation/rotationEngine";
-import type { Person, PositionCatalog, PositionDef, ProcessId, ProductGroup, SkillMatrix } from "@/features/production/rotation/types";
+import { patchPositionStaffing, processNeedsStaffing, withDefaultStaffing } from "@/features/production/rotation/staffing";
+import type { PeriodId, Person, PositionCatalog, PositionDef, ProcessId, ProductGroup, SkillMatrix } from "@/features/production/rotation/types";
 import { PositionEditor, ReadinessPanel, SkillMatrixEditor } from "../rotationShared";
+
+type MasterDraft = {
+  roster: Person[];
+  catalog: PositionCatalog;
+  skills: SkillMatrix;
+};
+
+function cloneDraft(draft: MasterDraft): MasterDraft {
+  return structuredClone(draft);
+}
 
 export default function RotationSettingsClient() {
   const [roster, setRoster] = useState<Person[]>([]);
@@ -27,17 +38,9 @@ export default function RotationSettingsClient() {
   const [rankError, setRankError] = useState<string | null>(null);
   const [panel, setPanel] = useState<"positions" | "skills">("skills");
   const [skillGroup, setSkillGroup] = useState<ProductGroup>("phono_signature");
-  const skipSave = useRef(true);
-
-  const snapshot = useMemo(
-    () =>
-      JSON.stringify({
-        workers: roster.map(({ id, name, preferred, shift, group }) => ({ id, name, preferred, shift, group })),
-        catalog,
-        skills,
-      }),
-    [roster, catalog, skills]
-  );
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const savedRef = useRef<MasterDraft | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -45,10 +48,16 @@ export default function RotationSettingsClient() {
       try {
         const master = await fetchRotationMaster();
         if (cancelled) return;
-        setRoster(master.workers);
-        setCatalog(master.catalog);
-        setSkills(master.skills);
-        skipSave.current = true;
+        const draft: MasterDraft = {
+          roster: master.workers,
+          catalog: master.catalog,
+          skills: master.skills,
+        };
+        savedRef.current = cloneDraft(draft);
+        setRoster(draft.roster);
+        setCatalog(draft.catalog);
+        setSkills(draft.skills);
+        setEditing(false);
         setHydrated(true);
       } catch (err) {
         if (cancelled) return;
@@ -61,25 +70,6 @@ export default function RotationSettingsClient() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!hydrated) return;
-    if (skipSave.current) {
-      skipSave.current = false;
-      return;
-    }
-    const t = window.setTimeout(() => {
-      void saveRotationMaster({
-        workers: roster.map((w) => ({ ...w, present: true })),
-        catalog,
-        skills,
-      }).then(
-        () => setSaveNote("설정 저장됨"),
-        (err) => setSaveNote(err instanceof Error ? err.message : "설정 저장 실패")
-      );
-    }, 700);
-    return () => window.clearTimeout(t);
-  }, [snapshot, hydrated, roster, catalog, skills]);
-
   const readinessByGroup = useMemo(
     () =>
       Object.fromEntries(
@@ -88,7 +78,46 @@ export default function RotationSettingsClient() {
     [catalog, skills, roster]
   );
 
+  const startEdit = () => {
+    setSaveNote(null);
+    setRankError(null);
+    setEditing(true);
+  };
+
+  const cancelEdit = () => {
+    const saved = savedRef.current;
+    if (saved) {
+      const restored = cloneDraft(saved);
+      setRoster(restored.roster);
+      setCatalog(restored.catalog);
+      setSkills(restored.skills);
+    }
+    setRankError(null);
+    setSaveNote(null);
+    setEditing(false);
+  };
+
+  const saveEdit = async () => {
+    setSaving(true);
+    setSaveNote(null);
+    try {
+      await saveRotationMaster({
+        workers: roster.map((w) => ({ ...w, present: true })),
+        catalog,
+        skills,
+      });
+      savedRef.current = cloneDraft({ roster, catalog, skills });
+      setEditing(false);
+      setSaveNote("저장되었습니다. 바꾸려면 수정을 누르세요.");
+    } catch (err) {
+      setSaveNote(err instanceof Error ? err.message : "설정 저장 실패");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const copyFromSignature = (to: ProductGroup) => {
+    if (!editing) return;
     const label = PRODUCT_GROUPS.find((pg) => pg.id === to)?.label ?? to;
     if (
       !window.confirm(
@@ -104,11 +133,12 @@ export default function RotationSettingsClient() {
   };
 
   const addPosition = (g: ProductGroup, process: ProcessId) => {
-    const pos: PositionDef = {
+    if (!editing) return;
+    const pos: PositionDef = withDefaultStaffing({
       id: newPositionId(process),
       label: `${processLabel(process)} ${catalog[g].filter((p) => p.process === process).length + 1}`,
       process,
-    };
+    });
     setCatalog((c) => ({ ...c, [g]: [...c[g], pos] }));
     setSkills((s) => {
       let next = s;
@@ -117,13 +147,28 @@ export default function RotationSettingsClient() {
     });
   };
 
+  const changeStaffing = (g: ProductGroup, id: string, period: PeriodId, field: "min" | "max", value: number) => {
+    if (!editing) return;
+    setCatalog((c) => ({
+      ...c,
+      [g]: c[g].map((p) => {
+        if (p.id !== id || !processNeedsStaffing(p.process)) return p;
+        return { ...p, staffing: patchPositionStaffing(p.process, p.staffing, period, field, value) };
+      }),
+    }));
+  };
+
   const renamePosition = (g: ProductGroup, id: string, label: string) => {
+    if (!editing) return;
     setCatalog((c) => ({ ...c, [g]: c[g].map((p) => (p.id === id ? { ...p, label } : p)) }));
   };
 
   const removePosition = (g: ProductGroup, id: string) => {
+    if (!editing) return;
     setCatalog((c) => ({ ...c, [g]: c[g].filter((p) => p.id !== id) }));
   };
+
+  const locked = !editing;
 
   return (
     <div className="flex min-h-[calc(100dvh-3.5rem-4rem)] md:min-h-[calc(100dvh-3.5rem)] flex-col p-3 md:p-4">
@@ -136,7 +181,41 @@ export default function RotationSettingsClient() {
             <SlidersHorizontal className="w-5 h-5 text-cyan-400" />
             로테이션 설정
           </h1>
+          <p className="mt-1 text-sm text-slate-400">
+            {editing ? "수정 중입니다. 끝나면 저장하세요." : "잠겨 있습니다. 바꾸려면 수정을 누르세요."}
+          </p>
           {saveNote && <p className="mt-1 text-[11px] text-slate-500">{saveNote}</p>}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={startEdit}
+            disabled={!hydrated || editing || Boolean(loadError)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-200 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Pencil className="w-4 h-4" />
+            수정
+          </button>
+          {editing && (
+            <button
+              type="button"
+              onClick={cancelEdit}
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 disabled:opacity-40"
+            >
+              <X className="w-4 h-4" />
+              취소
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => void saveEdit()}
+            disabled={!editing || saving}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-700/60 bg-cyan-950/40 px-3 py-2 text-sm text-cyan-100 hover:bg-cyan-900/40 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Save className="w-4 h-4" />
+            {saving ? "저장 중…" : "저장"}
+          </button>
         </div>
       </header>
 
@@ -175,7 +254,9 @@ export default function RotationSettingsClient() {
           onAdd={addPosition}
           onRename={renamePosition}
           onRemove={removePosition}
+          onStaffingChange={changeStaffing}
           onCopyFromSignature={copyFromSignature}
+          locked={locked}
         />
       )}
 
@@ -190,6 +271,7 @@ export default function RotationSettingsClient() {
           setSkillGroup={setSkillGroup}
           onCopyFromSignature={copyFromSignature}
           onRankError={setRankError}
+          locked={locked}
         />
       )}
     </div>

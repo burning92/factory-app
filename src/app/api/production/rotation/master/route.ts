@@ -20,6 +20,73 @@ import type { Person, ProductGroup } from "@/features/production/rotation/types"
 const READ_ROLES = ["worker", "assistant_manager", "manager", "quality_manager", "headquarters", "admin"];
 const WRITE_ROLES = ["manager", "quality_manager", "headquarters", "admin"];
 
+const POS_COLS =
+  "product_group,position_id,process,label,sort_order,min_by_period,max_by_period";
+const POS_COLS_BASIC = "product_group,position_id,process,label,sort_order";
+
+function missingStaffingColumn(message: string): boolean {
+  return /min_by_period|max_by_period|schema cache/i.test(message);
+}
+
+type PositionRow = {
+  product_group: string;
+  position_id: string;
+  process: string;
+  label: string;
+  sort_order: number;
+  min_by_period?: unknown;
+  max_by_period?: unknown;
+};
+
+async function loadPositionRows(admin: ReturnType<typeof createAdminClient>, org: string) {
+  const withStaff = await admin
+    .from("rotation_positions")
+    .select(POS_COLS)
+    .eq("organization_code", org)
+    .order("sort_order");
+  if (!withStaff.error) return { rows: (withStaff.data ?? []) as PositionRow[], error: null as string | null };
+  if (!missingStaffingColumn(withStaff.error.message)) {
+    return { rows: [] as PositionRow[], error: withStaff.error.message };
+  }
+  const basic = await admin
+    .from("rotation_positions")
+    .select(POS_COLS_BASIC)
+    .eq("organization_code", org)
+    .order("sort_order");
+  if (basic.error) return { rows: [] as PositionRow[], error: basic.error.message };
+  return { rows: (basic.data ?? []) as PositionRow[], error: null as string | null };
+}
+
+function withoutStaffingColumns<T extends { min_by_period?: unknown; max_by_period?: unknown }>(rows: T[]) {
+  return rows.map(({ min_by_period: _min, max_by_period: _max, ...rest }) => rest);
+}
+
+async function upsertPositionRows(
+  admin: ReturnType<typeof createAdminClient>,
+  rows: ReturnType<typeof seedPositionRows>
+) {
+  const first = await admin.from("rotation_positions").upsert(rows, {
+    onConflict: "organization_code,product_group,position_id",
+  });
+  if (!first.error) return null;
+  if (!missingStaffingColumn(first.error.message)) return first.error.message;
+  const retry = await admin.from("rotation_positions").upsert(withoutStaffingColumns(rows), {
+    onConflict: "organization_code,product_group,position_id",
+  });
+  return retry.error?.message ?? null;
+}
+
+async function insertPositionRows(
+  admin: ReturnType<typeof createAdminClient>,
+  rows: ReturnType<typeof flattenPositions>
+) {
+  const first = await admin.from("rotation_positions").insert(rows);
+  if (!first.error) return null;
+  if (!missingStaffingColumn(first.error.message)) return first.error.message;
+  const retry = await admin.from("rotation_positions").insert(withoutStaffingColumns(rows));
+  return retry.error?.message ?? null;
+}
+
 type ProfileRow = {
   id: string;
   display_name: string | null;
@@ -119,25 +186,22 @@ export async function GET(req: NextRequest) {
   if (synced.error) return NextResponse.json({ error: synced.error }, { status: 500 });
   const admin = synced.admin;
 
-  let { data: posRows, error: pErr } = await admin
-    .from("rotation_positions")
-    .select("product_group,position_id,process,label,sort_order")
-    .eq("organization_code", org)
-    .order("sort_order");
-  if (pErr) return NextResponse.json({ error: pErr.message }, { status: 500 });
+  const loaded = await loadPositionRows(admin, org);
+  if (loaded.error) return NextResponse.json({ error: loaded.error }, { status: 500 });
+  let posRows = loaded.rows;
 
   if (!posRows || posRows.length === 0) {
     const seed = seedPositionRows(org);
-    const { error } = await admin.from("rotation_positions").upsert(seed, {
-      onConflict: "organization_code,product_group,position_id",
-    });
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    const seedErr = await upsertPositionRows(admin, seed);
+    if (seedErr) return NextResponse.json({ error: seedErr }, { status: 500 });
     posRows = seed.map((s) => ({
       product_group: s.product_group,
       position_id: s.position_id,
       process: s.process,
       label: s.label,
       sort_order: s.sort_order,
+      min_by_period: s.min_by_period,
+      max_by_period: s.max_by_period,
     }));
   }
 
@@ -215,8 +279,8 @@ export async function PUT(req: NextRequest) {
   }
 
   await admin.from("rotation_positions").delete().eq("organization_code", org);
-  const { error: pErr } = await admin.from("rotation_positions").insert(posRows);
-  if (pErr) return NextResponse.json({ error: pErr.message }, { status: 500 });
+  const pErr = await insertPositionRows(admin, posRows);
+  if (pErr) return NextResponse.json({ error: pErr }, { status: 500 });
 
   await admin.from("rotation_priorities").delete().eq("organization_code", org);
   if (priRows.length > 0) {

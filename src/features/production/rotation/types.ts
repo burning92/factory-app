@@ -66,10 +66,19 @@ export type Person = {
   leaveKind?: "none" | "annual" | "other" | "half" | "half_am" | "half_pm";
 };
 
+export type PeriodStaffRange = {
+  min: number;
+  max: number;
+};
+
+/** 시간대별 최소·최대 인원. 가열·R&D는 두지 않음. */
+export type PositionStaffing = Record<PeriodId, PeriodStaffRange>;
+
 export type PositionDef = {
   id: string;
   label: string;
   process: ProcessId;
+  staffing?: PositionStaffing;
 };
 
 export type PositionCatalog = Record<ProductGroup, PositionDef[]>;
@@ -86,11 +95,17 @@ export type Assignment = {
 
 export type PeriodAssignments = Record<PeriodId, Assignment[]>;
 
+export type PositionStaffNeed = {
+  positionId: string;
+  process: ProcessId;
+  label: string;
+  min: number;
+  max: number;
+};
+
 export type StaffingTarget = {
   heating: number;
-  inner: number;
-  outer: number;
-  dough: number;
+  positions: PositionStaffNeed[];
 };
 
 export type RotationModes = {

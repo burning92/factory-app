@@ -1,5 +1,6 @@
 import { DEFAULT_CATALOG } from "./catalog";
 import { productGroup } from "./seedRoster";
+import { normalizePositionStaffing, parsePeriodStaffJson, processNeedsStaffing, withDefaultStaffing } from "./staffing";
 import type { PlanningLeaveItem, RotationLeaveKind } from "./planningLeave";
 import type { PlannedRotationProduct } from "./mapPlanProducts";
 import type {
@@ -46,18 +47,46 @@ export function emptyCatalog(): PositionCatalog {
 }
 
 export function catalogFromRows(
-  rows: { product_group: string; position_id: string; process: string; label: string; sort_order: number }[]
+  rows: {
+    product_group: string;
+    position_id: string;
+    process: string;
+    label: string;
+    sort_order: number;
+    min_by_period?: unknown;
+    max_by_period?: unknown;
+  }[]
 ): PositionCatalog {
   const catalog = emptyCatalog();
   for (const g of GROUPS) catalog[g] = [];
   for (const row of rows) {
     const g = row.product_group as ProductGroup;
     if (!GROUPS.includes(g)) continue;
-    catalog[g].push({
-      id: row.position_id,
-      label: row.label,
-      process: row.process as ProcessId,
-    });
+    const process = row.process as ProcessId;
+    const minMap = parsePeriodStaffJson(row.min_by_period);
+    const maxMap = parsePeriodStaffJson(row.max_by_period);
+    let staffing = processNeedsStaffing(process) ? normalizePositionStaffing(process, undefined) : undefined;
+    if (processNeedsStaffing(process) && (minMap || maxMap)) {
+      const merged = normalizePositionStaffing(process, undefined)!;
+      for (const period of PERIODS) {
+        merged[period.id] = {
+          min: minMap?.[period.id]?.min ?? merged[period.id].min,
+          max: maxMap?.[period.id]?.max ?? merged[period.id].max,
+        };
+        if (merged[period.id].max < merged[period.id].min) {
+          merged[period.id].max = merged[period.id].min;
+        }
+      }
+      staffing = merged;
+    }
+    catalog[g].push(
+      withDefaultStaffing({
+        id: row.position_id,
+        label: row.label,
+        process,
+        staffing,
+      })
+    );
   }
   for (const g of GROUPS) {
     if (catalog[g].length === 0) catalog[g] = structuredClone(DEFAULT_CATALOG[g]);
@@ -110,6 +139,8 @@ export function seedPositionRows(org: string): {
   process: string;
   label: string;
   sort_order: number;
+  min_by_period: Record<string, number>;
+  max_by_period: Record<string, number>;
 }[] {
   const out: {
     organization_code: string;
@@ -118,6 +149,8 @@ export function seedPositionRows(org: string): {
     process: string;
     label: string;
     sort_order: number;
+    min_by_period: Record<string, number>;
+    max_by_period: Record<string, number>;
   }[] = [];
   for (const g of GROUPS) {
     DEFAULT_CATALOG[g].forEach((p: PositionDef, i: number) => {
@@ -128,6 +161,7 @@ export function seedPositionRows(org: string): {
         process: p.process,
         label: p.label,
         sort_order: i,
+        ...staffingColumns(p),
       });
     });
   }
@@ -160,6 +194,22 @@ export function flattenPriorities(org: string, skills: SkillMatrix, catalog: Pos
   return rows;
 }
 
+function staffingColumns(p: PositionDef): {
+  min_by_period: Record<string, number>;
+  max_by_period: Record<string, number>;
+} {
+  const staffing = processNeedsStaffing(p.process) ? normalizePositionStaffing(p.process, p.staffing) : undefined;
+  const min_by_period: Record<string, number> = {};
+  const max_by_period: Record<string, number> = {};
+  if (staffing) {
+    for (const period of PERIODS) {
+      min_by_period[period.id] = staffing[period.id].min;
+      max_by_period[period.id] = staffing[period.id].max;
+    }
+  }
+  return { min_by_period, max_by_period };
+}
+
 export function flattenPositions(org: string, catalog: PositionCatalog) {
   const rows: {
     organization_code: string;
@@ -168,6 +218,8 @@ export function flattenPositions(org: string, catalog: PositionCatalog) {
     process: string;
     label: string;
     sort_order: number;
+    min_by_period: Record<string, number>;
+    max_by_period: Record<string, number>;
   }[] = [];
   for (const g of GROUPS) {
     catalog[g].forEach((p, i) => {
@@ -178,6 +230,7 @@ export function flattenPositions(org: string, catalog: PositionCatalog) {
         process: p.process,
         label: p.label,
         sort_order: i,
+        ...staffingColumns(p),
       });
     });
   }

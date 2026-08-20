@@ -1,4 +1,5 @@
 import { LEGACY_EXTRA_PROCESSES, SEED_ROSTER } from "./seedRoster";
+import { defaultStaffingForProcess, withDefaultStaffing } from "./staffing";
 import type { Person, PositionCatalog, PositionDef, Priority, ProcessId, ProductGroup, SkillMatrix } from "./types";
 import { EMERGENCY_PRIORITY } from "./types";
 
@@ -23,19 +24,19 @@ function shared(prefix: string): PositionDef[] {
 }
 
 export const DEFAULT_CATALOG: PositionCatalog = {
-  phono_signature: [...heat(7, "sig"), ...shared("sig")],
-  phono_basil_corn: [...heat(7, "basil"), ...shared("basil")],
-  phono_ricotta: [...heat(8, "ricotta"), ...shared("ricotta")],
+  phono_signature: [...heat(7, "sig"), ...shared("sig")].map((p) => withDefaultStaffing(p)),
+  phono_basil_corn: [...heat(7, "basil"), ...shared("basil")].map((p) => withDefaultStaffing(p)),
+  phono_ricotta: [...heat(8, "ricotta"), ...shared("ricotta")].map((p) => withDefaultStaffing(p)),
   parbake: [
-    { id: "pb-pick", label: "도우따기", process: "heating" },
-    { id: "pb-press", label: "누르기", process: "heating" },
-    { id: "pb-spin-before", label: "스피너 전", process: "heating" },
-    { id: "pb-spin-after", label: "스피너 후", process: "heating" },
-    { id: "pb-sauce", label: "소스", process: "heating" },
-    { id: "pb-cut", label: "자르기", process: "heating" },
-    { id: "pb-receive", label: "받기", process: "heating" },
+    { id: "pb-pick", label: "도우따기", process: "heating" as const },
+    { id: "pb-press", label: "누르기", process: "heating" as const },
+    { id: "pb-spin-before", label: "스피너 전", process: "heating" as const },
+    { id: "pb-spin-after", label: "스피너 후", process: "heating" as const },
+    { id: "pb-sauce", label: "소스", process: "heating" as const },
+    { id: "pb-cut", label: "자르기", process: "heating" as const },
+    { id: "pb-receive", label: "받기", process: "heating" as const },
     ...shared("pb"),
-  ],
+  ].map((p) => withDefaultStaffing(p)),
 };
 
 export function newPositionId(process: ProcessId): string {
@@ -142,11 +143,16 @@ export function mergeCatalog(saved: PositionCatalog | undefined): PositionCatalo
     if (source && source.length > 0) {
       next[group] = source
         .filter((p) => p && typeof p.id === "string" && typeof p.label === "string")
-        .map((p) => ({
-          id: p.id,
-          label: p.label,
-          process: p.process,
-        }));
+        .map((p) =>
+          withDefaultStaffing({
+            id: p.id,
+            label: p.label,
+            process: p.process,
+            staffing: p.staffing,
+          })
+        );
+    } else {
+      next[group] = next[group].map((p) => withDefaultStaffing(p));
     }
   }
   return next;
@@ -181,11 +187,14 @@ export function copyProductGroup(
   from: ProductGroup,
   to: ProductGroup
 ): { catalog: PositionCatalog; skills: SkillMatrix } {
-  const copied: PositionDef[] = catalog[from].map((p, i) => ({
-    id: `${to}__${p.process}__${i}`,
-    label: p.label,
-    process: p.process,
-  }));
+  const copied: PositionDef[] = catalog[from].map((p, i) =>
+    withDefaultStaffing({
+      id: `${to}__${p.process}__${i}`,
+      label: p.label,
+      process: p.process,
+      staffing: p.staffing ?? defaultStaffingForProcess(p.process),
+    })
+  );
   const idMap = new Map(catalog[from].map((p, i) => [p.id, copied[i].id]));
   const nextCatalog: PositionCatalog = { ...catalog, [to]: copied };
   const nextSkills: SkillMatrix = { ...skills };

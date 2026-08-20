@@ -1,6 +1,7 @@
 import { getPriority, heatingPositions, isNormalRank, positionsForProcess } from "./catalog";
 import { HOURLY_QTY, productGroup } from "./seedRoster";
 import { isAvailableInPeriod, isDoughCorePerson, isFullDayLeave } from "./planningLeave";
+import { processNeedsStaffing, staffingForPosition } from "./staffing";
 import {
   PERIODS,
   PRIORITY_OPTIONS,
@@ -27,14 +28,6 @@ import {
   type StationId,
   EMERGENCY_PRIORITY,
 } from "./types";
-
-const LUNCH_INNER = 3;
-const LUNCH_OUTER = 2;
-const START_INNER = 4;
-const START_OUTER = 3;
-const AFTER_INNER_PREF = 5;
-const AFTER_INNER_MIN = 4;
-const AFTER_OUTER = 4;
 
 export type Slot = {
   key: string;
@@ -93,20 +86,28 @@ export function heatingTarget(catalog: PositionCatalog, group: ProductGroup): nu
 export function periodTargets(
   catalog: PositionCatalog,
   group: ProductGroup,
-  doughCount: number,
-  doughCanRotate: boolean
+  _doughCount: number,
+  _doughCanRotate: boolean
 ): Record<PeriodId, StaffingTarget> {
   const h = heatingTarget(catalog, group);
+  const make = (period: PeriodId): StaffingTarget => ({
+    heating: h,
+    positions: catalog[group].filter((p) => processNeedsStaffing(p.process)).map((p) => {
+      const range = staffingForPosition(p, period);
+      return {
+        positionId: p.id,
+        process: p.process,
+        label: p.label,
+        min: range.min,
+        max: range.max,
+      };
+    }),
+  });
   return {
-    start: { heating: h, inner: START_INNER, outer: START_OUTER, dough: doughCount },
-    lunch1: { heating: h, inner: LUNCH_INNER, outer: LUNCH_OUTER, dough: doughCanRotate ? 0 : doughCount },
-    lunch2: { heating: h, inner: LUNCH_INNER, outer: LUNCH_OUTER, dough: doughCanRotate ? 0 : doughCount },
-    after: {
-      heating: h,
-      inner: AFTER_INNER_PREF,
-      outer: AFTER_OUTER,
-      dough: doughCanRotate && doughCount > 0 ? 1 : doughCanRotate ? 0 : doughCount,
-    },
+    start: make("start"),
+    lunch1: make("lunch1"),
+    lunch2: make("lunch2"),
+    after: make("after"),
   };
 }
 
@@ -126,19 +127,15 @@ function byName(a: Person, b: Person): number {
   return a.name.localeCompare(b.name, "ko");
 }
 
-function expandProcessSlots(
-  catalog: PositionCatalog,
-  group: ProductGroup,
-  process: ProcessId,
-  count: number,
-  required: boolean
-): Slot[] {
-  const defs = positionsForProcess(catalog, group, process);
-  if (count <= 0 || defs.length === 0) return [];
+function expandPositionSlots(position: PositionDef, min: number, max: number): Slot[] {
   const slots: Slot[] = [];
-  for (let i = 0; i < count; i++) {
-    const def = defs[i] ?? defs[0];
-    slots.push({ key: `${process}:${def.id}:${i}`, position: def, required });
+  const cap = Math.max(0, max);
+  const requiredN = Math.max(0, Math.min(min, cap));
+  for (let i = 0; i < requiredN; i++) {
+    slots.push({ key: `${position.process}:${position.id}:${i}`, position, required: true });
+  }
+  for (let i = requiredN; i < cap; i++) {
+    slots.push({ key: `${position.process}:${position.id}:${i}:opt`, position, required: false });
   }
   return slots;
 }
@@ -154,19 +151,15 @@ export function buildSlots(
     position,
     required: true,
   }));
-  const doughProcess: ProcessId = period === "after" ? "cleanup" : "dough";
-  const innerRequired = period === "after" ? AFTER_INNER_MIN : targets.inner;
-  const innerOptional = period === "after" ? Math.max(0, AFTER_INNER_PREF - AFTER_INNER_MIN) : 0;
-  return [
-    ...heat,
-    ...expandProcessSlots(catalog, group, "inner", innerRequired, true),
-    ...expandProcessSlots(catalog, group, "inner", innerOptional, false).map((s, i) => ({
-      ...s,
-      key: `${s.key}:opt${i}`,
-    })),
-    ...expandProcessSlots(catalog, group, "outer", targets.outer, true),
-    ...expandProcessSlots(catalog, group, doughProcess, targets.dough, targets.dough > 0),
-  ];
+  const staffed = (targets.positions.length > 0 ? targets.positions : catalog[group].filter((p) => processNeedsStaffing(p.process)).map((p) => {
+    const range = staffingForPosition(p, period);
+    return { positionId: p.id, process: p.process, label: p.label, min: range.min, max: range.max };
+  })).flatMap((need) => {
+    const position = catalog[group].find((p) => p.id === need.positionId);
+    if (!position) return [];
+    return expandPositionSlots(position, need.min, need.max);
+  });
+  return [...heat, ...staffed];
 }
 
 function capableOf(
@@ -467,12 +460,17 @@ function placeLeftovers(
   skills: SkillMatrix,
   catalog: PositionCatalog,
   group: ProductGroup,
-  prev: Map<string, Assignment>
+  prev: Map<string, Assignment>,
+  period: PeriodId
 ): Assignment[] {
   const byId = new Map(roster.map((p) => [p.id, p]));
   const taken = new Set(rows.filter((r) => r.station !== "unassigned").map((r) => r.personId));
   const leftover = rows.filter((r) => r.station === "unassigned");
   const kept = rows.filter((r) => r.station !== "unassigned");
+  const counts = new Map<string, number>();
+  for (const row of kept) {
+    if (row.positionId) counts.set(row.positionId, (counts.get(row.positionId) ?? 0) + 1);
+  }
   const fallback: ProcessId[] = ["topping", "inner", "outer", "rnd", "office"];
   const extra: Assignment[] = [];
   for (const row of leftover) {
@@ -483,6 +481,8 @@ function placeLeftovers(
       return defs.flatMap((d) => {
           const pr = getPriority(skills, person.id, group, d.id);
           if (pr === 0) return [];
+          const cap = staffingForPosition(d, period).max;
+          if ((counts.get(d.id) ?? 0) >= cap) return [];
           let sc = (6 - pr) * 10;
           if (person.preferred === process) sc += 8;
           if (prev.get(person.id)?.positionId === d.id) sc += 12;
@@ -497,6 +497,7 @@ function placeLeftovers(
       continue;
     }
     taken.add(person.id);
+    counts.set(best.d.id, (counts.get(best.d.id) ?? 0) + 1);
     extra.push({ personId: person.id, station: best.process, positionId: best.d.id, priority: best.pr });
   }
   return [...kept, ...extra];
@@ -571,10 +572,7 @@ function partitionLunch(
     }
   }
 
-  const fillQuota = (process: ProcessId, need: number) => {
-    const defs = slots.filter((s) => s.position.process === process).map((s) => s.position);
-    const posId = defs[0]?.id;
-    if (!posId) return;
+  const fillQuota = (posId: string, need: number) => {
     const countIn = (arr: Person[]) => arr.filter((p) => getPriority(skills, p.id, group, posId) > 0).length;
     for (const side of [B, A]) {
       while (countIn(side) < need) {
@@ -587,8 +585,12 @@ function partitionLunch(
       }
     }
   };
-  fillQuota("outer", LUNCH_OUTER);
-  fillQuota("inner", LUNCH_INNER);
+  const lunchNeeds = new Map<string, number>();
+  for (const slot of slots) {
+    if (!slot.required || !processNeedsStaffing(slot.position.process)) continue;
+    lunchNeeds.set(slot.position.id, (lunchNeeds.get(slot.position.id) ?? 0) + 1);
+  }
+  for (const [posId, need] of Array.from(lunchNeeds.entries())) fillQuota(posId, need);
 
   const rest = eaters.filter((p) => !placed.has(p.id)).sort((a, b) => {
     const da = doughIds.has(a.id) ? 1 : 0;
@@ -642,14 +644,27 @@ function toPrevMap(rows: Assignment[]): Map<string, Assignment> {
   return new Map(rows.map((r) => [r.personId, r]));
 }
 
-function officeRows(office: Person[], catalog: PositionCatalog, group: ProductGroup, skills: SkillMatrix): Assignment[] {
-  return office.map((p) => {
-    const def = positionsForProcess(catalog, group, "office")[0];
+function officeRows(
+  office: Person[],
+  catalog: PositionCatalog,
+  group: ProductGroup,
+  skills: SkillMatrix,
+  period: PeriodId,
+  existing: Assignment[]
+): Assignment[] {
+  const def = positionsForProcess(catalog, group, "office")[0];
+  const cap = def ? staffingForPosition(def, period).max : office.length;
+  const already = existing.filter((r) => r.station === "office").length;
+  const remain = Math.max(0, cap - already);
+  return office.map((p, i) => {
     const pr = def ? getPriority(skills, p.id, group, def.id) : 0;
-    if (def && pr > 0) {
-      return { personId: p.id, station: "office" as const, positionId: def.id, priority: pr };
+    if (i < remain) {
+      if (def && pr > 0) {
+        return { personId: p.id, station: "office" as const, positionId: def.id, priority: pr };
+      }
+      return { personId: p.id, station: "office" as const };
     }
-    return { personId: p.id, station: "office" as const };
+    return { personId: p.id, station: "unassigned" as const };
   });
 }
 
@@ -701,8 +716,10 @@ export function generateRotation(input: GenerateInput): GenerateResult {
   const startForced: Assignment[] = [];
   const doughDefs = positionsForProcess(catalog, group, "dough");
   const doughPos = doughDefs[0];
-  if (doughPos && targets.start.dough > 0) {
-    for (const person of doughCore.slice(0, targets.start.dough)) {
+  const doughNeed = targets.start.positions.find((p) => p.process === "dough");
+  const doughCap = doughNeed?.max ?? 0;
+  if (doughPos && doughCap > 0) {
+    for (const person of doughCore.slice(0, doughCap)) {
       const pr = getPriority(skills, person.id, group, doughPos.id);
       if (pr === 0) {
         warnings.push({ kind: "unfilled", message: `${person.name}은(는) 반죽 포지션이 불가입니다.` });
@@ -722,11 +739,12 @@ export function generateRotation(input: GenerateInput): GenerateResult {
     skills,
     catalog,
     group,
-    startPrev
+    startPrev,
+    "start"
   );
   start = [
     ...start,
-    ...officeRows(onDuty(roster, "start", "office"), catalog, group, skills),
+    ...officeRows(onDuty(roster, "start", "office"), catalog, group, skills, "start", start),
     ...offRows(roster, "start"),
   ];
   warnings.push(...unfilledWarnings(startOut.unfilled, "시작"));
@@ -756,29 +774,36 @@ export function generateRotation(input: GenerateInput): GenerateResult {
 
   const lunch1Out = assignSlots(lunch1Work, lunchSlots, skills, group, toPrevMap(start));
   warnings.push(...lunch1Out.warnings, ...unfilledWarnings(lunch1Out.unfilled, "1차 교대"));
-  let lunch1 = [
-    ...placeLeftovers(lunch1Out.assignments, roster, skills, catalog, group, toPrevMap(start)),
+  const lunch1Placed = [
+    ...placeLeftovers(lunch1Out.assignments, roster, skills, catalog, group, toPrevMap(start), "lunch1"),
     ...lunch1Eat.map((p) => ({ personId: p.id, station: "lunch" as const })),
-    ...officeRows(onDuty(roster, "lunch1", "office"), catalog, group, skills),
+  ];
+  const lunch1 = [
+    ...lunch1Placed,
+    ...officeRows(onDuty(roster, "lunch1", "office"), catalog, group, skills, "lunch1", lunch1Placed),
     ...offRows(roster, "lunch1"),
   ];
 
   const lunch2Slots = buildSlots(catalog, group, "lunch2", targets.lunch2);
   const lunch2Out = assignSlots(lunch2Work, lunch2Slots, skills, group, toPrevMap(lunch1));
   warnings.push(...lunch2Out.warnings, ...unfilledWarnings(lunch2Out.unfilled, "2차 교대"));
-  let lunch2 = [
-    ...placeLeftovers(lunch2Out.assignments, roster, skills, catalog, group, toPrevMap(lunch1)),
+  const lunch2Placed = [
+    ...placeLeftovers(lunch2Out.assignments, roster, skills, catalog, group, toPrevMap(lunch1), "lunch2"),
     ...lunch2Eat.map((p) => ({ personId: p.id, station: "lunch" as const })),
-    ...officeRows(onDuty(roster, "lunch2", "office"), catalog, group, skills),
+  ];
+  const lunch2 = [
+    ...lunch2Placed,
+    ...officeRows(onDuty(roster, "lunch2", "office"), catalog, group, skills, "lunch2", lunch2Placed),
     ...offRows(roster, "lunch2"),
   ];
 
   const afterSlots = buildSlots(catalog, group, "after", targets.after);
   const afterOut = assignSlots(afterFloor, afterSlots, skills, group, toPrevMap(lunch2));
   warnings.push(...afterOut.warnings, ...unfilledWarnings(afterOut.unfilled, "13시 이후"));
-  let after = [
-    ...placeLeftovers(afterOut.assignments, roster, skills, catalog, group, toPrevMap(lunch2)),
-    ...officeRows(onDuty(roster, "after", "office"), catalog, group, skills),
+  const afterPlaced = placeLeftovers(afterOut.assignments, roster, skills, catalog, group, toPrevMap(lunch2), "after");
+  const after = [
+    ...afterPlaced,
+    ...officeRows(onDuty(roster, "after", "office"), catalog, group, skills, "after", afterPlaced),
     ...offRows(roster, "after"),
   ];
 
@@ -888,23 +913,18 @@ export function buildChecks(
       actual: `${heatFilled}/${t.heating}자리`,
       expected: `필수 ${t.heating}자리 전부`,
     });
-    const innerN = rows.filter((r) => r.station === "inner").length;
-    const innerOk = period.id === "after" ? innerN >= AFTER_INNER_MIN && innerN <= 5 : innerN === t.inner;
-    checks.push({
-      id: `count:${period.id}:inner`,
-      label: `${period.short} 내포장`,
-      ok: innerOk,
-      actual: `${innerN}명`,
-      expected: period.id === "after" ? `${AFTER_INNER_MIN}~5명` : `${t.inner}명`,
-    });
-    const outerN = rows.filter((r) => r.station === "outer").length;
-    checks.push({
-      id: `count:${period.id}:outer`,
-      label: `${period.short} 외포장`,
-      ok: outerN === t.outer,
-      actual: `${outerN}명`,
-      expected: `${t.outer}명`,
-    });
+    for (const need of t.positions) {
+      if (need.min <= 0 && need.max <= 0) continue;
+      const n = rows.filter((r) => r.positionId === need.positionId || (r.station === need.process && !r.positionId)).length;
+      const rangeLabel = need.min === need.max ? `${need.min}명` : `${need.min}~${need.max}명`;
+      checks.push({
+        id: `count:${period.id}:${need.positionId}`,
+        label: `${period.short} ${need.label}`,
+        ok: n >= need.min && n <= need.max,
+        actual: `${n}명`,
+        expected: rangeLabel,
+      });
+    }
   }
 
   if (modes.lunch) {
