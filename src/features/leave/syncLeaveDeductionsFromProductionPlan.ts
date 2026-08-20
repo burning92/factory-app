@@ -9,6 +9,8 @@ import {
 const CATEGORY_DAYS: Record<string, number> = {
   연차: 1,
   반차: 0.5,
+  "반차(오전출근)": 0.5,
+  "반차(오후출근)": 0.5,
   월차: 1,
 };
 

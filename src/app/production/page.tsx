@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Calculator, FileText, Plus, List, CalendarDays, ChevronRight, Package } from "lucide-react";
+import { Calculator, FileText, Plus, List, CalendarDays, ChevronRight, Package, Users } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { isManagerOrAbove } from "@/lib/roles";
 
@@ -20,6 +20,14 @@ const HUB_ITEMS = [
     description: "오늘/이번달 계획 확인",
     badge: "핵심",
     Icon: CalendarDays,
+    featured: true,
+  },
+  {
+    href: "/production/rotation",
+    label: "작업 로테이션",
+    description: "작업일 기준 점심 교대·가열 인원 배치",
+    badge: "현장",
+    Icon: Users,
     featured: true,
   },
   {
@@ -64,7 +72,7 @@ const HUB_ITEMS = [
   },
 ] as const;
 
-const WORKER_HUB_HREFS = new Set<string>(["/production/plan"]);
+const WORKER_HUB_HREFS = new Set<string>(["/production/plan", "/production/rotation"]);
 
 export default function ProductionHubPage() {
   const { profile } = useAuth();

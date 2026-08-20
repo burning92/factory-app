@@ -28,6 +28,7 @@ const DESKTOP_DROPDOWN_PRODUCTION: DropdownItem[] = [
   { href: "/production/history/completed", label: "생산일지" },
   { href: "/production/lot-consumption", label: "LOT별 생산 소모" },
   { href: "/production/plan", label: "생산계획" },
+  { href: "/production/rotation", label: "작업 로테이션" },
 ];
 
 const DESKTOP_DROPDOWN_MATERIALS: DropdownItem[] = [
@@ -79,8 +80,11 @@ const DESKTOP_DROPDOWN_MANAGEMENT: DropdownItem[] = [
   { href: "/admin/logs", label: "로그조회" },
 ];
 
-/** 워커: 생산 드롭다운에는 생산계획만 */
-const WORKER_DESKTOP_PRODUCTION: DropdownItem[] = [{ href: "/production/plan", label: "생산계획" }];
+/** 워커: 생산계획 + 작업 로테이션 */
+const WORKER_DESKTOP_PRODUCTION: DropdownItem[] = [
+  { href: "/production/plan", label: "생산계획" },
+  { href: "/production/rotation", label: "작업 로테이션" },
+];
 /** 워커: 재고 현황 + 출고 현황만 */
 const WORKER_DESKTOP_MATERIALS: DropdownItem[] = [
   { href: "/inventory/ecount", label: "재고 현황" },

@@ -30,6 +30,8 @@ function getCategoryClass(category: string | null): string {
     case "연차":
       return "bg-orange-500/25 text-orange-100 border border-orange-400/50";
     case "반차":
+    case "반차(오전출근)":
+    case "반차(오후출근)":
       return "bg-violet-500/20 text-violet-300 border border-violet-500/40";
     case "기타":
       return "bg-slate-500/20 text-slate-300 border border-slate-500/40";
@@ -62,6 +64,8 @@ function getDisplayName(category: string | null, productName: string, note: stri
     return t.startsWith("[기타]") ? t.slice("[기타]".length).trim() : t;
   }
   if (category === "연차") return `휴 : ${productName}`;
+  if (category === "반차(오전출근)") return `반(오전) : ${productName}`;
+  if (category === "반차(오후출근)") return `반(오후) : ${productName}`;
   if (category === "반차") return `반 : ${productName}`;
   if (category === "생산") {
     const idx = productName.indexOf(" - ");
@@ -87,6 +91,8 @@ const DESKTOP_ROW_ORDER: Record<string, number> = {
   메모: 2,
   연차: 3,
   반차: 4,
+  "반차(오전출근)": 4,
+  "반차(오후출근)": 4,
   기타: 5,
 };
 

@@ -18,6 +18,7 @@ import type {
   PlanningSubmaterialRow,
   PlanningVersionType,
 } from "./types";
+import { parsePlanningLeaveType, parsePlanningRangeEntryType } from "./leaveTypes";
 
 const NEAR_EXPIRY_EXCLUDE_KEYWORDS = [
   "설탕",
@@ -208,14 +209,14 @@ export async function getPlanningMonthData(year: number, month: number, version:
     id: Number(r.id),
     month_id: String(r.month_id),
     plan_date: String(r.plan_date).slice(0, 10),
-    leave_type: String(r.leave_type) === "half" ? "half" : "annual",
+    leave_type: parsePlanningLeaveType(r.leave_type),
     person_name: String(r.person_name ?? ""),
     profile_id: r.profile_id != null ? String(r.profile_id) : null,
   })) as PlanningLeaveRow[];
   const rangeEntries = ((rangeEntriesRes.data ?? []) as Record<string, unknown>[]).map((r) => ({
     id: String(r.id ?? ""),
     person_name: String(r.person_name ?? ""),
-    entry_type: String(r.entry_type) === "half" ? "half" : String(r.entry_type) === "other" ? "other" : "annual",
+    entry_type: parsePlanningRangeEntryType(r.entry_type),
     reason: r.reason != null ? String(r.reason) : null,
     start_date: String(r.start_date).slice(0, 10),
     end_date: String(r.end_date).slice(0, 10),

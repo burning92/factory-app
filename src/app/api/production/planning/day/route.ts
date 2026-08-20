@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { computeActualManpower } from "@/features/production/planning/calculations";
+import {
+  isHalfDayLeaveType,
+  parsePlanningLeaveType,
+  planningLeaveDeductionDays,
+  planningLeaveMirrorCategory,
+  planningLeaveTypeLabel,
+} from "@/features/production/planning/leaveTypes";
 import type { PlanningDayPayload } from "@/features/production/planning/types";
 import { isManagerOrAbove } from "@/lib/roles";
 
@@ -47,8 +54,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "권한 없음" }, { status: 403 });
   }
 
-  const annualFromLeaves = (payload.leaves ?? []).filter((l) => l.leave_type !== "half" && l.person_name.trim().length > 0).length;
-  const halfFromLeaves = (payload.leaves ?? []).filter((l) => l.leave_type === "half" && l.person_name.trim().length > 0).length;
+  const leavesForCount = (payload.leaves ?? []).filter((l) => l.person_name.trim().length > 0);
+  const annualFromLeaves = leavesForCount.filter((l) => !isHalfDayLeaveType(l.leave_type)).length;
+  const halfFromLeaves = leavesForCount.filter((l) => isHalfDayLeaveType(l.leave_type)).length;
 
   const actualManpower = computeActualManpower(
     Number(payload.baseline_headcount) || 0,
@@ -113,7 +121,7 @@ export async function POST(request: Request) {
 
     const leaves = (payload.leaves ?? [])
       .map((l) => ({
-        leave_type: l.leave_type === "half" ? "half" : "annual",
+        leave_type: parsePlanningLeaveType(l.leave_type),
         person_name: l.person_name.trim(),
       }))
       .filter((l) => l.person_name.length > 0);
@@ -148,8 +156,8 @@ export async function POST(request: Request) {
           profile_id: l.profile_id,
           year: Number(planDate.slice(0, 4)),
           usage_date: planDate,
-          days: l.leave_type === "half" ? 0.5 : 1,
-          memo: `생산계획 보드 자동 (${l.leave_type === "half" ? "반차" : "연차"})`,
+          days: planningLeaveDeductionDays(l.leave_type),
+          memo: `생산계획 보드 자동 (${planningLeaveTypeLabel(l.leave_type)})`,
           created_by: null as string | null,
           source: "planning_board" as const,
         }));
@@ -245,7 +253,7 @@ export async function POST(request: Request) {
         plan_date: planDate,
         product_name: l.person_name,
         qty: null,
-        category: l.leave_type === "half" ? "반차" : "연차",
+        category: planningLeaveMirrorCategory(l.leave_type),
         note: null,
         plan_year: planYear,
         plan_month: planMonth,

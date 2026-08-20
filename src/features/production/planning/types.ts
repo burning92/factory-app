@@ -1,3 +1,7 @@
+import type { PlanningLeaveType, PlanningRangeEntryType } from "./leaveTypes";
+
+export type { PlanningLeaveType, PlanningRangeEntryType } from "./leaveTypes";
+
 export type PlanningVersionType = "master" | "draft" | "end";
 
 export type PlanningRangeMode = "day" | "from_selected" | "from_today" | "custom";
@@ -46,7 +50,7 @@ export interface PlanningLeaveRow {
   id: number;
   month_id: string;
   plan_date: string;
-  leave_type: "annual" | "half";
+  leave_type: PlanningLeaveType;
   person_name: string;
   profile_id: string | null;
 }
@@ -54,7 +58,7 @@ export interface PlanningLeaveRow {
 export interface PlanningRangeEntryRow {
   id: string;
   person_name: string;
-  entry_type: "annual" | "half" | "other";
+  entry_type: PlanningRangeEntryType;
   reason: string | null;
   start_date: string;
   end_date: string;
@@ -75,7 +79,7 @@ export interface PlanningDayPayload {
   plan_date: string;
   entries: PlanningDayEntryInput[];
   notes: string[];
-  leaves: { leave_type: "annual" | "half"; person_name: string }[];
+  leaves: { leave_type: PlanningLeaveType; person_name: string }[];
   annual_leave_count: number;
   half_day_count: number;
   other_count: number;

@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { computeActualManpower } from "@/features/production/planning/calculations";
+import {
+  isHalfDayLeaveType,
+  parsePlanningLeaveType,
+  parsePlanningRangeEntryType,
+  planningLeaveDeductionDays,
+  planningLeaveMirrorCategory,
+  planningLeaveTypeLabel,
+  type PlanningRangeEntryType,
+} from "@/features/production/planning/leaveTypes";
 import { isManagerOrAbove } from "@/lib/roles";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -10,13 +19,12 @@ const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const OTHER_NOTE_PREFIX = "[기타]";
 type AdminClient = any;
 
-type RangeEntryType = "annual" | "half" | "other";
 type ApplyMode = "all_days" | "weekdays_only";
 type ConflictStrategy = "overwrite" | "skip";
 
 type RangePayload = {
   person_name: string;
-  entry_type: RangeEntryType;
+  entry_type: PlanningRangeEntryType;
   reason?: string;
   start_date: string;
   end_date: string;
@@ -129,8 +137,8 @@ async function rebuildDayDerived(admin: AdminClient, planDate: string, monthId: 
   const noteRows = (notes ?? []) as Array<{ note_text: string }>;
   const entryRows = (entries ?? []) as Array<{ product_name_snapshot: string; qty: number }>;
   const profileRows = (profiles ?? []) as Array<{ id: string; display_name?: string | null; login_id?: string | null }>;
-  const annualCount = leaveRows.filter((l: { leave_type: string }) => l.leave_type !== "half").length;
-  const halfCount = leaveRows.filter((l: { leave_type: string }) => l.leave_type === "half").length;
+  const annualCount = leaveRows.filter((l: { leave_type: string }) => !isHalfDayLeaveType(l.leave_type)).length;
+  const halfCount = leaveRows.filter((l: { leave_type: string }) => isHalfDayLeaveType(l.leave_type)).length;
   const otherCount = noteRows.filter((n: { note_text: string }) => parseOtherNoteText(String(n.note_text ?? ""))).length;
   const actualManpower = computeActualManpower(baseline, annualCount, halfCount, otherCount);
 
@@ -159,15 +167,18 @@ async function rebuildDayDerived(admin: AdminClient, planDate: string, monthId: 
   const { error: delDeductionErr } = await admin.from("leave_deductions").delete().eq("usage_date", planDate).eq("source", "planning_board");
   if (delDeductionErr) throw delDeductionErr;
   const deductionRows = leaveRows
-    .map((l) => ({
-      profile_id: nameToProfileId.get(String(l.person_name ?? "")) ?? null,
-      year: Number(planDate.slice(0, 4)),
-      usage_date: planDate,
-      days: l.leave_type === "half" ? 0.5 : 1,
-      memo: `생산계획 보드 자동 (${l.leave_type === "half" ? "반차" : "연차"})`,
-      created_by: null as string | null,
-      source: "planning_board" as const,
-    }))
+    .map((l) => {
+      const leaveType = parsePlanningLeaveType(l.leave_type);
+      return {
+        profile_id: nameToProfileId.get(String(l.person_name ?? "")) ?? null,
+        year: Number(planDate.slice(0, 4)),
+        usage_date: planDate,
+        days: planningLeaveDeductionDays(leaveType),
+        memo: `생산계획 보드 자동 (${planningLeaveTypeLabel(leaveType)})`,
+        created_by: null as string | null,
+        source: "planning_board" as const,
+      };
+    })
     .filter((r) => Boolean(r.profile_id));
   if (deductionRows.length > 0) {
     const { error: insDeductionErr } = await admin.from("leave_deductions").insert(deductionRows);
@@ -223,7 +234,7 @@ async function rebuildDayDerived(admin: AdminClient, planDate: string, monthId: 
       plan_date: planDate,
       product_name: String(l.person_name ?? ""),
       qty: null,
-      category: l.leave_type === "half" ? "반차" : "연차",
+      category: planningLeaveMirrorCategory(parsePlanningLeaveType(l.leave_type)),
       note: null,
       plan_year: planYear,
       plan_month: planMonth,
@@ -255,7 +266,7 @@ export async function POST(request: Request) {
   }
 
   const personName = String(payload.person_name ?? "").trim();
-  const entryType: RangeEntryType = payload.entry_type === "half" ? "half" : payload.entry_type === "other" ? "other" : "annual";
+  const entryType = parsePlanningRangeEntryType(payload.entry_type);
   const reason = String(payload.reason ?? "").trim();
   const startDate = String(payload.start_date ?? "").trim();
   const endDate = String(payload.end_date ?? "").trim();
@@ -295,7 +306,7 @@ export async function POST(request: Request) {
     const noteLike = `% : ${personName}`;
     for (const d of targetDates) {
       const monthId = monthIdByYm.get(d.slice(0, 7))!;
-      if (entryType === "annual" || entryType === "half") {
+      if (entryType !== "other") {
         const { data: existingLeaves, error: leaveErr } = await admin
           .from("production_plan_leaves")
           .select("id")
@@ -340,7 +351,7 @@ export async function POST(request: Request) {
       for (const d of applyDates) {
         if (!conflictSet.has(d)) continue;
         const monthId = monthIdByYm.get(d.slice(0, 7))!;
-        if (entryType === "annual" || entryType === "half") {
+        if (entryType !== "other") {
           const { error: delLeaveErr } = await admin
             .from("production_plan_leaves")
             .delete()
@@ -366,7 +377,7 @@ export async function POST(request: Request) {
       }
     }
 
-    if (entryType === "annual" || entryType === "half") {
+    if (entryType !== "other") {
       const { data: profiles } = await admin.from("profiles").select("id,display_name,login_id");
       const profileRows = (profiles ?? []) as Array<{ id: string; display_name?: string | null; login_id?: string | null }>;
       const profileId =

@@ -12,9 +12,9 @@ import { computeMonthlyCategoryTotals } from "@/features/production/planning/com
 import { fetchPlanningClassificationOverrides } from "@/features/production/planning/fetchPlanningClassifications";
 import { formatMiniPlanningLabel, isMiniProductKind, rollupQtyForPlanning } from "@/features/production/planning/productClassification";
 import type { ClassificationOverrides } from "@/features/production/planning/productClassification";
-import type { PlanningMonthData } from "@/features/production/planning/types";
+import type { PlanningLeaveType, PlanningMonthData } from "@/features/production/planning/types";
 
-type LeaveTag = { type: "annual" | "half"; person: string };
+type LeaveTag = { type: PlanningLeaveType; person: string };
 
 function safeNum(v: string | null, fallback: number): number {
   const n = Number(v);
@@ -201,6 +201,8 @@ export default function PlanningPrintPage() {
     holidayName: string | null;
     list: Array<{ product: string; qty: number }>;
     annualLeaveNames: string[];
+    halfAmLeaveNames: string[];
+    halfPmLeaveNames: string[];
     halfLeaveNames: string[];
     otherLine: string[];
     plainNotes: string[];
@@ -216,6 +218,8 @@ export default function PlanningPrintPage() {
             const dayLeaves = leavesByDate.get(dateKey) ?? [];
             const dayNotes = notesByDate.get(dateKey) ?? [];
             const annualLeaveNames = dayLeaves.filter((x) => x.type === "annual").map((x) => x.person);
+            const halfAmLeaveNames = dayLeaves.filter((x) => x.type === "half_am").map((x) => x.person);
+            const halfPmLeaveNames = dayLeaves.filter((x) => x.type === "half_pm").map((x) => x.person);
             const halfLeaveNames = dayLeaves.filter((x) => x.type === "half").map((x) => x.person);
             const parsedOthers = dayNotes
               .map((note) => parseOtherNoteText(note))
@@ -230,6 +234,8 @@ export default function PlanningPrintPage() {
             const hasAnyInfo =
               list.length > 0 ||
               annualLeaveNames.length > 0 ||
+              halfAmLeaveNames.length > 0 ||
+              halfPmLeaveNames.length > 0 ||
               halfLeaveNames.length > 0 ||
               otherLine.length > 0 ||
               plainNotes.length > 0 ||
@@ -242,6 +248,8 @@ export default function PlanningPrintPage() {
               holidayName,
               list,
               annualLeaveNames,
+              halfAmLeaveNames,
+              halfPmLeaveNames,
               halfLeaveNames,
               otherLine,
               plainNotes,
@@ -386,6 +394,16 @@ export default function PlanningPrintPage() {
                                 <span className="tag">휴무:</span> {row.annualLeaveNames.join(", ")}
                               </p>
                             ) : null}
+                            {row.halfAmLeaveNames.length > 0 ? (
+                              <p className="meta-line half">
+                                <span className="tag">반차(오전출근):</span> {row.halfAmLeaveNames.join(", ")}
+                              </p>
+                            ) : null}
+                            {row.halfPmLeaveNames.length > 0 ? (
+                              <p className="meta-line half">
+                                <span className="tag">반차(오후출근):</span> {row.halfPmLeaveNames.join(", ")}
+                              </p>
+                            ) : null}
                             {row.halfLeaveNames.length > 0 ? (
                               <p className="meta-line half">
                                 <span className="tag">반차:</span> {row.halfLeaveNames.join(", ")}
@@ -411,7 +429,8 @@ export default function PlanningPrintPage() {
           </section>
           <footer className="planning-a3-legend">
             <span><em>휴무:</em> 연차 / 휴무</span>
-            <span><em>반차:</em> 반차</span>
+            <span><em>반차(오전출근):</em> 오전 근무</span>
+            <span><em>반차(오후출근):</em> 오후 근무</span>
             <span><em>기타:</em> 기타 사유</span>
             <span><em>비고:</em> 참고 사항</span>
           </footer>

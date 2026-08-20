@@ -29,7 +29,13 @@ import {
 import { listUnclassifiedProductBases } from "@/features/production/planning/listUnclassifiedProductBases";
 import { fetchPlanningClassificationOverrides } from "@/features/production/planning/fetchPlanningClassifications";
 import type { ClassificationOverrides } from "@/features/production/planning/productClassification";
-import type { MaterialRequirementRow, PlanningDayEntryInput, PlanningMonthData } from "@/features/production/planning/types";
+import type { MaterialRequirementRow, PlanningDayEntryInput, PlanningLeaveType, PlanningMonthData, PlanningRangeEntryType } from "@/features/production/planning/types";
+import {
+  isHalfDayLeaveType,
+  parsePlanningLeaveType,
+  parsePlanningRangeEntryType,
+  planningLeaveTypeShortLabel,
+} from "@/features/production/planning/leaveTypes";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 
@@ -40,13 +46,13 @@ type DayDraft = {
     qtyText: string;
     sort_order: number;
   }>;
-  leaves: { leave_type: "annual" | "half"; person_name: string }[];
+  leaves: { leave_type: PlanningLeaveType; person_name: string }[];
   otherItems: { person_name: string; detail: string }[];
   notes: string[];
   noteInput: string;
 };
 
-type RangeEntryType = "annual" | "half" | "other";
+type RangeEntryType = PlanningRangeEntryType;
 type RangeApplyMode = "all_days" | "weekdays_only";
 type ConflictStrategy = "overwrite" | "skip";
 
@@ -383,7 +389,7 @@ export default function PlanningBoardClient() {
   const baseProductOptions = useMemo(() => Array.from(productOptionMap.keys()).sort((a, b) => a.localeCompare(b)), [productOptionMap]);
 
   const leavesByDate = useMemo(() => {
-    const map = new Map<string, { leave_type: "annual" | "half"; person_name: string }[]>();
+    const map = new Map<string, { leave_type: PlanningLeaveType; person_name: string }[]>();
     for (const l of data?.leaves ?? []) {
       const list = map.get(l.plan_date) ?? [];
       list.push({ leave_type: l.leave_type, person_name: l.person_name });
@@ -530,11 +536,11 @@ export default function PlanningBoardClient() {
     [draft.entries]
   );
   const annualCount = useMemo(
-    () => draft.leaves.filter((l) => l.leave_type === "annual" && l.person_name.trim().length > 0).length,
+    () => draft.leaves.filter((l) => !isHalfDayLeaveType(l.leave_type) && l.person_name.trim().length > 0).length,
     [draft.leaves]
   );
   const halfCount = useMemo(
-    () => draft.leaves.filter((l) => l.leave_type === "half" && l.person_name.trim().length > 0).length,
+    () => draft.leaves.filter((l) => isHalfDayLeaveType(l.leave_type) && l.person_name.trim().length > 0).length,
     [draft.leaves]
   );
   const baselineHeadcount = data?.month.baseline_headcount ?? Math.max(1, data?.totalMembers ?? 25);
@@ -953,12 +959,12 @@ export default function PlanningBoardClient() {
                             <span
                               key={`${dateKey}-leave-${li}-${leave.person_name}`}
                               className={`px-1.5 py-0.5 rounded ${
-                                leave.leave_type === "half"
+                                isHalfDayLeaveType(leave.leave_type)
                                   ? "bg-violet-500/20 text-violet-100"
                                   : "bg-orange-500/20 text-orange-100"
                               }`}
                             >
-                              {leave.leave_type === "half" ? "반:" : "휴:"} {leave.person_name}
+                              {planningLeaveTypeShortLabel(leave.leave_type)}: {leave.person_name}
                             </span>
                           ))}
                         </div>
@@ -1524,11 +1530,23 @@ export default function PlanningBoardClient() {
                               onClick={() =>
                                 setDraft((prev) => ({
                                   ...prev,
-                                  leaves: [...prev.leaves, { leave_type: "half", person_name: "" }],
+                                  leaves: [...prev.leaves, { leave_type: "half_am", person_name: "" }],
                                 }))
                               }
                             >
-                              <Plus className="h-4 w-4" /> 반차
+                              <Plus className="h-4 w-4" /> 반차(오전출근)
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 rounded-md text-sm text-violet-300 hover:text-violet-200"
+                              onClick={() =>
+                                setDraft((prev) => ({
+                                  ...prev,
+                                  leaves: [...prev.leaves, { leave_type: "half_pm", person_name: "" }],
+                                }))
+                              }
+                            >
+                              <Plus className="h-4 w-4" /> 반차(오후출근)
                             </button>
                             <button
                               type="button"
@@ -1558,21 +1576,23 @@ export default function PlanningBoardClient() {
                       </div>
                       <div className="max-h-[min(34vh,300px)] space-y-2 overflow-y-auto">
                         {draft.leaves.map((leave, idx) => (
-                          <div key={`leave-${idx}`} className="grid grid-cols-[5rem_1fr_2rem] items-center gap-2">
+                          <div key={`leave-${idx}`} className="grid grid-cols-[auto_minmax(0,1fr)_2rem] items-center gap-2">
                             <select
                               value={leave.leave_type}
                               disabled={!canEdit}
                               onChange={(e) =>
                                 setDraft((prev) => {
                                   const next = prev.leaves.slice();
-                                  next[idx] = { ...next[idx], leave_type: e.target.value === "half" ? "half" : "annual" };
+                                  next[idx] = { ...next[idx], leave_type: parsePlanningLeaveType(e.target.value) };
                                   return { ...prev, leaves: next };
                                 })
                               }
                               className="rounded-lg border border-slate-600 bg-space-800 px-2 py-2.5 text-sm text-slate-100"
                             >
                               <option value="annual">연차</option>
-                              <option value="half">반차</option>
+                              <option value="half_am">반차(오전출근)</option>
+                              <option value="half_pm">반차(오후출근)</option>
+                              {leave.leave_type === "half" ? <option value="half">반차</option> : null}
                             </select>
                             <input
                               list="planning-people-drawer"
@@ -1763,7 +1783,7 @@ export default function PlanningBoardClient() {
                           휴무{" "}
                           {draft.leaves
                             .filter((l) => l.person_name.trim())
-                            .map((l) => `${l.person_name}(${l.leave_type === "half" ? "반" : "연"})`)
+                            .map((l) => `${l.person_name}(${planningLeaveTypeShortLabel(l.leave_type)})`)
                             .join(", ")}
                         </p>
                       ) : null}
@@ -1844,12 +1864,13 @@ export default function PlanningBoardClient() {
                         <select
                           value={rangeDraft.entry_type}
                           onChange={(e) =>
-                            setRangeDraft((prev) => ({ ...prev, entry_type: e.target.value === "half" ? "half" : e.target.value === "other" ? "other" : "annual" }))
+                            setRangeDraft((prev) => ({ ...prev, entry_type: parsePlanningRangeEntryType(e.target.value) }))
                           }
                           className="w-full rounded-lg border border-slate-600 bg-space-800 px-3 py-2 text-sm text-slate-100"
                         >
                           <option value="annual">연차</option>
-                          <option value="half">반차</option>
+                          <option value="half_am">반차(오전출근)</option>
+                          <option value="half_pm">반차(오후출근)</option>
                           <option value="other">기타</option>
                         </select>
                       </label>
