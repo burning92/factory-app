@@ -171,7 +171,7 @@ export default function RotationSettingsClient() {
   const locked = !editing;
 
   return (
-    <div className="flex min-h-[calc(100dvh-3.5rem-4rem)] md:min-h-[calc(100dvh-3.5rem)] flex-col p-3 md:p-4">
+    <div className="flex h-[calc(100dvh-3.5rem-4rem)] md:h-[calc(100dvh-3.5rem)] flex-col overflow-hidden p-3 md:p-4">
       <header className="mb-3 flex shrink-0 flex-wrap items-start justify-between gap-3">
         <div>
           <Link href="/production/rotation" className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-cyan-300 mb-1">

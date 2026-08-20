@@ -59,7 +59,7 @@ export function CopyFromSignatureBar(props: { onCopy: (to: ProductGroup) => void
 
 export function ReadinessPanel(props: { readiness: Record<ProductGroup, GroupReadiness> }) {
   return (
-    <details className="mb-3 rounded-xl border border-slate-700/70 bg-slate-800/40">
+    <details className="mb-3 shrink-0 rounded-xl border border-slate-700/70 bg-slate-800/40">
       <summary className="cursor-pointer px-4 py-2.5 text-sm text-slate-300">
         입력 완료 검증
         <span className="ml-2 text-xs text-slate-500">
@@ -123,7 +123,7 @@ export function PositionEditor(props: {
   const heatN = heatingPositions(props.catalog, g).length;
   const expect = g === "phono_ricotta" ? 8 : 7;
   return (
-    <section className="rounded-xl border border-slate-700/70 bg-slate-800/30 p-4 mb-6">
+    <section className="mb-6 flex min-h-0 flex-1 flex-col overflow-auto rounded-xl border border-slate-700/70 bg-slate-800/30 p-4">
       <div className="flex flex-wrap gap-1.5 mb-3">
         {PRODUCT_GROUPS.map((pg) => (
           <button
@@ -302,13 +302,16 @@ export function SkillMatrixEditor(props: {
       </p>
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full text-sm border-separate border-spacing-0">
-          <thead className="sticky top-0 z-10">
+          <thead>
             <tr>
-              <th className="sticky left-0 z-20 bg-slate-900 px-3 py-3 text-left text-slate-300 font-medium min-w-[7rem]">이름</th>
-              <th className="bg-slate-900 px-2 py-3 text-left text-slate-300 font-medium min-w-[7.5rem]">주공정</th>
-              <th className="bg-slate-900 px-2 py-3 text-left text-slate-300 font-medium min-w-[6.5rem]">조</th>
+              <th className="sticky top-0 left-0 z-30 bg-slate-900 px-3 py-3 text-left text-slate-300 font-medium min-w-[7rem] shadow-[0_1px_0_0_#334155]">이름</th>
+              <th className="sticky top-0 z-20 bg-slate-900 px-2 py-3 text-left text-slate-300 font-medium min-w-[7.5rem] shadow-[0_1px_0_0_#334155]">주공정</th>
+              <th className="sticky top-0 z-20 bg-slate-900 px-2 py-3 text-left text-slate-300 font-medium min-w-[6.5rem] shadow-[0_1px_0_0_#334155]">조</th>
               {ordered.map((pos) => (
-                <th key={pos.id} className="bg-slate-900 px-1.5 py-3 text-center text-slate-200 font-medium whitespace-nowrap">
+                <th
+                  key={pos.id}
+                  className="sticky top-0 z-20 bg-slate-900 px-1.5 py-3 text-center text-slate-200 font-medium whitespace-nowrap shadow-[0_1px_0_0_#334155]"
+                >
                   <span className="block text-[11px] font-normal text-slate-500">{processLabel(pos.process)}</span>
                   {pos.label}
                 </th>
