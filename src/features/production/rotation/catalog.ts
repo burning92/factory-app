@@ -80,6 +80,29 @@ export function hasAssignableSkill(
   return catalog[group].some((pos) => getPriority(skills, personId, group, pos.id) > 0);
 }
 
+/** 주공정이 사무여도, 숙련 사무가 비어 있으면 배치표에 넣지 않는다 */
+export function hasOfficeSkill(
+  skills: SkillMatrix,
+  personId: string,
+  catalog: PositionCatalog,
+  group: ProductGroup
+): boolean {
+  return positionsForProcess(catalog, group, "office").some((pos) => getPriority(skills, personId, group, pos.id) > 0);
+}
+
+export function isOfficePerson(person: Person): boolean {
+  return person.group === "office" || person.preferred === "office";
+}
+
+export function isAssignedOfficePerson(
+  person: Person,
+  skills: SkillMatrix,
+  catalog: PositionCatalog,
+  group: ProductGroup
+): boolean {
+  return isOfficePerson(person) && hasOfficeSkill(skills, person.id, catalog, group);
+}
+
 /** 숙련이 모두 비었거나, 아직 입사 전이면 당일 배치에서 뺀다 */
 export function isRotationEligible(
   person: Person,

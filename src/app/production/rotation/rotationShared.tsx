@@ -298,7 +298,7 @@ export function SkillMatrixEditor(props: {
         <CopyFromSignatureBar onCopy={props.onCopyFromSignature} locked={locked} />
       </div>
       <p className="shrink-0 px-4 pb-3 text-sm text-slate-400">
-        상부터 배치하고, 비상은 숙련 가능자가 없을 때만, 불가는 배치하지 않습니다. 같은 숙련은 여러 명이 가능합니다.
+        상부터 배치하고, 비상은 최소 인원을 숙련자로 못 채울 때만 넣습니다. 불가는 배치하지 않습니다. 같은 숙련은 여러 명이 가능합니다.
         이 제품군에서 숙련을 하나도 넣지 않은 사람(미입사·본사 공유 등)은 당일 배치표에 나오지 않습니다.
       </p>
       <div className="min-h-0 flex-1 overflow-auto">

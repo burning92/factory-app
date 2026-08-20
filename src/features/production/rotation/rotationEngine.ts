@@ -1,4 +1,4 @@
-import { eligibleRotationRoster, getPriority, heatingPositions, isNormalRank, positionsForProcess } from "./catalog";
+import { eligibleRotationRoster, getPriority, heatingPositions, isAssignedOfficePerson, isNormalRank, positionsForProcess } from "./catalog";
 import { HOURLY_QTY, productGroup } from "./seedRoster";
 import { isAvailableInPeriod, isDoughCorePerson, isFullDayLeave } from "./planningLeave";
 import { processNeedsStaffing, staffingForPosition } from "./staffing";
@@ -37,6 +37,24 @@ export type Slot = {
 
 export function processLabel(process: ProcessId | StationId): string {
   return STATIONS.find((s) => s.id === process)?.label ?? process;
+}
+
+/** 외포장만 1층. 식사·휴무·미배치·사무는 층 이동에 넣지 않음. */
+export function processFloor(station: ProcessId | StationId): 0 | 1 | 2 {
+  if (station === "outer") return 1;
+  if (station === "lunch" || station === "off" || station === "unassigned" || station === "office") return 0;
+  return 2;
+}
+
+function floorsDiffer(a: ProcessId | StationId | undefined, b: ProcessId | StationId | undefined): boolean {
+  if (!a || !b) return false;
+  const fa = processFloor(a);
+  const fb = processFloor(b);
+  return fa !== 0 && fb !== 0 && fa !== fb;
+}
+
+function staysOnFloor(person: Person, process: ProcessId | StationId, prev: Map<string, Assignment>): boolean {
+  return !floorsDiffer(prev.get(person.id)?.station, process);
 }
 
 export function priorityLabel(p: Priority | undefined): string {
@@ -172,24 +190,68 @@ function capableOf(
   return people.filter((p) => !taken.has(p.id) && getPriority(skills, p.id, group, positionId) > 0);
 }
 
+function isUsablePriority(priority: Priority, allowEmergency: boolean): boolean {
+  if (isNormalRank(priority)) return true;
+  return allowEmergency && priority === EMERGENCY_PRIORITY;
+}
+
+function pickPreferredCapable(
+  people: Person[],
+  skills: SkillMatrix,
+  group: ProductGroup,
+  positionId: string,
+  allowEmergency: boolean
+): Person | undefined {
+  const ranked = people
+    .map((p) => ({ p, pr: getPriority(skills, p.id, group, positionId) }))
+    .filter((row) => isUsablePriority(row.pr, allowEmergency));
+  const normal = ranked.filter((row) => isNormalRank(row.pr));
+  const pool = normal.length > 0 ? normal : ranked;
+  return [...pool].sort((a, b) => a.pr - b.pr || byName(a.p, b.p))[0]?.p;
+}
+
+const BACKUP_PROCESSES: ProcessId[] = ["topping", "inner", "outer", "cleanup"];
+
+function backupStationCount(
+  person: Person,
+  skills: SkillMatrix,
+  catalog: PositionCatalog,
+  group: ProductGroup
+): number {
+  return BACKUP_PROCESSES.filter((process) =>
+    positionsForProcess(catalog, group, process).some((d) => isNormalRank(getPriority(skills, person.id, group, d.id)))
+  ).length;
+}
+
 function scoreCandidate(
   person: Person,
   slot: Slot,
   priority: Priority,
-  prev: Map<string, Assignment>
+  prev: Map<string, Assignment>,
+  skills: SkillMatrix,
+  catalog: PositionCatalog,
+  group: ProductGroup
 ): number {
   const prevA = prev.get(person.id);
   let s = 0;
   s += (6 - priority) * 100;
   if (person.preferred === slot.position.process) s += 30;
   if (prevA?.positionId === slot.position.id) s += 20;
-  if (prevA?.station === slot.position.process) s += 12;
+  if (prevA?.station === slot.position.process) s += 6;
+  if (prevA && floorsDiffer(prevA.station, slot.position.process)) s -= 220;
+  else if (prevA && processFloor(prevA.station) !== 0 && processFloor(prevA.station) === processFloor(slot.position.process)) s += 80;
+  if (slot.position.process === "heating") {
+    const backups = backupStationCount(person, skills, catalog, group);
+    s += backups === 0 ? 220 : -backups * 35;
+  }
   return s;
 }
 
 type ScoreVec = {
   unfilled: number;
   emergency: number;
+  floorMoves: number;
+  flexOnHeat: number;
   rank4: number;
   rank3: number;
   rankSum: number;
@@ -198,7 +260,17 @@ type ScoreVec = {
 };
 
 function cmpScore(a: ScoreVec, b: ScoreVec): number {
-  const keys: (keyof ScoreVec)[] = ["unfilled", "emergency", "rank4", "rank3", "rankSum", "prefLeave", "changed"];
+  const keys: (keyof ScoreVec)[] = [
+    "unfilled",
+    "emergency",
+    "floorMoves",
+    "flexOnHeat",
+    "rank4",
+    "rank3",
+    "rankSum",
+    "prefLeave",
+    "changed",
+  ];
   for (const k of keys) {
     if (a[k] !== b[k]) return a[k] - b[k];
   }
@@ -209,10 +281,23 @@ function scoreRequired(
   filled: Map<string, Assignment>,
   slots: Slot[],
   roster: Person[],
-  prev: Map<string, Assignment>
+  prev: Map<string, Assignment>,
+  skills: SkillMatrix,
+  catalog: PositionCatalog,
+  group: ProductGroup
 ): ScoreVec {
   const byId = new Map(roster.map((p) => [p.id, p]));
-  const vec: ScoreVec = { unfilled: 0, emergency: 0, rank4: 0, rank3: 0, rankSum: 0, prefLeave: 0, changed: 0 };
+  const vec: ScoreVec = {
+    unfilled: 0,
+    emergency: 0,
+    floorMoves: 0,
+    flexOnHeat: 0,
+    rank4: 0,
+    rank3: 0,
+    rankSum: 0,
+    prefLeave: 0,
+    changed: 0,
+  };
   for (const slot of slots) {
     if (!slot.required) continue;
     const a = filled.get(slot.key);
@@ -226,8 +311,12 @@ function scoreRequired(
     if (pr === EMERGENCY_PRIORITY) vec.emergency += 1;
     if (pr === 4) vec.rank4 += 1;
     if (pr === 3) vec.rank3 += 1;
+    if (slot.position.process === "heating" && person && backupStationCount(person, skills, catalog, group) > 0) {
+      vec.flexOnHeat += 1;
+    }
     if (person && person.preferred !== slot.position.process && slot.position.process !== "cleanup") vec.prefLeave += 1;
     const prevA = prev.get(a.personId);
+    if (prevA && floorsDiffer(prevA.station, slot.position.process)) vec.floorMoves += 1;
     if (prevA && prevA.positionId && prevA.positionId !== a.positionId) vec.changed += 1;
   }
   return vec;
@@ -260,15 +349,23 @@ function pickForSlot(
   skills: SkillMatrix,
   group: ProductGroup,
   taken: Set<string>,
-  prev: Map<string, Assignment>
+  prev: Map<string, Assignment>,
+  catalog: PositionCatalog,
+  strictFloor = false
 ): Person | undefined {
-  const all = capableOf(people, skills, group, slot.position.id, taken);
+  const all = capableOf(people, skills, group, slot.position.id, taken).filter((p) =>
+    isUsablePriority(getPriority(skills, p.id, group, slot.position.id), slot.required)
+  );
   const normal = all.filter((p) => isNormalRank(getPriority(skills, p.id, group, slot.position.id)));
-  const pool = normal.length > 0 ? normal : all;
+  const base = normal.length > 0 ? normal : all;
+  const stay = base.filter((p) => staysOnFloor(p, slot.position.process, prev));
+  const pool = stay.length > 0 ? stay : slot.required && !strictFloor ? base : [];
   return [...pool].sort((a, b) => {
     const pa = getPriority(skills, a.id, group, slot.position.id);
     const pb = getPriority(skills, b.id, group, slot.position.id);
-    const d = scoreCandidate(b, slot, pb, prev) - scoreCandidate(a, slot, pa, prev);
+    const d =
+      scoreCandidate(b, slot, pb, prev, skills, catalog, group) -
+      scoreCandidate(a, slot, pa, prev, skills, catalog, group);
     return d !== 0 ? d : byName(a, b);
   })[0];
 }
@@ -278,7 +375,9 @@ function assignSlots(
   slots: Slot[],
   skills: SkillMatrix,
   group: ProductGroup,
-  prev: Map<string, Assignment>
+  prev: Map<string, Assignment>,
+  catalog: PositionCatalog,
+  strictFloor = false
 ): AssignOutcome {
   const taken = new Set<string>();
   const filled = new Map<string, Assignment>();
@@ -289,6 +388,8 @@ function assignSlots(
   for (const slot of required) {
     for (const person of people) {
       if (getPriority(skills, person.id, group, slot.position.id) !== 1) continue;
+      if (!staysOnFloor(person, slot.position.process, prev)) continue;
+      if (slot.position.process === "heating" && backupStationCount(person, skills, catalog, group) > 0) continue;
       const list = primarySlots.get(person.id) ?? [];
       list.push(slot);
       primarySlots.set(person.id, list);
@@ -354,7 +455,7 @@ function assignSlots(
     });
     const slot = leftoverSlots.shift()!;
     if (filled.has(slot.key)) continue;
-    const pick = pickForSlot(people, slot, skills, group, taken, prev);
+    const pick = pickForSlot(people, slot, skills, group, taken, prev, catalog, strictFloor);
     if (!pick) continue;
     const priority = getPriority(skills, pick.id, group, slot.position.id);
     taken.add(pick.id);
@@ -366,7 +467,7 @@ function assignSlots(
     });
   }
 
-  optimizeFilled(people, slots, filled, skills, group, prev);
+  optimizeFilled(people, slots, filled, skills, group, prev, catalog);
   taken.clear();
   Array.from(filled.values()).forEach((a) => taken.add(a.personId));
 
@@ -397,10 +498,11 @@ function optimizeFilled(
   filled: Map<string, Assignment>,
   skills: SkillMatrix,
   group: ProductGroup,
-  prev: Map<string, Assignment>
+  prev: Map<string, Assignment>,
+  catalog: PositionCatalog
 ) {
   const required = slots.filter((s) => s.required);
-  let best = scoreRequired(filled, required, people, prev);
+  let best = scoreRequired(filled, required, people, prev, skills, catalog, group);
   for (let n = 0; n < 120; n++) {
     let improved = false;
     const keys = required.map((s) => s.key).filter((k) => filled.has(k));
@@ -418,7 +520,7 @@ function optimizeFilled(
         const next = new Map(Array.from(filled.entries()));
         next.set(keys[i], { personId: b.personId, station: slotA.position.process, positionId: slotA.position.id, priority: pa });
         next.set(keys[j], { personId: a.personId, station: slotB.position.process, positionId: slotB.position.id, priority: pb });
-        const sc = scoreRequired(next, required, people, prev);
+        const sc = scoreRequired(next, required, people, prev, skills, catalog, group);
         if (cmpScore(sc, best) < 0) {
           filled.clear();
           Array.from(next.entries()).forEach(([k, v]) => filled.set(k, v));
@@ -437,7 +539,7 @@ function optimizeFilled(
         if (isNormalRank(cur.priority ?? 0) && pr === EMERGENCY_PRIORITY) continue;
         const next = new Map(Array.from(filled.entries()));
         next.set(slot.key, { personId: person.id, station: slot.position.process, positionId: slot.position.id, priority: pr });
-        const sc = scoreRequired(next, required, people, prev);
+        const sc = scoreRequired(next, required, people, prev, skills, catalog, group);
         if (cmpScore(sc, best) < 0) {
           filled.clear();
           Array.from(next.entries()).forEach(([k, v]) => filled.set(k, v));
@@ -481,12 +583,16 @@ function placeLeftovers(
       return defs.flatMap((d) => {
           const pr = getPriority(skills, person.id, group, d.id);
           if (pr === 0) return [];
-          const cap = staffingForPosition(d, period).max;
-          if ((counts.get(d.id) ?? 0) >= cap) return [];
+          const range = staffingForPosition(d, period);
+          const cur = counts.get(d.id) ?? 0;
+          if (cur >= range.max) return [];
+          if (!isUsablePriority(pr, cur < range.min)) return [];
           let sc = (6 - pr) * 10;
           if (person.preferred === process) sc += 8;
           if (prev.get(person.id)?.positionId === d.id) sc += 12;
           if (prev.get(person.id)?.station === process) sc += 6;
+          const prevSt = prev.get(person.id)?.station;
+          if (prevSt && floorsDiffer(prevSt, process)) return [];
           return [{ process, d, pr, sc }];
         });
     });
@@ -507,9 +613,11 @@ function dryUnfilledCount(
   people: Person[],
   slots: Slot[],
   skills: SkillMatrix,
-  group: ProductGroup
+  group: ProductGroup,
+  catalog: PositionCatalog,
+  startMap: Map<string, Assignment>
 ): number {
-  return assignSlots(people, slots, skills, group, new Map()).unfilled.length;
+  return assignSlots(people, slots, skills, group, startMap, catalog, true).unfilled.length;
 }
 
 function partitionLunch(
@@ -518,7 +626,9 @@ function partitionLunch(
   skills: SkillMatrix,
   group: ProductGroup,
   doughCore: Person[],
-  doughCanRotate: boolean
+  doughCanRotate: boolean,
+  catalog: PositionCatalog,
+  startMap: Map<string, Assignment>
 ): { waveA: Person[]; waveB: Person[]; warnings: RotationWarning[] } {
   const warnings: RotationWarning[] = [];
   const workCount = slots.filter((s) => s.required).length;
@@ -535,7 +645,12 @@ function partitionLunch(
   );
 
   const pickFor = (pool: Person[], slot: Slot, preferIds: Set<string>) => {
-    return [...capableOf(pool, skills, group, slot.position.id, placed)].sort((a, b) => {
+    const candidates = capableOf(pool, skills, group, slot.position.id, placed);
+    const normal = candidates.filter((p) => isNormalRank(getPriority(skills, p.id, group, slot.position.id)));
+    const base = normal.length > 0 ? normal : candidates;
+    const stay = base.filter((p) => staysOnFloor(p, slot.position.process, startMap));
+    const source = stay.length > 0 ? stay : base;
+    return [...source].sort((a, b) => {
       const pa = getPriority(skills, a.id, group, slot.position.id);
       const pb = getPriority(skills, b.id, group, slot.position.id);
       const da = (preferIds.has(a.id) ? 50 : 0) + (5 - pa) * 10;
@@ -572,25 +687,27 @@ function partitionLunch(
     }
   }
 
-  const fillQuota = (posId: string, need: number) => {
-    const countIn = (arr: Person[]) => arr.filter((p) => getPriority(skills, p.id, group, posId) > 0).length;
+  const fillQuota = (posId: string, process: ProcessId, need: number) => {
+    const countIn = (arr: Person[]) =>
+      arr.filter((p) => getPriority(skills, p.id, group, posId) > 0 && staysOnFloor(p, process, startMap)).length;
     for (const side of [B, A]) {
       while (countIn(side) < need) {
-        const pick = eaters
-          .filter((p) => !placed.has(p.id) && getPriority(skills, p.id, group, posId) > 0)
-          .sort(byName)[0];
+        const open = eaters.filter((p) => !placed.has(p.id));
+        const stay = open.filter((p) => staysOnFloor(p, process, startMap));
+        const pick = pickPreferredCapable(stay.length > 0 ? stay : open, skills, group, posId, true);
         if (!pick) break;
         side.push(pick);
         placed.add(pick.id);
       }
     }
   };
-  const lunchNeeds = new Map<string, number>();
+  const lunchNeeds = new Map<string, { process: ProcessId; need: number }>();
   for (const slot of slots) {
     if (!slot.required || !processNeedsStaffing(slot.position.process)) continue;
-    lunchNeeds.set(slot.position.id, (lunchNeeds.get(slot.position.id) ?? 0) + 1);
+    const cur = lunchNeeds.get(slot.position.id);
+    lunchNeeds.set(slot.position.id, { process: slot.position.process, need: (cur?.need ?? 0) + 1 });
   }
-  for (const [posId, need] of Array.from(lunchNeeds.entries())) fillQuota(posId, need);
+  for (const [posId, row] of Array.from(lunchNeeds.entries())) fillQuota(posId, row.process, row.need);
 
   const rest = eaters.filter((p) => !placed.has(p.id)).sort((a, b) => {
     const da = doughIds.has(a.id) ? 1 : 0;
@@ -607,7 +724,9 @@ function partitionLunch(
   }
 
   // 같은 포지션 가능자·외포장 가능자가 한쪽에 몰리면 스왑
-  const scorePartition = (a: Person[], b: Person[]) => dryUnfilledCount(b, slots, skills, group) + dryUnfilledCount(a, slots, skills, group);
+  const scorePartition = (a: Person[], b: Person[]) =>
+    dryUnfilledCount(b, slots, skills, group, catalog, startMap) +
+    dryUnfilledCount(a, slots, skills, group, catalog, startMap);
   let bestA = A;
   let bestB = B;
   let best = scorePartition(A, B);
@@ -640,31 +759,28 @@ function partitionLunch(
   return { waveA: bestA, waveB: bestB, warnings };
 }
 
-function toPrevMap(rows: Assignment[]): Map<string, Assignment> {
-  return new Map(rows.map((r) => [r.personId, r]));
+function toPrevWorkMap(...waves: Assignment[][]): Map<string, Assignment> {
+  const map = new Map<string, Assignment>();
+  for (const rows of waves) {
+    for (const row of rows) {
+      if (row.station === "lunch" || row.station === "off" || row.station === "unassigned") continue;
+      map.set(row.personId, row);
+    }
+  }
+  return map;
 }
 
 function officeRows(
   office: Person[],
   catalog: PositionCatalog,
   group: ProductGroup,
-  skills: SkillMatrix,
-  period: PeriodId,
-  existing: Assignment[]
+  skills: SkillMatrix
 ): Assignment[] {
   const def = positionsForProcess(catalog, group, "office")[0];
-  const cap = def ? staffingForPosition(def, period).max : office.length;
-  const already = existing.filter((r) => r.station === "office").length;
-  const remain = Math.max(0, cap - already);
-  return office.map((p, i) => {
+  return office.flatMap((p) => {
     const pr = def ? getPriority(skills, p.id, group, def.id) : 0;
-    if (i < remain) {
-      if (def && pr > 0) {
-        return { personId: p.id, station: "office" as const, positionId: def.id, priority: pr };
-      }
-      return { personId: p.id, station: "office" as const };
-    }
-    return { personId: p.id, station: "unassigned" as const };
+    if (pr === 0) return [];
+    return [{ personId: p.id, station: "office" as const, positionId: def?.id, priority: pr }];
   });
 }
 
@@ -674,8 +790,19 @@ function offRows(roster: Person[], period: PeriodId): Assignment[] {
     .map((p) => ({ personId: p.id, station: "off" as const }));
 }
 
-function onDuty(roster: Person[], period: PeriodId, group: "floor" | "office"): Person[] {
-  return roster.filter((p) => p.group === group && isAvailableInPeriod(p, period));
+function onDuty(
+  roster: Person[],
+  period: PeriodId,
+  group: "floor" | "office",
+  skills: SkillMatrix,
+  catalog: PositionCatalog,
+  productGroup: ProductGroup
+): Person[] {
+  return roster.filter((p) => {
+    if (!isAvailableInPeriod(p, period)) return false;
+    const office = isAssignedOfficePerson(p, skills, catalog, productGroup);
+    return group === "office" ? office : !office;
+  });
 }
 
 export function generateRotation(input: GenerateInput): GenerateResult {
@@ -685,11 +812,11 @@ export function generateRotation(input: GenerateInput): GenerateResult {
   const impact = computeImpact(line, modes);
   const warnings: RotationWarning[] = [];
   const present = roster.filter((p) => p.present);
-  const floor = present.filter((p) => p.group !== "office");
-  const startFloor = onDuty(roster, "start", "floor");
-  const lunch1Floor = onDuty(roster, "lunch1", "floor");
-  const lunch2Floor = onDuty(roster, "lunch2", "floor");
-  const afterFloor = onDuty(roster, "after", "floor");
+  const floor = present.filter((p) => !isAssignedOfficePerson(p, skills, catalog, group));
+  const startFloor = onDuty(roster, "start", "floor", skills, catalog, group);
+  const lunch1Floor = onDuty(roster, "lunch1", "floor", skills, catalog, group);
+  const lunch2Floor = onDuty(roster, "lunch2", "floor", skills, catalog, group);
+  const afterFloor = onDuty(roster, "after", "floor", skills, catalog, group);
   const doughCore = startFloor.filter((p) => isDoughCorePerson(p));
   const doughCanRotate = impact.doughCanRotate && doughCore.length > 0;
   const targets = periodTargets(catalog, group, doughCore.length, doughCanRotate);
@@ -732,7 +859,7 @@ export function generateRotation(input: GenerateInput): GenerateResult {
   }
   const startPool = startFloor.filter((p) => !startTaken.has(p.id));
   const startRemainSlots = startSlots.filter((s) => s.position.process !== "dough");
-  const startOut = assignSlots(startPool, startRemainSlots, skills, group, startPrev);
+  const startOut = assignSlots(startPool, startRemainSlots, skills, group, startPrev, catalog);
   warnings.push(...startOut.warnings);
   let start = placeLeftovers(
     [...startForced, ...startOut.assignments],
@@ -745,7 +872,7 @@ export function generateRotation(input: GenerateInput): GenerateResult {
   );
   start = [
     ...start,
-    ...officeRows(onDuty(roster, "start", "office"), catalog, group, skills, "start", start),
+    ...officeRows(onDuty(roster, "start", "office", skills, catalog, group), catalog, group, skills),
     ...offRows(roster, "start"),
   ];
   warnings.push(...unfilledWarnings(startOut.unfilled, "시작"));
@@ -761,7 +888,7 @@ export function generateRotation(input: GenerateInput): GenerateResult {
   const halfAm = floor.filter((p) => p.leaveKind === "half_am" || p.leaveKind === "half");
   const halfPm = floor.filter((p) => p.leaveKind === "half_pm");
   const eaters = doughCanRotate ? allDayFloor : allDayFloor.filter((p) => !isDoughCorePerson(p));
-  const part = partitionLunch(eaters, lunchSlots, skills, group, doughCore, doughCanRotate);
+  const part = partitionLunch(eaters, lunchSlots, skills, group, doughCore, doughCanRotate, catalog, toPrevWorkMap(start));
   warnings.push(...part.warnings);
   const doughHeld = doughCanRotate ? [] : doughCore.filter((p) => eaters.every((e) => e.id !== p.id) && lunch1Floor.some((x) => x.id === p.id));
   const lunch1Work = [...part.waveB.filter((p) => lunch1Floor.some((x) => x.id === p.id)), ...doughHeld];
@@ -773,38 +900,46 @@ export function generateRotation(input: GenerateInput): GenerateResult {
   const lunch1Eat = [...part.waveA.filter((p) => lunch1Floor.some((x) => x.id === p.id)), ...halfAm];
   const lunch2Eat = part.waveB.filter((p) => lunch2Floor.some((x) => x.id === p.id));
 
-  const lunch1Out = assignSlots(lunch1Work, lunchSlots, skills, group, toPrevMap(start));
+  const lunch1Out = assignSlots(lunch1Work, lunchSlots, skills, group, toPrevWorkMap(start), catalog);
   warnings.push(...lunch1Out.warnings, ...unfilledWarnings(lunch1Out.unfilled, "1차 교대"));
   const lunch1Placed = [
-    ...placeLeftovers(lunch1Out.assignments, roster, skills, catalog, group, toPrevMap(start), "lunch1"),
+    ...placeLeftovers(lunch1Out.assignments, roster, skills, catalog, group, toPrevWorkMap(start), "lunch1"),
     ...lunch1Eat.map((p) => ({ personId: p.id, station: "lunch" as const })),
   ];
   const lunch1 = [
     ...lunch1Placed,
-    ...officeRows(onDuty(roster, "lunch1", "office"), catalog, group, skills, "lunch1", lunch1Placed),
+    ...officeRows(onDuty(roster, "lunch1", "office", skills, catalog, group), catalog, group, skills),
     ...offRows(roster, "lunch1"),
   ];
 
   const lunch2Slots = buildSlots(catalog, group, "lunch2", targets.lunch2);
-  const lunch2Out = assignSlots(lunch2Work, lunch2Slots, skills, group, toPrevMap(lunch1));
+  const lunch2Out = assignSlots(lunch2Work, lunch2Slots, skills, group, toPrevWorkMap(start, lunch1Placed), catalog);
   warnings.push(...lunch2Out.warnings, ...unfilledWarnings(lunch2Out.unfilled, "2차 교대"));
   const lunch2Placed = [
-    ...placeLeftovers(lunch2Out.assignments, roster, skills, catalog, group, toPrevMap(lunch1), "lunch2"),
+    ...placeLeftovers(lunch2Out.assignments, roster, skills, catalog, group, toPrevWorkMap(start, lunch1Placed), "lunch2"),
     ...lunch2Eat.map((p) => ({ personId: p.id, station: "lunch" as const })),
   ];
   const lunch2 = [
     ...lunch2Placed,
-    ...officeRows(onDuty(roster, "lunch2", "office"), catalog, group, skills, "lunch2", lunch2Placed),
+    ...officeRows(onDuty(roster, "lunch2", "office", skills, catalog, group), catalog, group, skills),
     ...offRows(roster, "lunch2"),
   ];
 
   const afterSlots = buildSlots(catalog, group, "after", targets.after);
-  const afterOut = assignSlots(afterFloor, afterSlots, skills, group, toPrevMap(lunch2));
+  const afterOut = assignSlots(afterFloor, afterSlots, skills, group, toPrevWorkMap(start, lunch1Placed, lunch2Placed), catalog);
   warnings.push(...afterOut.warnings, ...unfilledWarnings(afterOut.unfilled, "13시 이후"));
-  const afterPlaced = placeLeftovers(afterOut.assignments, roster, skills, catalog, group, toPrevMap(lunch2), "after");
+  const afterPlaced = placeLeftovers(
+    afterOut.assignments,
+    roster,
+    skills,
+    catalog,
+    group,
+    toPrevWorkMap(start, lunch1Placed, lunch2Placed),
+    "after"
+  );
   const after = [
     ...afterPlaced,
-    ...officeRows(onDuty(roster, "after", "office"), catalog, group, skills, "after", afterPlaced),
+    ...officeRows(onDuty(roster, "after", "office", skills, catalog, group), catalog, group, skills),
     ...offRows(roster, "after"),
   ];
 
@@ -864,6 +999,13 @@ function finish(
       warnings.push({ kind: "unfilled", message: `${period.short} 중복 배정: ${dups.join(", ")}` });
     }
   }
+  const floorMoves = findFloorMoves(withOff, byId);
+  if (floorMoves.length > 0) {
+    warnings.push({
+      kind: "other",
+      message: `1층↔2층 이동 ${floorMoves.length}건 (${floorMoves.slice(0, 4).join(", ")}${floorMoves.length > 4 ? " 외" : ""}). 외포장만 1층입니다.`,
+    });
+  }
   const deduped = dedupeWarnings(warnings);
   return { assignments: withOff, targets, checks, warnings: deduped, impact, failed: failed || checks.some((c) => !c.ok && c.id.startsWith("pos:")) };
 }
@@ -876,6 +1018,27 @@ function findDuplicateIds(rows: Assignment[]): string[] {
   const n = new Map<string, number>();
   for (const row of rows) n.set(row.personId, (n.get(row.personId) ?? 0) + 1);
   return Array.from(n.entries()).filter(([, c]) => c > 1).map(([id]) => id);
+}
+
+function findFloorMoves(assignments: PeriodAssignments, byId: Map<string, Person>): string[] {
+  const out: string[] = [];
+  const work = new Map<string, Assignment[]>();
+  for (const period of PERIODS) {
+    for (const row of assignments[period.id]) {
+      if (row.station === "lunch" || row.station === "off" || row.station === "unassigned") continue;
+      const list = work.get(row.personId) ?? [];
+      list.push(row);
+      work.set(row.personId, list);
+    }
+  }
+  for (const [personId, rows] of Array.from(work.entries())) {
+    for (let i = 1; i < rows.length; i++) {
+      if (!floorsDiffer(rows[i - 1].station, rows[i].station)) continue;
+      const name = byId.get(personId)?.name ?? personId;
+      out.push(`${name} ${processLabel(rows[i - 1].station)}→${processLabel(rows[i].station)}`);
+    }
+  }
+  return out;
 }
 
 function dedupeWarnings(warnings: RotationWarning[]): RotationWarning[] {
@@ -936,7 +1099,7 @@ export function buildChecks(
       }
     }
     const blocked = doughRotationBlocked(modes);
-    const floor = roster.filter((p) => p.present && p.group !== "office");
+    const floor = roster.filter((p) => p.present && !isAssignedOfficePerson(p, skills, catalog, group));
     const mustEat = (blocked ? floor.filter((p) => !isDoughCorePerson(p)) : floor).filter(
       (p) => isAvailableInPeriod(p, "lunch1") || isAvailableInPeriod(p, "lunch2")
     );
@@ -992,8 +1155,9 @@ export function movePerson(
   const fromIdx = rows.findIndex((r) => r.personId === personId);
   if (fromIdx < 0) return { assignments, error: "해당 시간대에 없는 사람입니다." };
   const mover = rows[fromIdx];
+  const uniqueSeat = station === "heating" || station === "rnd";
   const occupantIdx =
-    positionId && station !== "lunch" && station !== "unassigned" && station !== "off"
+    uniqueSeat && positionId
       ? rows.findIndex((r) => r.personId !== personId && r.positionId === positionId && r.station === station)
       : -1;
 
@@ -1003,8 +1167,8 @@ export function movePerson(
   if (occupantIdx >= 0) {
     const other = rows[occupantIdx];
     const otherCan = canAssign(skills, other.personId, group, mover.positionId, mover.station);
-    if (otherCan && mover.positionId) {
-      const op = getPriority(skills, other.personId, group, mover.positionId);
+    if (otherCan) {
+      const op = mover.positionId ? getPriority(skills, other.personId, group, mover.positionId) : undefined;
       rows[occupantIdx] = {
         personId: other.personId,
         station: mover.station,

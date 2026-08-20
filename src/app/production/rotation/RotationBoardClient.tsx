@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Printer, RefreshCw, Settings2, Users } from "lucide-react";
-import { DEFAULT_CATALOG, eligibleRotationRoster, getPriority, heatingPositions } from "@/features/production/rotation/catalog";
+import { DEFAULT_CATALOG, eligibleRotationRoster, getPriority, heatingPositions, isAssignedOfficePerson } from "@/features/production/rotation/catalog";
 import { processNeedsStaffing, staffingForPosition, staffingRangeLabel } from "@/features/production/rotation/staffing";
 import { fetchRotationDay, fetchRotationMaster, saveRotationDay } from "@/features/production/rotation/clientApi";
 import { HOURLY_QTY, PRODUCT_LINES, productGroup } from "@/features/production/rotation/seedRoster";
@@ -258,8 +258,18 @@ export default function RotationBoardClient() {
       <style>{`
         @media print {
           .no-print { display: none !important; }
-          .print-board { break-inside: avoid; }
+          .print-only { display: table-row !important; }
+          .heat-detail, .heat-section { display: none !important; }
+          .print-board { break-inside: avoid; border-color: #cbd5e1 !important; background: #fff !important; }
+          .print-board th, .print-board td { color: #0f172a !important; border-color: #cbd5e1 !important; background: #fff !important; }
+          .print-board .row-head th { background: #f8fafc !important; }
+          .print-board .row-section th { background: #e2e8f0 !important; color: #334155 !important; }
+          .print-board .row-lunch th, .print-board .row-lunch td { background: #fde68a !important; }
+          .print-chip { background: #f1f5f9 !important; color: #0f172a !important; box-shadow: none !important; }
+          .print-chip-warn { background: #ffedd5 !important; }
+          .print-chip-em { background: #fecaca !important; }
         }
+        .print-only { display: none; }
       `}</style>
 
       <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -470,9 +480,38 @@ export default function RotationBoardClient() {
 type BoardRow = {
   key: string;
   title: string;
+  hint?: string;
   match: { station?: StationId; positionId?: string };
   heating?: boolean;
   staffed?: boolean;
+  section: "가열" | "포장" | "반죽" | "기타";
+};
+
+function splitSeatLabel(label: string): { title: string; hint?: string } {
+  const m = label.match(/^(.*)\((.+)\)\s*$/);
+  if (m && m[2].trim().length >= 2) return { title: m[2].trim(), hint: m[1].trim() };
+  return { title: label };
+}
+
+function sectionForStation(station?: StationId, heating?: boolean): BoardRow["section"] {
+  if (heating || station === "heating") return "가열";
+  if (station === "inner" || station === "outer" || station === "topping") return "포장";
+  if (station === "dough" || station === "cleanup") return "반죽";
+  return "기타";
+}
+
+const SECTION_HEAD: Record<BoardRow["section"], string> = {
+  가열: "bg-orange-500/15 text-orange-100",
+  포장: "bg-sky-500/15 text-sky-100",
+  반죽: "bg-emerald-500/15 text-emerald-100",
+  기타: "bg-slate-700/70 text-slate-200",
+};
+
+const SECTION_BAR: Record<BoardRow["section"], string> = {
+  가열: "border-l-[3px] border-orange-400",
+  포장: "border-l-[3px] border-sky-400",
+  반죽: "border-l-[3px] border-emerald-400",
+  기타: "border-l-[3px] border-slate-500",
 };
 
 function BoardTable(props: {
@@ -488,30 +527,40 @@ function BoardTable(props: {
 }) {
   const { catalog, group, roster, assignments, targets, skills } = props;
   const heat = heatingPositions(catalog, group);
-  const staffed = catalog[group].filter((p) => processNeedsStaffing(p.process));
+  const staffed = catalog[group].filter((p) => processNeedsStaffing(p.process) && p.process !== "office");
   const rndShown = catalog[group].some((p) => p.process === "rnd");
+  const officeShown = roster.some((p) => isAssignedOfficePerson(p, skills, catalog, group));
   const allRows: BoardRow[] = [
-    ...heat.map((pos) => ({
-      key: pos.id,
-      title: pos.label,
-      match: { station: "heating" as const, positionId: pos.id },
-      heating: true,
-    })),
+    ...heat.map((pos) => {
+      const names = splitSeatLabel(pos.label);
+      return {
+        key: pos.id,
+        title: names.title,
+        hint: names.hint,
+        match: { station: "heating" as const, positionId: pos.id },
+        heating: true,
+        section: "가열" as const,
+      };
+    }),
     ...staffed.map((pos) => ({
       key: pos.id,
-      title: pos.label,
+      title: pos.process === "outer" ? `${pos.label} · 1층` : pos.label,
       match: { station: pos.process as StationId, positionId: pos.id },
       staffed: true,
+      section: sectionForStation(pos.process),
     })),
     ...(rndShown
-      ? [{ key: "rnd", title: processLabel("rnd"), match: { station: "rnd" as const } }]
+      ? [{ key: "rnd", title: processLabel("rnd"), match: { station: "rnd" as const }, section: "기타" as const }]
       : []),
-    { key: "lunch", title: "식사", match: { station: "lunch" as const } },
-    { key: "off", title: "휴무", match: { station: "off" as const } },
-    { key: "unassigned", title: "미배치", match: { station: "unassigned" as const } },
+    ...(officeShown
+      ? [{ key: "office", title: "사무", match: { station: "office" as const }, section: "기타" as const }]
+      : []),
+    { key: "lunch", title: "식사", match: { station: "lunch" as const }, section: "기타" },
+    { key: "off", title: "휴무", match: { station: "off" as const }, section: "기타" },
+    { key: "unassigned", title: "미배치", match: { station: "unassigned" as const }, section: "기타" },
   ];
   const rows = allRows.filter((row) => {
-    if (row.heating || row.key === "lunch" || row.key === "off") return true;
+    if (row.heating || row.key === "lunch" || row.key === "off" || row.key === "office") return true;
     const hasPeople = PERIODS.some((period) => peopleOn(assignments[period.id], roster, row.match).length > 0);
     if (row.staffed && row.match.positionId) {
       const hasNeed = PERIODS.some((period) => {
@@ -523,34 +572,103 @@ function BoardTable(props: {
     return hasPeople;
   });
 
+  const rendered: Array<
+    | { type: "section"; label: BoardRow["section"] }
+    | { type: "row"; row: BoardRow }
+    | { type: "heat-print" }
+  > = [];
+  let last = "";
+  for (const row of rows) {
+    if (row.section !== last) {
+      if (last === "가열") rendered.push({ type: "heat-print" });
+      last = row.section;
+      rendered.push({ type: "section", label: row.section });
+    }
+    rendered.push({ type: "row", row });
+  }
+  if (last === "가열") rendered.push({ type: "heat-print" });
+
   return (
-    <div className="print-board overflow-auto rounded-xl border border-slate-700/80">
-      <table className="w-full min-w-[52rem] border-collapse text-sm">
+    <div className="print-board overflow-auto rounded-2xl border border-slate-700/80 bg-slate-950/40 shadow-xl shadow-black/20">
+      <table className="w-full min-w-[56rem] border-collapse text-sm">
         <thead>
-          <tr className="bg-slate-800">
-            <th className="sticky left-0 z-10 bg-slate-800 px-3 py-3 text-left text-slate-300 font-medium w-32 border-b border-slate-700">
+          <tr className="row-head">
+            <th className="sticky left-0 z-10 w-40 bg-slate-900 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-700">
               자리
             </th>
             {PERIODS.map((period) => (
-              <th key={period.id} className="px-3 py-3 text-left text-slate-100 font-semibold border-b border-l border-slate-700">
-                <span className="block">{period.short}</span>
-                <span className="block text-xs font-normal text-slate-400">{period.label}</span>
+              <th
+                key={period.id}
+                className="bg-slate-900 px-3 py-3 text-left border-b border-l border-slate-800"
+              >
+                <span className="block text-base font-semibold text-slate-50">{period.short}</span>
+                <span className="block text-[11px] font-normal text-slate-400">{period.label}</span>
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => {
+          {rendered.map((item) => {
+            if (item.type === "section") {
+              return (
+                <tr key={`sec-${item.label}`} className={`row-section ${item.label === "가열" ? "heat-section" : ""}`}>
+                  <th
+                    colSpan={1 + PERIODS.length}
+                    className={`px-3 py-1.5 text-left text-[11px] font-semibold tracking-widest ${SECTION_HEAD[item.label]}`}
+                  >
+                    {item.label}
+                  </th>
+                </tr>
+              );
+            }
+            if (item.type === "heat-print") {
+              return (
+                <tr key="heat-print" className="print-only">
+                  <th className="sticky left-0 z-10 bg-slate-950 px-3 py-2.5 text-left font-semibold text-slate-100 border-l-[3px] border-orange-400">
+                    가열
+                  </th>
+                  {PERIODS.map((period) => {
+                    const people = peopleOn(assignments[period.id], roster, { station: "heating" });
+                    return (
+                      <td key={period.id} className="px-2.5 py-2 border-l border-slate-800/80 align-top">
+                        {people.length === 0 ? (
+                          <span className="text-xs text-slate-600">—</span>
+                        ) : (
+                          <ul className="flex flex-wrap gap-1.5">
+                            {people.map(({ person, assignment }) => (
+                              <li key={person.id}>
+                                <span className="print-chip inline-flex rounded-lg px-2.5 py-1 text-sm font-semibold">
+                                  {person.name}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            }
+            const row = item.row;
             const isLunch = row.key === "lunch";
             const isOff = row.key === "off";
             return (
-              <tr key={row.key} className={isLunch ? "bg-yellow-400/90" : isOff ? "bg-slate-900/80" : "odd:bg-slate-900/40 even:bg-slate-900/20"}>
+              <tr
+                key={row.key}
+                className={`${row.heating ? "heat-detail" : ""} ${isLunch ? "row-lunch bg-amber-300" : isOff ? "bg-slate-950/70" : "odd:bg-slate-900/50 even:bg-slate-900/25"}`}
+              >
                 <th
-                  className={`sticky left-0 z-10 px-3 py-2.5 text-left font-semibold border-t border-slate-700/80 ${
-                    isLunch ? "bg-yellow-400 text-slate-900" : isOff ? "bg-slate-900 text-slate-300" : "bg-slate-900 text-slate-100"
+                  className={`sticky left-0 z-10 px-3 py-2.5 text-left align-middle ${SECTION_BAR[row.section]} ${
+                    isLunch
+                      ? "bg-amber-300 text-amber-950"
+                      : isOff
+                        ? "bg-slate-950 text-slate-400"
+                        : "bg-slate-950 text-slate-100"
                   }`}
                 >
-                  {row.title}
+                  <span className={`block font-semibold ${row.heating ? "text-[15px]" : "text-sm"}`}>{row.title}</span>
+                  {row.hint ? <span className="no-print mt-0.5 block text-[10px] font-normal text-slate-500">{row.hint}</span> : null}
                 </th>
                 {PERIODS.map((period) => {
                   const people = peopleOn(assignments[period.id], roster, row.match);
@@ -565,21 +683,21 @@ function BoardTable(props: {
                   return (
                     <td
                       key={period.id}
-                      className={`px-2 py-2 border-t border-l border-slate-700/80 align-top ${
-                        emptyRequired || over ? "bg-rose-950/50" : isLunch ? "bg-yellow-400/90" : ""
+                      className={`px-2.5 py-2 border-l border-slate-800/80 align-top ${
+                        emptyRequired || over ? "bg-rose-950/40" : isLunch ? "bg-amber-300" : ""
                       }`}
                     >
-                      {range && (range.min > 0 || range.max > 0 || n > 0) && (
-                        <p className={`mb-1 text-[11px] ${under || over ? "text-rose-200 font-medium" : "text-slate-500"}`}>
-                          {n}/{staffingRangeLabel(range.min, range.max)}
+                      {range && (range.min > 0 || range.max > 0) && (
+                        <p className={`mb-1.5 text-[10px] tabular-nums ${under || over ? "text-rose-200 font-semibold" : "text-slate-500"}`}>
+                          {n}명 · {staffingRangeLabel(range.min, range.max)}
                         </p>
                       )}
                       {people.length === 0 ? (
-                        <span className={`text-xs ${emptyRequired ? "text-rose-300 font-medium" : isLunch ? "text-slate-700" : "text-slate-600"}`}>
+                        <span className={`text-xs ${emptyRequired ? "font-medium text-rose-300" : isLunch ? "text-amber-800/70" : "text-slate-600"}`}>
                           {emptyRequired ? "비어 있음" : "—"}
                         </span>
                       ) : (
-                        <ul className="flex flex-wrap gap-1.5">
+                        <ul className={`flex flex-wrap ${row.heating ? "gap-0" : "gap-1.5"}`}>
                           {people.map(({ person, assignment }) => (
                             <li key={person.id} className="relative">
                               <PersonChip
@@ -587,6 +705,7 @@ function BoardTable(props: {
                                 assignment={assignment}
                                 period={period.id}
                                 lunch={isLunch}
+                                heating={Boolean(row.heating)}
                                 editing={props.editing}
                                 setEditing={props.setEditing}
                                 catalog={catalog}
@@ -606,6 +725,10 @@ function BoardTable(props: {
           })}
         </tbody>
       </table>
+      <div className="no-print flex flex-wrap gap-3 border-t border-slate-800 px-3 py-2 text-[11px] text-slate-500">
+        <span>이름 눌러 자리 이동</span>
+        <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-amber-300" />식사</span>
+      </div>
     </div>
   );
 }
@@ -615,6 +738,7 @@ function PersonChip(props: {
   assignment: ReturnType<typeof peopleOn>[number]["assignment"];
   period: PeriodId;
   lunch: boolean;
+  heating?: boolean;
   editing: { period: PeriodId; personId: string } | null;
   setEditing: (v: { period: PeriodId; personId: string } | null) => void;
   catalog: PositionCatalog;
@@ -624,17 +748,28 @@ function PersonChip(props: {
 }) {
   const open = props.editing?.period === props.period && props.editing.personId === props.person.id;
   const leave = leaveKindLabel(props.person.leaveKind);
+  const pr = props.assignment.priority;
+  const warn = pr === 4;
+  const emergency = pr === 5;
   return (
     <>
       <button
         type="button"
         onClick={() => props.setEditing(open ? null : { period: props.period, personId: props.person.id })}
-        className={`rounded-md px-2 py-1 text-sm font-medium text-left ${
-          props.lunch ? "bg-yellow-200 text-slate-900 hover:bg-yellow-100" : "bg-slate-800 text-slate-50 hover:bg-slate-700"
-        } ${props.assignment.priority === 5 ? "ring-1 ring-rose-400" : props.assignment.priority === 4 ? "ring-1 ring-orange-400" : ""}`}
+        className={`print-chip inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-left font-semibold leading-tight transition ${
+          props.heating ? "min-w-[4.5rem] text-[15px]" : "text-sm"
+        } ${
+          props.lunch
+            ? "bg-white text-stone-900 shadow-sm hover:bg-amber-50"
+            : emergency
+              ? "print-chip-em bg-rose-500 text-white hover:bg-rose-400"
+              : warn
+                ? "print-chip-warn bg-orange-500/90 text-white hover:bg-orange-400"
+                : "bg-white/10 text-slate-50 ring-1 ring-white/10 hover:bg-white/20"
+        } ${open ? "ring-2 ring-cyan-400" : ""}`}
       >
         {props.person.name}
-        {leave ? <span className={`ml-1 text-[11px] font-normal ${props.lunch ? "text-slate-700" : "text-amber-300"}`}>{leave}</span> : null}
+        {leave ? <span className={`text-[10px] font-medium ${props.lunch ? "text-stone-600" : "text-amber-200"}`}>{leave}</span> : null}
       </button>
       {open && (
         <MoveMenu
