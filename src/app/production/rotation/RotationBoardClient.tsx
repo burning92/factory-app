@@ -386,7 +386,7 @@ export default function RotationBoardClient() {
 
       {!heatReady && (
         <p className="no-print mb-3 rounded-xl border border-amber-700/50 bg-amber-950/30 px-4 py-3 text-sm text-amber-100">
-          가열 자리 우선순위가 비어 있습니다.
+          가열 자리 숙련도가 비어 있습니다.
           {canEditSettings ? (
             <>
               {" "}
@@ -396,7 +396,7 @@ export default function RotationBoardClient() {
               에서 먼저 넣어 주세요.
             </>
           ) : (
-            " 관리자에게 우선순위 입력을 요청하세요."
+            " 관리자에게 숙련도 입력을 요청하세요."
           )}
         </p>
       )}

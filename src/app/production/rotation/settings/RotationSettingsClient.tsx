@@ -121,7 +121,7 @@ export default function RotationSettingsClient() {
     const label = PRODUCT_GROUPS.find((pg) => pg.id === to)?.label ?? to;
     if (
       !window.confirm(
-        `포노 시그니처의 포지션과 우선순위를 「${label}」에 복사합니다. 기존 값은 덮어쓰이며, 이후 차이만 수정하면 됩니다.`
+        `포노 시그니처의 포지션과 숙련도를 「${label}」에 복사합니다. 기존 값은 덮어쓰이며, 이후 차이만 수정하면 됩니다.`
       )
     ) {
       return;
@@ -241,7 +241,7 @@ export default function RotationSettingsClient() {
               panel === id ? "border-cyan-600 bg-cyan-950/40 text-cyan-100" : "border-slate-600 text-slate-300"
             }`}
           >
-            {id === "skills" ? "우선순위" : "포지션"}
+            {id === "skills" ? "숙련도" : "포지션"}
           </button>
         ))}
       </div>

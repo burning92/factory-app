@@ -5,8 +5,7 @@ import type { Dispatch, SetStateAction } from "react";
 import {
   getPriority,
   heatingPositions,
-  rankTakenBy,
-  setPriorityUnique,
+  setPriority,
   type GroupReadiness,
 } from "@/features/production/rotation/catalog";
 import { processNeedsStaffing } from "@/features/production/rotation/staffing";
@@ -73,7 +72,7 @@ export function ReadinessPanel(props: { readiness: Record<ProductGroup, GroupRea
       </summary>
       <div className="px-4 pb-4">
         <p className="text-xs text-slate-500 mb-3">
-          우선순위는 숙련이 아니라 포지션별 후보 순번입니다. 1~4순위는 자리마다 한 명만, 한 사람은 여러 자리 후보가 될 수 있습니다. 점심 유지는 필수포지션마다 가능자 2명 이상이 필요합니다.
+          자리마다 숙련도(상·중상·중·하)를 넣습니다. 같은 숙련은 여러 명이 가능하고, 한 사람은 여러 자리 후보가 될 수 있습니다. 점심 유지는 필수포지션마다 가능자 2명 이상이 필요합니다.
         </p>
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
           {PRODUCT_GROUPS.map((pg) => {
@@ -84,10 +83,10 @@ export function ReadinessPanel(props: { readiness: Record<ProductGroup, GroupRea
                 <ul className="space-y-1 text-xs text-slate-400">
                   <li>필수포지션 {r.requiredCount}</li>
                   <li className={r.primaryComplete === r.requiredCount ? "text-cyan-200" : "text-amber-200"}>
-                    1순위 등록 {r.primaryComplete}/{r.requiredCount}
+                    상 숙련 {r.primaryComplete}/{r.requiredCount}
                   </li>
                   <li className={r.backupComplete === r.requiredCount ? "text-cyan-200" : "text-amber-200"}>
-                    정상 대체자 {r.backupComplete}/{r.requiredCount}
+                    중상~하 {r.backupComplete}/{r.requiredCount}
                   </li>
                   <li className={r.singleCandidate.length ? "text-amber-200" : ""}>
                     후보 1명뿐 {r.singleCandidate.length ? r.singleCandidate.map((p) => p.label).join(", ") : "없음"}
@@ -299,8 +298,7 @@ export function SkillMatrixEditor(props: {
         <CopyFromSignatureBar onCopy={props.onCopyFromSignature} locked={locked} />
       </div>
       <p className="shrink-0 px-4 pb-3 text-sm text-slate-400">
-        1순위 최우선 · 2순위 1순위 부재·식사 시 · 3순위 1·2 불가 시 · 4순위 최종 정상 대체 · 비상은 정상 후보가 모두 없을 때만 · 불가는 배치 금지.
-        같은 자리의 1~4순위는 한 명만 넣을 수 있습니다.
+        상부터 배치하고, 비상은 숙련 가능자가 없을 때만, 불가는 배치하지 않습니다. 같은 숙련은 여러 명이 가능합니다.
       </p>
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full text-sm border-separate border-spacing-0">
@@ -363,24 +361,16 @@ export function SkillMatrixEditor(props: {
                         disabled={locked}
                         onChange={(e) => {
                           const n = Number(e.target.value) as Priority;
-                          const next = setPriorityUnique(props.skills, props.roster, person.id, g, pos.id, n);
-                          if (next.error) {
-                            props.onRankError(next.error);
-                            return;
-                          }
                           props.onRankError(null);
-                          props.setSkills(next.skills);
+                          props.setSkills(setPriority(props.skills, person.id, g, pos.id, n));
                         }}
                         className={`w-full min-h-10 rounded-md border border-slate-700 px-1 py-2 text-sm font-medium disabled:cursor-not-allowed ${PRIORITY_CELL[v]}`}
                       >
-                        {PRIORITY_OPTIONS.map((o) => {
-                          const taken = rankTakenBy(props.skills, props.roster, g, pos.id, o.value, person.id);
-                          return (
-                            <option key={o.value} value={o.value} disabled={Boolean(taken)}>
-                              {o.short}{taken ? ` (${taken.name})` : ""}
-                            </option>
-                          );
-                        })}
+                        {PRIORITY_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.short}
+                          </option>
+                        ))}
                       </select>
                     </td>
                   );

@@ -238,9 +238,9 @@ function warnForPriority(personName: string, label: string, priority: Priority, 
   if (priority === EMERGENCY_PRIORITY) {
     out.push({ kind: "emergency", message: `${personName} → ${label} [비상]` });
   } else if (priority === 4) {
-    out.push({ kind: "rank4", message: `${personName} → ${label} [4순위]` });
+    out.push({ kind: "rank4", message: `${personName} → ${label} [하]` });
   } else if (priority === 3) {
-    out.push({ kind: "rank3", message: `${personName} → ${label} [3순위]` });
+    out.push({ kind: "rank3", message: `${personName} → ${label} [중]` });
   }
   if (preferred !== process && process !== "cleanup") {
     out.push({ kind: "preferredLeave", message: `${personName} 주공정 ${processLabel(preferred)} → ${label}` });
@@ -634,7 +634,7 @@ function partitionLunch(
   if (best > 0) {
     warnings.push({
       kind: "lunchCoverage",
-      message: `점심조를 나눠도 필수포지션 ${best}자리가 비는 배분이 됩니다. 우선순위를 보강하거나 휴무를 조정하세요.`,
+      message: `점심조를 나눠도 필수포지션 ${best}자리가 비는 배분이 됩니다. 숙련도를 보강하거나 휴무를 조정하세요.`,
     });
   }
   return { waveA: bestA, waveB: bestB, warnings };

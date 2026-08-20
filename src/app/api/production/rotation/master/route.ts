@@ -235,22 +235,6 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
   }
 
-  for (const group of Object.keys(body.catalog) as ProductGroup[]) {
-    for (const pos of body.catalog[group]) {
-      for (const rank of [1, 2, 3, 4] as const) {
-        const holders = (body.workers as Person[]).filter(
-          (w) => (body.skills[w.id]?.[group]?.[pos.id] ?? 0) === rank
-        );
-        if (holders.length > 1) {
-          return NextResponse.json(
-            { error: "duplicate_rank", message: `${pos.label} ${rank}순위가 여러 명입니다.` },
-            { status: 409 }
-          );
-        }
-      }
-    }
-  }
-
   const synced = await syncWorkersFromProfiles();
   if (synced.error) return NextResponse.json({ error: synced.error }, { status: 500 });
   const allowed = new Set(synced.workerRows.map((w) => w.worker_id));

@@ -82,39 +82,7 @@ export function setPriority(
   return next;
 }
 
-/** 1~4순위는 포지션당 한 명. 비상·불가는 여러 명 가능. */
-export function rankTakenBy(
-  skills: SkillMatrix,
-  roster: Person[],
-  group: ProductGroup,
-  positionId: string,
-  rank: Priority,
-  exceptPersonId: string
-): Person | null {
-  if (!isNormalRank(rank)) return null;
-  for (const person of roster) {
-    if (person.id === exceptPersonId) continue;
-    if (getPriority(skills, person.id, group, positionId) === rank) return person;
-  }
-  return null;
-}
-
-export function setPriorityUnique(
-  skills: SkillMatrix,
-  roster: Person[],
-  personId: string,
-  group: ProductGroup,
-  positionId: string,
-  value: Priority
-): { skills: SkillMatrix; error?: string } {
-  const taken = rankTakenBy(skills, roster, group, positionId, value, personId);
-  if (taken) {
-    return { skills, error: `${taken.name}이(가) 이미 이 자리 ${value}순위입니다. 같은 순번은 한 명만 넣을 수 있습니다.` };
-  }
-  return { skills: setPriority(skills, personId, group, positionId, value) };
-}
-
-/** 가열·포장 모두 기본 불가. 순번은 직접 입력. */
+/** 가열·포장 모두 기본 불가. 숙련도는 직접 입력. */
 export function seedSkillMatrix(roster: Person[] = SEED_ROSTER, catalog: PositionCatalog = DEFAULT_CATALOG): SkillMatrix {
   const skills: SkillMatrix = {};
   for (const person of roster) {

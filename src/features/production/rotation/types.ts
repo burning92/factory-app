@@ -29,17 +29,17 @@ export const STATIONS = [
 
 export type StationId = (typeof STATIONS)[number]["id"];
 
-/** 0 불가 · 1~4 후보 순번 · 5 비상(정상 후보가 없을 때만) */
+/** 0 불가 · 1 상 · 2 중상 · 3 중 · 4 하 · 5 비상(숙련 가능자 없을 때만). 같은 숙련은 여러 명 가능 */
 export type Priority = 0 | 1 | 2 | 3 | 4 | 5;
 
 export const EMERGENCY_PRIORITY: Priority = 5;
 
 export const PRIORITY_OPTIONS: { value: Priority; label: string; short: string }[] = [
   { value: 0, label: "불가", short: "불가" },
-  { value: 1, label: "1순위", short: "1" },
-  { value: 2, label: "2순위", short: "2" },
-  { value: 3, label: "3순위", short: "3" },
-  { value: 4, label: "4순위", short: "4" },
+  { value: 1, label: "상", short: "상" },
+  { value: 2, label: "중상", short: "중상" },
+  { value: 3, label: "중", short: "중" },
+  { value: 4, label: "하", short: "하" },
   { value: 5, label: "비상", short: "비상" },
 ];
 
@@ -57,7 +57,8 @@ export type ProductGroup = "phono_signature" | "phono_basil_corn" | "phono_ricot
 export type Person = {
   id: string;
   name: string;
-  /** 주공정. 자동배치 참고값일 뿐, 스킬 본문은 포지션 우선순위 */
+  /** 주공정. 자동배치는 포지션 숙련도를 본다 */
+
   preferred: ProcessId;
   shift: ShiftId;
   group: "floor" | "office";
@@ -83,7 +84,7 @@ export type PositionDef = {
 
 export type PositionCatalog = Record<ProductGroup, PositionDef[]>;
 
-/** 작업자 × 제품군 × 세부포지션 → 우선순위 */
+/** 작업자 × 제품군 × 세부포지션 → 숙련도 */
 export type SkillMatrix = Record<string, Partial<Record<ProductGroup, Record<string, Priority>>>>;
 
 export type Assignment = {
