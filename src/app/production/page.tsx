@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Calculator, FileText, Plus, List, CalendarDays, ChevronRight, Package, Users } from "lucide-react";
+import { Calculator, FileText, Plus, List, CalendarDays, ChevronRight, Package, SlidersHorizontal, Users } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { isManagerOrAbove } from "@/lib/roles";
 
@@ -25,10 +25,18 @@ const HUB_ITEMS = [
   {
     href: "/production/rotation",
     label: "작업 로테이션",
-    description: "작업일 기준 점심 교대·가열 인원 배치",
+    description: "당일 자리 배치·점심 교대",
     badge: "현장",
     Icon: Users,
     featured: true,
+  },
+  {
+    href: "/production/rotation/settings",
+    label: "로테이션 설정",
+    description: "포지션 이름·우선순위 공통 저장",
+    badge: "설정",
+    Icon: SlidersHorizontal,
+    featured: false,
   },
   {
     href: "/production/history",

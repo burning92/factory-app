@@ -29,6 +29,7 @@ const DESKTOP_DROPDOWN_PRODUCTION: DropdownItem[] = [
   { href: "/production/lot-consumption", label: "LOT별 생산 소모" },
   { href: "/production/plan", label: "생산계획" },
   { href: "/production/rotation", label: "작업 로테이션" },
+  { href: "/production/rotation/settings", label: "로테이션 설정" },
 ];
 
 const DESKTOP_DROPDOWN_MATERIALS: DropdownItem[] = [
