@@ -150,7 +150,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     })().catch(() => {});
   }, [loading, user, profile, pathname]);
 
-  /** AFF: 워커는 생산계획·재고/출고현황·대시보드·계정만 (데일리 등 직접 URL 차단) */
+  /** AFF: 워커는 생산계획·재고/추가출고·출고현황·대시보드·계정만 (데일리 등 직접 URL 차단) */
   useEffect(() => {
     if (loading || !profile) return;
     if (!isAffRestrictedWorkerRole(profile.role)) return;

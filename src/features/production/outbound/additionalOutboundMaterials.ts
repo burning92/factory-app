@@ -11,6 +11,88 @@
  * 추가 출고 선택지에는 넣지 않는다.
  */
 
+export type MaterialQuantityType = "g_only" | "ea_only" | "box_ea";
+
+export type AdditionalOutboundProductOption = {
+  productName: string;
+  author: string;
+  materialNames: string[];
+};
+
+export type AdditionalOutboundPlan =
+  | { action: "append"; logId: string }
+  | { action: "create" };
+
+export function getMaterialQuantityType(material: {
+  boxWeightG?: number;
+  unitWeightG?: number;
+} | undefined | null): MaterialQuantityType {
+  if (!material) return "g_only";
+  const box = material.boxWeightG ?? 0;
+  const ea = material.unitWeightG ?? 0;
+  if (box === 0 && ea === 0) return "g_only";
+  if (box === 0 && ea > 0) return "ea_only";
+  return "box_ea";
+}
+
+export function validateAdditionalOutboundQty(
+  qType: MaterialQuantityType,
+  box: number,
+  bag: number,
+  g: number
+): string | null {
+  if (qType === "g_only" && g <= 0) return "g 전용 원료는 수량(g)을 1 이상 입력해 주세요.";
+  if (qType === "ea_only" && bag <= 0 && g <= 0) return "낱개 또는 g 수량을 입력해 주세요.";
+  if (qType === "box_ea" && box <= 0 && bag <= 0 && g <= 0) {
+    return "박스/낱개/g 중 하나 이상 입력해 주세요.";
+  }
+  return null;
+}
+
+/** 이미 출고된 원료면 라인만 추가, 없으면 새 출고 로그 생성 */
+export function planAdditionalOutbound(
+  logs: Array<{ id: string; 원료명: string }>,
+  materialName: string
+): AdditionalOutboundPlan {
+  const name = materialName.trim();
+  const existing = logs.find((l) => (l.원료명 ?? "").trim() === name);
+  if (existing) return { action: "append", logId: existing.id };
+  return { action: "create" };
+}
+
+export function listAdditionalOutboundProducts(
+  logs: Array<{
+    생산일자: string;
+    제품명: string;
+    원료명: string;
+    출고자?: string;
+    작성자2?: string;
+  }>,
+  date: string
+): AdditionalOutboundProductOption[] {
+  const day = date.slice(0, 10);
+  const map = new Map<string, AdditionalOutboundProductOption>();
+  for (const log of logs) {
+    if ((log.생산일자 ?? "").slice(0, 10) !== day) continue;
+    const productName = (log.제품명 ?? "").trim();
+    if (!productName) continue;
+    const material = (log.원료명 ?? "").trim();
+    const existing = map.get(productName);
+    if (existing) {
+      if (material && existing.materialNames.indexOf(material) < 0) {
+        existing.materialNames.push(material);
+      }
+      continue;
+    }
+    map.set(productName, {
+      productName,
+      author: (log.출고자 ?? log.작성자2 ?? "").trim(),
+      materialNames: material ? [material] : [],
+    });
+  }
+  return Array.from(map.values()).sort((a, b) => a.productName.localeCompare(b.productName, "ko-KR"));
+}
+
 const PONO_BREAD_BASE_NAME = "포노부오노 시그니처 화덕 브레드";
 
 /** 캔(본품) + 팩 제품명 모두 포노브레드 계열로 취급 */

@@ -6,7 +6,7 @@ export function isAffRestrictedWorkerRole(role: string | null | undefined): bool
   return role === "worker";
 }
 
-/** 워커: 홈·생산(허브+생산계획)·원부자재(허브)·재고현황·출고현황·임원 대시보드·계정·로그인 */
+/** 워커: 홈·생산(허브+생산계획)·원부자재(허브)·재고현황·추가출고·출고현황·임원 대시보드·계정·로그인 */
 export function isAffWorkerAllowedPath(pathname: string): boolean {
   if (pathname === "/" || pathname === "/production" || pathname === "/materials") return true;
   if (pathname === "/logout") return true;
@@ -17,5 +17,6 @@ export function isAffWorkerAllowedPath(pathname: string): boolean {
   if (pathname === "/production/rotation") return true;
   if (pathname.startsWith("/inventory/ecount")) return true;
   if (pathname.startsWith("/production/outbound-history")) return true;
+  if (pathname.startsWith("/production/additional-outbound")) return true;
   return false;
 }

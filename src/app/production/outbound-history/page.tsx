@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, useCallback, Fragment } from "react";
 import Link from "next/link";
 import { useMasterStore, type ProductionLog, type OutboundLine } from "@/store/useMasterStore";
 import { ChevronDown, ChevronRight, Trash2, Pencil, Plus } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 import DateWheelPicker from "@/components/DateWheelPicker";
 import {
   buildLotOptions,
@@ -587,7 +588,14 @@ function DetailView({
   );
 }
 
+function additionalOutboundHref(date: string, productName: string): string {
+  const params = new URLSearchParams({ date, product: productName });
+  return `/production/additional-outbound?${params.toString()}`;
+}
+
 export default function OutboundHistoryPage() {
+  const { profile } = useAuth();
+  const isRestrictedWorker = profile?.role === "worker";
   const {
     fetchProductionLogs,
     fetchBom,
@@ -790,12 +798,22 @@ export default function OutboundHistoryPage() {
       <div className="max-w-6xl mx-auto w-full">
         <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
           <h1 className="text-2xl font-bold text-slate-100">생산 출고 현황</h1>
-          <Link
-            href="/production/outbound"
-            className="px-4 py-2 rounded-lg bg-cyan-500 text-space-900 font-medium text-sm hover:bg-cyan-400 transition-colors"
-          >
-            + 출고 입력
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/production/additional-outbound"
+              className="px-4 py-2 rounded-lg bg-amber-500 text-space-900 font-medium text-sm hover:bg-amber-400 transition-colors"
+            >
+              추가 출고
+            </Link>
+            {!isRestrictedWorker ? (
+              <Link
+                href="/production/outbound"
+                className="px-4 py-2 rounded-lg bg-cyan-500 text-space-900 font-medium text-sm hover:bg-cyan-400 transition-colors"
+              >
+                + 출고 입력
+              </Link>
+            ) : null}
+          </div>
         </div>
 
         {showError && (
@@ -846,7 +864,7 @@ export default function OutboundHistoryPage() {
             <p className="text-slate-400 mb-4">
               {groups.length === 0 ? "저장된 출고 내역이 없습니다." : "조건에 맞는 출고 내역이 없습니다."}
             </p>
-            {groups.length === 0 && (
+            {groups.length === 0 && !isRestrictedWorker && (
               <Link href="/production/outbound" className="inline-block px-4 py-2 rounded-lg bg-cyan-500 text-space-900 font-medium hover:bg-cyan-400">
                 출고 입력하기
               </Link>
@@ -875,6 +893,12 @@ export default function OutboundHistoryPage() {
                         </div>
                       </div>
                       <div className="mt-3 flex items-center justify-end gap-2">
+                        <Link
+                          href={additionalOutboundHref(group.생산일자, group.제품명)}
+                          className="inline-flex items-center px-3 py-2 rounded-lg bg-amber-500/20 text-amber-200 text-sm font-medium"
+                        >
+                          추가 출고
+                        </Link>
                         <button
                           type="button"
                           onClick={() => { setExpandedKey(isExpanded ? null : key); setEditingLogId(null); }}
@@ -928,7 +952,7 @@ export default function OutboundHistoryPage() {
                     <th className="px-4 py-3 text-left font-semibold text-slate-200 w-[140px]">도우수량(목표치)</th>
                     <th className="px-4 py-3 text-left font-semibold text-slate-200 w-[160px]">완제품 예상수량</th>
                     <th className="px-4 py-3 text-left font-semibold text-slate-200 w-[100px]">작성자</th>
-                    <th className="px-4 py-3 text-center font-semibold text-slate-200 w-[140px]">상세/삭제</th>
+                    <th className="px-4 py-3 text-center font-semibold text-slate-200 w-[180px]">추가/상세</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -952,6 +976,12 @@ export default function OutboundHistoryPage() {
                           <td className="px-4 py-3 text-slate-300">{group.작성자}</td>
                           <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                             <div className="inline-flex items-center gap-1">
+                              <Link
+                                href={additionalOutboundHref(group.생산일자, group.제품명)}
+                                className="px-2 py-1 rounded-md bg-amber-500/20 text-amber-200 text-xs font-medium hover:bg-amber-500/30"
+                              >
+                                추가 출고
+                              </Link>
                               <button
                                 type="button"
                                 onClick={() => setExpandedKey(isExpanded ? null : key)}

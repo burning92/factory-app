@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import Link from "next/link";
 import { useMasterStore } from "@/store/useMasterStore";
 import DateWheelPicker from "@/components/DateWheelPicker";
 import { getAppRecentValue, setAppRecentValue } from "@/lib/appRecentValues";
@@ -914,9 +915,16 @@ export default function OutboundPage() {
   return (
     <main className="py-10 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-2xl sm:text-3xl font-bold text-slate-100 mb-6 no-print">
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-100 mb-2 no-print">
           출고 입력
         </h1>
+        <p className="mb-6 text-sm text-slate-400 no-print">
+          1차 출고만 여기서 입력하세요. 생산 중 추가로 올린 원료는{" "}
+          <Link href="/production/additional-outbound" className="text-amber-300 underline hover:text-amber-200">
+            추가 출고
+          </Link>
+          에서 올린 사람이 바로 입력합니다.
+        </p>
 
         {error && (
           <div className="mb-4 p-4 rounded-xl bg-red-500/10 border border-red-500/40 text-red-300 text-sm">
