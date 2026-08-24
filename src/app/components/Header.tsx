@@ -82,10 +82,9 @@ const DESKTOP_DROPDOWN_MANAGEMENT: DropdownItem[] = [
   { href: "/admin/logs", label: "로그조회" },
 ];
 
-/** 워커: 생산계획 + 작업 로테이션 */
+/** 워커: 생산계획 */
 const WORKER_DESKTOP_PRODUCTION: DropdownItem[] = [
   { href: "/production/plan", label: "생산계획" },
-  { href: "/production/rotation", label: "작업 로테이션" },
 ];
 /** 워커: 재고 현황 + 추가 출고 + 출고 현황 */
 const WORKER_DESKTOP_MATERIALS: DropdownItem[] = [
@@ -118,11 +117,18 @@ export default function Header() {
   const isAdmin = isAdminLikeRole(profile?.role);
   const isManagerOrAdmin = isManagerOrAbove(profile?.role);
   const isRestrictedWorker = profile?.role === "worker";
-  const desktopProductionItems: DropdownItem[] = isRestrictedWorker
-    ? WORKER_DESKTOP_PRODUCTION
-    : isManagerOrAdmin
-      ? [...DESKTOP_DROPDOWN_PRODUCTION, { href: "/production/planning", label: "플래닝" }]
-      : DESKTOP_DROPDOWN_PRODUCTION;
+  const desktopProductionItems: DropdownItem[] = (
+    isRestrictedWorker
+      ? WORKER_DESKTOP_PRODUCTION
+      : isManagerOrAdmin
+        ? [...DESKTOP_DROPDOWN_PRODUCTION, { href: "/production/planning", label: "플래닝" }]
+        : DESKTOP_DROPDOWN_PRODUCTION
+  ).filter(
+    (item) =>
+      isManagerOrAdmin ||
+      !("href" in item) ||
+      !item.href.startsWith("/production/rotation")
+  );
   const desktopMaterialsItems: DropdownItem[] = isRestrictedWorker
     ? WORKER_DESKTOP_MATERIALS
     : DESKTOP_DROPDOWN_MATERIALS;

@@ -9,15 +9,16 @@ import {
   workersFromRows,
   type RotationMasterPayload,
 } from "@/features/production/rotation/persist";
+import { constraintsForSave } from "@/features/production/rotation/personRules";
 import { ROTATION_FACTORY_ORG } from "@/features/production/rotation/factoryOrg";
 import { defaultWorkerFields } from "@/features/production/rotation/planningLeave";
 import {
-  isExcludedFromFieldHeadcountByLoginId,
-  isFieldHeadcountRole,
+  isExcludedFromRotationRosterByLoginId,
+  isRotationRosterRole,
 } from "@/lib/profileFieldHeadcount";
 import type { Person, ProductGroup } from "@/features/production/rotation/types";
 
-const READ_ROLES = ["worker", "assistant_manager", "manager", "quality_manager", "headquarters", "admin"];
+const READ_ROLES = ["manager", "quality_manager", "headquarters", "admin"];
 const WRITE_ROLES = ["manager", "quality_manager", "headquarters", "admin"];
 
 const POS_COLS =
@@ -112,8 +113,8 @@ async function factoryProfiles() {
   const profiles = ((data ?? []) as ProfileRow[]).filter(
     (p) =>
       p.is_active !== false &&
-      isFieldHeadcountRole(p.role) &&
-      !isExcludedFromFieldHeadcountByLoginId(p.login_id)
+      isRotationRosterRole(p.role) &&
+      !isExcludedFromRotationRosterByLoginId(p.login_id)
   );
   profiles.sort((a, b) => {
     const an = (a.display_name ?? a.login_id ?? "").trim();
@@ -130,7 +131,7 @@ async function syncWorkersFromProfiles() {
     .from("rotation_workers")
     .select("worker_id,preferred,shift,worker_group,sort_order,is_active")
     .eq("organization_code", org);
-  if (eErr) return { admin, error: eErr.message, workerRows: [] as { worker_id: string; name: string; preferred: string; shift: string; worker_group: string; sort_order: number }[], profiles };
+  if (eErr) return { admin, error: eErr.message, workerRows: [] as { worker_id: string; name: string; preferred: string; shift: string; worker_group: string; sort_order: number; constraints?: unknown }[], profiles };
 
   const byId = new Map((existing ?? []).map((r) => [String(r.worker_id), r]));
   const keep = new Set(profiles.map((p) => p.id));
@@ -164,6 +165,18 @@ async function syncWorkersFromProfiles() {
         "worker_id",
         gone.map((r) => String(r.worker_id))
       );
+  }
+  const loaded = await admin
+    .from("rotation_workers")
+    .select("worker_id,name,preferred,shift,worker_group,sort_order,constraints")
+    .eq("organization_code", org)
+    .eq("is_active", true)
+    .order("sort_order");
+  if (!loaded.error) {
+    return { admin, error: null as string | null, workerRows: loaded.data ?? [], profiles };
+  }
+  if (!/constraints/i.test(loaded.error.message)) {
+    return { admin, error: loaded.error.message, workerRows: [] as NonNullable<typeof loaded.data>, profiles };
   }
   const { data: workerRows, error: wErr } = await admin
     .from("rotation_workers")
@@ -255,6 +268,7 @@ export async function PUT(req: NextRequest) {
       worker_group: w.group,
       sort_order: i,
       is_active: true,
+      constraints: constraintsForSave(w.constraints),
       updated_at: new Date().toISOString(),
     };
   });
@@ -263,7 +277,13 @@ export async function PUT(req: NextRequest) {
 
   if (workerRows.length > 0) {
     const { error: wErr } = await admin.from("rotation_workers").upsert(workerRows, { onConflict: "organization_code,worker_id" });
-    if (wErr) return NextResponse.json({ error: wErr.message }, { status: 500 });
+    if (wErr && /constraints/i.test(wErr.message)) {
+      const without = workerRows.map(({ constraints: _c, ...rest }) => rest);
+      const retry = await admin.from("rotation_workers").upsert(without, { onConflict: "organization_code,worker_id" });
+      if (retry.error) return NextResponse.json({ error: retry.error.message }, { status: 500 });
+    } else if (wErr) {
+      return NextResponse.json({ error: wErr.message }, { status: 500 });
+    }
   }
 
   await admin.from("rotation_positions").delete().eq("organization_code", org);

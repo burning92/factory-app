@@ -16,7 +16,7 @@ import { summarizePlannedRotationProducts } from "@/features/production/rotation
 import { overridesFromDbRows } from "@/features/production/planning/productClassification";
 import { PERIODS, type PeriodId } from "@/features/production/rotation/types";
 
-const READ_ROLES = ["worker", "assistant_manager", "manager", "quality_manager", "headquarters", "admin"];
+const READ_ROLES = ["manager", "quality_manager", "headquarters", "admin"];
 const WRITE_ROLES = ["manager", "quality_manager", "headquarters", "admin"];
 
 async function resolvePlanningMonths(

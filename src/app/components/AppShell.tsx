@@ -99,6 +99,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, [user, profile, uiSettings?.default_landing_path, pathname, router, isHarangOrgAccount, viewOrganizationCode]);
 
+  /** 작업 로테이션: 매니저급 이상만 (워커·주임 제외) */
+  useEffect(() => {
+    if (loading || !profile) return;
+    if (!(pathname === "/production/rotation" || pathname.startsWith("/production/rotation/"))) return;
+    if (isManagerOrAbove(profile.role)) return;
+    router.replace("/production");
+  }, [loading, profile, pathname, router]);
+
   /** 설비 이상 등록: worker/assistant_manager URL 직접 접근 차단 */
   useEffect(() => {
     if (loading || !profile) return;

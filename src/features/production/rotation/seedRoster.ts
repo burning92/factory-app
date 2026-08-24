@@ -44,7 +44,7 @@ export const SEED_ROSTER: Person[] = [
   p("신민아", "heating", { present: false }),
   p("홍수빈", "heating", { present: false }),
   p("박서은", "topping", { present: false }),
-  p("최민권", "office", { group: "office", present: false }),
+  p("최민권", "office", { group: "office" }),
 ];
 
 /** 주공정 외, 예전 배치 이력에서 본 대체 가능 공정. 가열 세부포지션은 넣지 않음. */

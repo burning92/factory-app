@@ -10,6 +10,7 @@ import {
 } from "@/features/production/rotation/catalog";
 import { processNeedsStaffing } from "@/features/production/rotation/staffing";
 import { PRODUCT_GROUPS } from "@/features/production/rotation/seedRoster";
+import { isDoughCorePerson } from "@/features/production/rotation/personRules";
 import { processLabel } from "@/features/production/rotation/rotationEngine";
 import {
   PERIODS,
@@ -17,6 +18,7 @@ import {
   PROCESSES,
   type PeriodId,
   type Person,
+  type PersonConstraints,
   type PositionCatalog,
   type PositionDef,
   type Priority,
@@ -33,6 +35,28 @@ export const PRIORITY_CELL: Record<Priority, string> = {
   4: "bg-orange-950 text-orange-200",
   5: "bg-rose-950 text-rose-200",
 };
+
+function patchPersonRule(
+  rows: Person[],
+  personId: string,
+  key: keyof PersonConstraints,
+  value: boolean
+): Person[] {
+  return rows.map((row) => {
+    if (row.id !== personId) return row;
+    const constraints: PersonConstraints = { ...row.constraints };
+    if (key === "doughCore") constraints.doughCore = value;
+    else if (value) constraints[key] = true;
+    else delete constraints[key];
+    return { ...row, constraints };
+  });
+}
+
+function skillHeaderParts(label: string): { title: string; extra?: string } {
+  const m = label.match(/^(.*?)[\(（](.+?)[\)）]\s*$/);
+  if (m && m[1].trim() && m[2].trim()) return { title: m[1].trim(), extra: m[2].trim() };
+  return { title: label };
+}
 
 export function CopyFromSignatureBar(props: { onCopy: (to: ProductGroup) => void; locked?: boolean }) {
   if (props.locked) return null;
@@ -300,6 +324,7 @@ export function SkillMatrixEditor(props: {
       <p className="shrink-0 px-4 pb-3 text-sm text-slate-400">
         상부터 배치하고, 비상은 최소 인원을 숙련자로 못 채울 때만 넣습니다. 불가는 배치하지 않습니다. 같은 숙련은 여러 명이 가능합니다.
         이 제품군에서 숙련을 하나도 넣지 않은 사람(미입사·본사 공유 등)은 당일 배치표에 나오지 않습니다.
+        사람마다 조건을 켤 수 있습니다. 주공정만·층고정·반죽고정. 제외를 켜면 숙련표에는 남고 당일 배치표에서는 빠집니다.
       </p>
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full text-sm border-separate border-spacing-0">
@@ -308,20 +333,31 @@ export function SkillMatrixEditor(props: {
               <th className="sticky top-0 left-0 z-30 bg-slate-900 px-3 py-3 text-left text-slate-300 font-medium min-w-[7rem] shadow-[0_1px_0_0_#334155]">이름</th>
               <th className="sticky top-0 z-20 bg-slate-900 px-2 py-3 text-left text-slate-300 font-medium min-w-[7.5rem] shadow-[0_1px_0_0_#334155]">주공정</th>
               <th className="sticky top-0 z-20 bg-slate-900 px-2 py-3 text-left text-slate-300 font-medium min-w-[6.5rem] shadow-[0_1px_0_0_#334155]">조</th>
-              {ordered.map((pos) => (
-                <th
-                  key={pos.id}
-                  className="sticky top-0 z-20 bg-slate-900 px-1.5 py-3 text-center text-slate-200 font-medium whitespace-nowrap shadow-[0_1px_0_0_#334155]"
-                >
-                  <span className="block text-[11px] font-normal text-slate-500">{processLabel(pos.process)}</span>
-                  {pos.label}
-                </th>
-              ))}
+              <th className="sticky top-0 z-20 bg-slate-900 px-2 py-3 text-left text-slate-300 font-medium min-w-[10.5rem] shadow-[0_1px_0_0_#334155]">조건</th>
+              {ordered.map((pos) => {
+                const parts = skillHeaderParts(pos.label);
+                return (
+                  <th
+                    key={pos.id}
+                    className="sticky top-0 z-20 bg-slate-900 px-1.5 py-2.5 text-center text-slate-200 font-medium align-bottom min-w-[6.75rem] max-w-[7.5rem] shadow-[0_1px_0_0_#334155]"
+                  >
+                    <span className="block text-[10px] font-normal leading-tight text-slate-500">{processLabel(pos.process)}</span>
+                    <span className="mt-0.5 block text-[12px] font-medium leading-snug break-keep whitespace-normal">
+                      {parts.title}
+                      {parts.extra ? (
+                        <span className="mt-0.5 block text-[10px] font-normal leading-tight text-slate-400">({parts.extra})</span>
+                      ) : null}
+                    </span>
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
-            {props.roster.map((person) => (
-              <tr key={person.id} className="border-t border-slate-800">
+            {props.roster.map((person) => {
+              const excluded = Boolean(person.constraints?.excluded);
+              return (
+              <tr key={person.id} className={`border-t border-slate-800 ${excluded ? "opacity-50" : ""}`}>
                 <td className="sticky left-0 z-10 bg-slate-900 px-3 py-2 text-slate-50 whitespace-nowrap font-semibold text-base border-t border-slate-800">
                   {person.name}
                 </td>
@@ -356,10 +392,62 @@ export function SkillMatrixEditor(props: {
                     <option value="0900-1900">09–19</option>
                   </select>
                 </td>
+                <td className="px-2 py-2 border-t border-slate-800">
+                  <div className="flex flex-col gap-1">
+                    <label className="inline-flex items-center gap-1 text-[11px] text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(person.constraints?.lockPreferred)}
+                        disabled={locked}
+                        onChange={(e) =>
+                          props.setRoster((rows) => patchPersonRule(rows, person.id, "lockPreferred", e.target.checked))
+                        }
+                        className="accent-cyan-500"
+                      />
+                      주공정만
+                    </label>
+                    <label className="inline-flex items-center gap-1 text-[11px] text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(person.constraints?.stayFloor)}
+                        disabled={locked}
+                        onChange={(e) =>
+                          props.setRoster((rows) => patchPersonRule(rows, person.id, "stayFloor", e.target.checked))
+                        }
+                        className="accent-cyan-500"
+                      />
+                      층고정
+                    </label>
+                    <label className="inline-flex items-center gap-1 text-[11px] text-rose-200">
+                      <input
+                        type="checkbox"
+                        checked={excluded}
+                        disabled={locked}
+                        onChange={(e) =>
+                          props.setRoster((rows) => patchPersonRule(rows, person.id, "excluded", e.target.checked))
+                        }
+                        className="accent-rose-500"
+                      />
+                      제외
+                    </label>
+                    <label className="inline-flex items-center gap-1 text-[11px] text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={isDoughCorePerson(person)}
+                        disabled={locked}
+                        onChange={(e) =>
+                          props.setRoster((rows) => patchPersonRule(rows, person.id, "doughCore", e.target.checked))
+                        }
+                        className="accent-cyan-500"
+                      />
+                      반죽고정
+                    </label>
+                  </div>
+                </td>
                 {ordered.map((pos) => {
                   const v = getPriority(props.skills, person.id, g, pos.id);
                   return (
-                    <td key={pos.id} className="px-1 py-1.5 text-center border-t border-slate-800">
+                    <td key={pos.id} className="min-w-[6.75rem] max-w-[7.5rem] px-1 py-1.5 text-center border-t border-slate-800">
                       <select
                         value={v}
                         disabled={locked}
@@ -380,7 +468,8 @@ export function SkillMatrixEditor(props: {
                   );
                 })}
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

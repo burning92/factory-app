@@ -1,4 +1,5 @@
 import { DEFAULT_CATALOG } from "./catalog";
+import { parsePersonConstraints } from "./personRules";
 import { productGroup } from "./seedRoster";
 import { normalizePositionStaffing, parsePeriodStaffJson, processNeedsStaffing, withDefaultStaffing } from "./staffing";
 import type { PlanningLeaveItem, RotationLeaveKind } from "./planningLeave";
@@ -118,7 +119,15 @@ export function skillsFromRows(
 }
 
 export function workersFromRows(
-  rows: { worker_id: string; name: string; preferred: string; shift: string; worker_group: string; sort_order: number }[]
+  rows: {
+    worker_id: string;
+    name: string;
+    preferred: string;
+    shift: string;
+    worker_group: string;
+    sort_order: number;
+    constraints?: unknown;
+  }[]
 ): Person[] {
   return [...rows]
     .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, "ko"))
@@ -129,6 +138,7 @@ export function workersFromRows(
       shift: (r.shift === "0900-1900" ? "0900-1900" : "0800-1800") as ShiftId,
       group: r.worker_group === "office" ? "office" : "floor",
       present: true,
+      constraints: parsePersonConstraints(r.constraints),
     }));
 }
 

@@ -1,6 +1,7 @@
 import { eligibleRotationRoster, getPriority, heatingPositions, isAssignedOfficePerson, isNormalRank, positionsForProcess } from "./catalog";
 import { HOURLY_QTY, productGroup } from "./seedRoster";
 import { isAvailableInPeriod, isDoughCorePerson, isFullDayLeave } from "./planningLeave";
+import { canTakeProcess, hardStayFloor } from "./personRules";
 import { processNeedsStaffing, staffingForPosition } from "./staffing";
 import {
   PERIODS,
@@ -354,12 +355,14 @@ function pickForSlot(
   strictFloor = false
 ): Person | undefined {
   const all = capableOf(people, skills, group, slot.position.id, taken).filter((p) =>
-    isUsablePriority(getPriority(skills, p.id, group, slot.position.id), slot.required)
+    isUsablePriority(getPriority(skills, p.id, group, slot.position.id), slot.required) &&
+    canTakeProcess(p, slot.position.process)
   );
   const normal = all.filter((p) => isNormalRank(getPriority(skills, p.id, group, slot.position.id)));
   const base = normal.length > 0 ? normal : all;
   const stay = base.filter((p) => staysOnFloor(p, slot.position.process, prev));
-  const pool = stay.length > 0 ? stay : slot.required && !strictFloor ? base : [];
+  const fallback = base.filter((p) => !hardStayFloor(p));
+  const pool = stay.length > 0 ? stay : slot.required && !strictFloor ? fallback : [];
   return [...pool].sort((a, b) => {
     const pa = getPriority(skills, a.id, group, slot.position.id);
     const pb = getPriority(skills, b.id, group, slot.position.id);
@@ -388,6 +391,7 @@ function assignSlots(
   for (const slot of required) {
     for (const person of people) {
       if (getPriority(skills, person.id, group, slot.position.id) !== 1) continue;
+      if (!canTakeProcess(person, slot.position.process)) continue;
       if (!staysOnFloor(person, slot.position.process, prev)) continue;
       if (slot.position.process === "heating" && backupStationCount(person, skills, catalog, group) > 0) continue;
       const list = primarySlots.get(person.id) ?? [];
@@ -512,6 +516,12 @@ function optimizeFilled(
         const b = filled.get(keys[j])!;
         const slotA = required.find((s) => s.key === keys[i])!;
         const slotB = required.find((s) => s.key === keys[j])!;
+        const personA = people.find((p) => p.id === a.personId);
+        const personB = people.find((p) => p.id === b.personId);
+        if (personB && !canTakeProcess(personB, slotA.position.process)) continue;
+        if (personA && !canTakeProcess(personA, slotB.position.process)) continue;
+        if (personB && hardStayFloor(personB) && floorsDiffer(prev.get(personB.id)?.station, slotA.position.process)) continue;
+        if (personA && hardStayFloor(personA) && floorsDiffer(prev.get(personA.id)?.station, slotB.position.process)) continue;
         const pa = getPriority(skills, b.personId, group, slotA.position.id);
         const pb = getPriority(skills, a.personId, group, slotB.position.id);
         if (pa === 0 || pb === 0) continue;
@@ -533,7 +543,13 @@ function optimizeFilled(
     for (const slot of required) {
       const cur = filled.get(slot.key);
       if (!cur) continue;
-      const others = people.filter((p) => !taken.has(p.id) && getPriority(skills, p.id, group, slot.position.id) > 0);
+      const others = people.filter(
+        (p) =>
+          !taken.has(p.id) &&
+          getPriority(skills, p.id, group, slot.position.id) > 0 &&
+          canTakeProcess(p, slot.position.process) &&
+          !(hardStayFloor(p) && floorsDiffer(prev.get(p.id)?.station, slot.position.process))
+      );
       for (const person of others) {
         const pr = getPriority(skills, person.id, group, slot.position.id);
         if (isNormalRank(cur.priority ?? 0) && pr === EMERGENCY_PRIORITY) continue;
@@ -583,6 +599,7 @@ function placeLeftovers(
       return defs.flatMap((d) => {
           const pr = getPriority(skills, person.id, group, d.id);
           if (pr === 0) return [];
+          if (!canTakeProcess(person, process)) return [];
           const range = staffingForPosition(d, period);
           const cur = counts.get(d.id) ?? 0;
           if (cur >= range.max) return [];
@@ -645,11 +662,13 @@ function partitionLunch(
   );
 
   const pickFor = (pool: Person[], slot: Slot, preferIds: Set<string>) => {
-    const candidates = capableOf(pool, skills, group, slot.position.id, placed);
+    const candidates = capableOf(pool, skills, group, slot.position.id, placed).filter((p) =>
+      canTakeProcess(p, slot.position.process)
+    );
     const normal = candidates.filter((p) => isNormalRank(getPriority(skills, p.id, group, slot.position.id)));
     const base = normal.length > 0 ? normal : candidates;
     const stay = base.filter((p) => staysOnFloor(p, slot.position.process, startMap));
-    const source = stay.length > 0 ? stay : base;
+    const source = stay.length > 0 ? stay : base.filter((p) => !hardStayFloor(p));
     return [...source].sort((a, b) => {
       const pa = getPriority(skills, a.id, group, slot.position.id);
       const pb = getPriority(skills, b.id, group, slot.position.id);
@@ -692,9 +711,15 @@ function partitionLunch(
       arr.filter((p) => getPriority(skills, p.id, group, posId) > 0 && staysOnFloor(p, process, startMap)).length;
     for (const side of [B, A]) {
       while (countIn(side) < need) {
-        const open = eaters.filter((p) => !placed.has(p.id));
+        const open = eaters.filter((p) => !placed.has(p.id) && canTakeProcess(p, process));
         const stay = open.filter((p) => staysOnFloor(p, process, startMap));
-        const pick = pickPreferredCapable(stay.length > 0 ? stay : open, skills, group, posId, true);
+        const pick = pickPreferredCapable(
+          stay.length > 0 ? stay : open.filter((p) => !hardStayFloor(p)),
+          skills,
+          group,
+          posId,
+          true
+        );
         if (!pick) break;
         side.push(pick);
         placed.add(pick.id);

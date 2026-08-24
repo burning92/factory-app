@@ -1,4 +1,5 @@
 import { LEGACY_EXTRA_PROCESSES, SEED_ROSTER } from "./seedRoster";
+import { isRotationExcluded } from "./personRules";
 import { defaultStaffingForProcess, withDefaultStaffing } from "./staffing";
 import type { Person, PositionCatalog, PositionDef, Priority, ProcessId, ProductGroup, SkillMatrix } from "./types";
 import { EMERGENCY_PRIORITY } from "./types";
@@ -103,7 +104,7 @@ export function isAssignedOfficePerson(
   return isOfficePerson(person) && hasOfficeSkill(skills, person.id, catalog, group);
 }
 
-/** 숙련이 모두 비었거나, 아직 입사 전이면 당일 배치에서 뺀다 */
+/** 숙련이 모두 비었거나, 아직 입사 전이거나, 제외면 당일 배치에서 뺀다 */
 export function isRotationEligible(
   person: Person,
   skills: SkillMatrix,
@@ -111,6 +112,7 @@ export function isRotationEligible(
   group: ProductGroup,
   workDate?: string
 ): boolean {
+  if (isRotationExcluded(person)) return false;
   if (workDate && person.hireDate && person.hireDate > workDate) return false;
   return hasAssignableSkill(skills, person.id, catalog, group);
 }

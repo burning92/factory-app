@@ -80,7 +80,7 @@ const HUB_ITEMS = [
   },
 ] as const;
 
-const WORKER_HUB_HREFS = new Set<string>(["/production/plan", "/production/rotation"]);
+const WORKER_HUB_HREFS = new Set<string>(["/production/plan"]);
 
 export default function ProductionHubPage() {
   const { profile } = useAuth();
@@ -106,6 +106,7 @@ export default function ProductionHubPage() {
         {HUB_ITEMS
           .filter((item) => {
             if (item.href === "/production/planning") return canViewPlanningBoard;
+            if (item.href.startsWith("/production/rotation")) return canViewPlanningBoard;
             if (isRestrictedWorker) return WORKER_HUB_HREFS.has(item.href);
             return true;
           })

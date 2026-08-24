@@ -27,10 +27,7 @@ export function preferredHintByName(name: string): Pick<Person, "preferred" | "s
   return { preferred: seed.preferred, shift: seed.shift, group: seed.group };
 }
 
-export function isDoughCorePerson(person: Person): boolean {
-  const names = ["조선영", "이진화", "이병일"];
-  return names.includes(normalizePersonKey(person.name));
-}
+export { isDoughCorePerson } from "./personRules";
 
 export function leaveKindLabel(kind: RotationLeaveKind | undefined): string | null {
   switch (kind) {

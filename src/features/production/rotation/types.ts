@@ -54,6 +54,17 @@ export type ProductLine =
 
 export type ProductGroup = "phono_signature" | "phono_basil_corn" | "phono_ricotta" | "parbake";
 
+export type PersonConstraints = {
+  /** 숙련이 있어도 주공정 외 자리에는 안 넣음 */
+  lockPreferred?: boolean;
+  /** 시작 층에서 다른 층으로 안 내려감. 필수자리 폴백도 안 함 */
+  stayFloor?: boolean;
+  /** 반죽 고정조. false면 이름 기본값도 해제 */
+  doughCore?: boolean;
+  /** 당일 배치표에서 뺌. 숙련표에는 그대로 둠 */
+  excluded?: boolean;
+};
+
 export type Person = {
   id: string;
   name: string;
@@ -67,6 +78,7 @@ export type Person = {
   leaveKind?: "none" | "annual" | "other" | "half" | "half_am" | "half_pm";
   /** 프로필 입사일. 당일보다 뒤면 배치표에서 제외 */
   hireDate?: string | null;
+  constraints?: PersonConstraints;
 };
 
 export type PeriodStaffRange = {

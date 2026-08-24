@@ -16,6 +16,12 @@ export function isFieldHeadcountRole(role: string | null | undefined): boolean {
   return r === "worker" || r === "assistant_manager" || r === "manager";
 }
 
+/** 당일 로테이션 명단. 현장 총원보다 넓게, 공장 관리자·품질팀장도 넣는다 */
+export function isRotationRosterRole(role: string | null | undefined): boolean {
+  const r = (role ?? "").trim();
+  return isFieldHeadcountRole(r) || r === "admin" || r === "quality_manager";
+}
+
 /** 시험·시스템용 로그인 아이디는 현장 총원 집계에서 제외 */
 export function isExcludedFromFieldHeadcountByLoginId(loginId: string | null | undefined): boolean {
   const id = (loginId ?? "").trim().toLowerCase();
@@ -23,6 +29,13 @@ export function isExcludedFromFieldHeadcountByLoginId(loginId: string | null | u
   if (id === "admin") return true;
   if (id === "test" || id.startsWith("test")) return true;
   return false;
+}
+
+/** 로테이션 명단에서는 test 계정만 뺀다. 공장 admin 로그인도 숙련표에 넣는다 */
+export function isExcludedFromRotationRosterByLoginId(loginId: string | null | undefined): boolean {
+  const id = (loginId ?? "").trim().toLowerCase();
+  if (!id) return false;
+  return id === "test" || id.startsWith("test");
 }
 
 /** 활성 + 100번대 조직 + 현장 직군만 «총원» 참고 집계에 포함 (test·admin 계열 로그인 제외) */
