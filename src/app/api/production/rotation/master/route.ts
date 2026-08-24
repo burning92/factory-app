@@ -128,22 +128,45 @@ async function factoryProfiles() {
   return { admin, profiles };
 }
 
+type ExistingWorkerRow = {
+  worker_id: string;
+  preferred?: string;
+  shift?: string;
+  worker_group?: string;
+  sort_order?: number;
+  is_active?: boolean;
+  constraints?: unknown;
+};
+
+type SyncedWorkerRow = {
+  worker_id: string;
+  name: string;
+  preferred: string;
+  shift: string;
+  worker_group: string;
+  sort_order: number;
+  constraints?: unknown;
+};
+
+const EMPTY_WORKER_ROWS: SyncedWorkerRow[] = [];
+
 async function syncWorkersFromProfiles() {
   const { admin, profiles } = await factoryProfiles();
   const org = ROTATION_FACTORY_ORG;
-  let existingQuery = await admin
+  const withConstraints = await admin
     .from("rotation_workers")
     .select("worker_id,preferred,shift,worker_group,sort_order,is_active,constraints")
     .eq("organization_code", org);
-  if (existingQuery.error && /constraints/i.test(existingQuery.error.message)) {
-    existingQuery = await admin
-      .from("rotation_workers")
-      .select("worker_id,preferred,shift,worker_group,sort_order,is_active")
-      .eq("organization_code", org);
-  }
-  const existing = existingQuery.data;
+  const existingQuery =
+    withConstraints.error && /constraints/i.test(withConstraints.error.message)
+      ? await admin
+          .from("rotation_workers")
+          .select("worker_id,preferred,shift,worker_group,sort_order,is_active")
+          .eq("organization_code", org)
+      : withConstraints;
+  const existing = (existingQuery.data ?? []) as ExistingWorkerRow[];
   const eErr = existingQuery.error;
-  if (eErr) return { admin, error: eErr.message, workerRows: [] as { worker_id: string; name: string; preferred: string; shift: string; worker_group: string; sort_order: number; constraints?: unknown }[], profiles };
+  if (eErr) return { admin, error: eErr.message, workerRows: EMPTY_WORKER_ROWS, profiles };
 
   const byId = new Map((existing ?? []).map((r) => [String(r.worker_id), r]));
   const keep = new Set(profiles.map((p) => p.id));
@@ -180,7 +203,7 @@ async function syncWorkersFromProfiles() {
   });
   if (upserts.length > 0) {
     const { error } = await admin.from("rotation_workers").upsert(upserts, { onConflict: "organization_code,worker_id" });
-    if (error) return { admin, error: error.message, workerRows: [] as typeof upserts, profiles };
+    if (error) return { admin, error: error.message, workerRows: EMPTY_WORKER_ROWS, profiles };
   }
   const gone = (existing ?? []).filter((r) => !keep.has(String(r.worker_id)));
   if (gone.length > 0) {
@@ -200,10 +223,10 @@ async function syncWorkersFromProfiles() {
     .eq("is_active", true)
     .order("sort_order");
   if (!loaded.error) {
-    return { admin, error: null as string | null, workerRows: loaded.data ?? [], profiles };
+    return { admin, error: null as string | null, workerRows: (loaded.data ?? []) as SyncedWorkerRow[], profiles };
   }
   if (!/constraints/i.test(loaded.error.message)) {
-    return { admin, error: loaded.error.message, workerRows: [] as NonNullable<typeof loaded.data>, profiles };
+    return { admin, error: loaded.error.message, workerRows: EMPTY_WORKER_ROWS, profiles };
   }
   const { data: workerRows, error: wErr } = await admin
     .from("rotation_workers")
@@ -211,8 +234,8 @@ async function syncWorkersFromProfiles() {
     .eq("organization_code", org)
     .eq("is_active", true)
     .order("sort_order");
-  if (wErr) return { admin, error: wErr.message, workerRows: [] as NonNullable<typeof workerRows>, profiles };
-  return { admin, error: null as string | null, workerRows: workerRows ?? [], profiles };
+  if (wErr) return { admin, error: wErr.message, workerRows: EMPTY_WORKER_ROWS, profiles };
+  return { admin, error: null as string | null, workerRows: (workerRows ?? []) as SyncedWorkerRow[], profiles };
 }
 
 export async function GET(req: NextRequest) {
