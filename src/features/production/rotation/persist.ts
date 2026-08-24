@@ -4,10 +4,12 @@ import { productGroup } from "./seedRoster";
 import { normalizePositionStaffing, parsePeriodStaffJson, processNeedsStaffing, withDefaultStaffing } from "./staffing";
 import type { PlanningLeaveItem, RotationLeaveKind } from "./planningLeave";
 import type { PlannedRotationProduct } from "./mapPlanProducts";
+import { normalizeDoughSettings } from "./doughPolicy";
 import type {
   PeriodAssignments,
   PeriodId,
   Person,
+  PersonConstraints,
   PositionCatalog,
   PositionDef,
   Priority,
@@ -15,6 +17,7 @@ import type {
   ProductGroup,
   ProductLine,
   RotationModes,
+  RotationOps,
   ShiftId,
   SkillMatrix,
 } from "./types";
@@ -24,7 +27,55 @@ export type RotationMasterPayload = {
   workers: Person[];
   catalog: PositionCatalog;
   skills: SkillMatrix;
+  ops?: RotationOps;
 };
+
+export function opsFromRow(payload: unknown): RotationOps {
+  const src = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+  const doughRaw = src.dough && typeof src.dough === "object" ? (src.dough as Record<string, unknown>) : src;
+  return {
+    dough: normalizeDoughSettings({
+      minStaff: typeof doughRaw.minStaff === "number" ? doughRaw.minStaff : undefined,
+      rotationPolicy:
+        doughRaw.rotationPolicy === "FIXED_DOUGH" || doughRaw.rotationPolicy === "CURRENT_LUNCH_BACKUP"
+          ? doughRaw.rotationPolicy
+          : undefined,
+    }),
+  };
+}
+
+export function workerConstraintsMapFromPayload(payload: unknown): Record<string, PersonConstraints> {
+  const src = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+  const raw = src.workerConstraints;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, PersonConstraints> = {};
+  for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
+    const parsed = parsePersonConstraints(value);
+    out[id] = parsed ?? {};
+  }
+  return out;
+}
+
+export function applyWorkerConstraintsMap(
+  workers: Person[],
+  stored: Record<string, PersonConstraints>
+): Person[] {
+  return workers.map((w) => {
+    if (!Object.prototype.hasOwnProperty.call(stored, w.id)) return w;
+    const constraints = stored[w.id];
+    return { ...w, constraints: Object.keys(constraints).length > 0 ? constraints : undefined };
+  });
+}
+
+export function opsPayloadForSave(
+  ops: RotationOps | undefined,
+  workerConstraints: Record<string, PersonConstraints>
+): Record<string, unknown> {
+  return {
+    ...opsFromRow(ops ?? {}),
+    workerConstraints,
+  };
+}
 
 export type RotationDayPayload = {
   date: string;

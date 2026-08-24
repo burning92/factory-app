@@ -54,6 +54,23 @@ export type ProductLine =
 
 export type ProductGroup = "phono_signature" | "phono_basil_corn" | "phono_ricotta" | "parbake";
 
+export type RotationQualificationKey = "threeSidePacker";
+
+export type RotationQualifications = Partial<Record<RotationQualificationKey, boolean>> & {
+  [key: string]: boolean | undefined;
+};
+
+export type DoughRotationPolicy = "CURRENT_LUNCH_BACKUP" | "FIXED_DOUGH";
+
+export type DoughSettings = {
+  minStaff?: number;
+  rotationPolicy?: DoughRotationPolicy;
+};
+
+export type RotationOps = {
+  dough?: DoughSettings;
+};
+
 export type PersonConstraints = {
   /** 숙련이 있어도 주공정 외 자리에는 안 넣음 */
   lockPreferred?: boolean;
@@ -63,6 +80,12 @@ export type PersonConstraints = {
   doughCore?: boolean;
   /** 당일 배치표에서 뺌. 숙련표에는 그대로 둠 */
   excluded?: boolean;
+  /** 사무 기본이지만 필수자격 자리가 비면 현장에 투입 */
+  fieldBackup?: boolean;
+  /** 기계·공정 자격. 이름 하드코딩 대신 이 값만 본다 */
+  qualifications?: RotationQualifications;
+  /** 해당 제품군 숙련을 한 번이라도 저장함. 1~5 행이 없어도 명시적 불가와 미설정을 가른다 */
+  skillConfiguredGroups?: ProductGroup[];
 };
 
 export type Person = {
@@ -101,11 +124,14 @@ export type PositionCatalog = Record<ProductGroup, PositionDef[]>;
 /** 작업자 × 제품군 × 세부포지션 → 숙련도 */
 export type SkillMatrix = Record<string, Partial<Record<ProductGroup, Record<string, Priority>>>>;
 
+export type UnassignedReason = "NO_SKILL_CONFIG" | "NO_AVAILABLE_SLOT";
+
 export type Assignment = {
   personId: string;
   station: StationId;
   positionId?: string;
   priority?: Priority;
+  unassignedReason?: UnassignedReason;
 };
 
 export type PeriodAssignments = Record<PeriodId, Assignment[]>;
@@ -160,6 +186,7 @@ export type GenerateInput = {
   catalog: PositionCatalog;
   skills: SkillMatrix;
   workDate?: string;
+  doughSettings?: DoughSettings;
 };
 
 export type GenerateResult = {

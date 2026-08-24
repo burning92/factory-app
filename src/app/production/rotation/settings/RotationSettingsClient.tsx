@@ -3,25 +3,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Pencil, Save, SlidersHorizontal, X } from "lucide-react";
-import {
-  DEFAULT_CATALOG,
-  buildGroupReadiness,
-  copyProductGroup,
-  newPositionId,
-  setPriority,
-  type GroupReadiness,
-} from "@/features/production/rotation/catalog";
+import { DEFAULT_CATALOG, buildGroupReadiness, copyProductGroup, newPositionId, setPriority, type GroupReadiness } from "@/features/production/rotation/catalog";
 import { fetchRotationMaster, saveRotationMaster } from "@/features/production/rotation/clientApi";
+import { buildQualificationCoverage } from "@/features/production/rotation/qualifications";
 import { PRODUCT_GROUPS } from "@/features/production/rotation/seedRoster";
 import { processLabel } from "@/features/production/rotation/rotationEngine";
 import { patchPositionStaffing, processNeedsStaffing, withDefaultStaffing } from "@/features/production/rotation/staffing";
-import type { PeriodId, Person, PositionCatalog, PositionDef, ProcessId, ProductGroup, SkillMatrix } from "@/features/production/rotation/types";
-import { PositionEditor, ReadinessPanel, SkillMatrixEditor } from "../rotationShared";
+import type { DoughSettings, PeriodId, Person, PositionCatalog, PositionDef, ProcessId, ProductGroup, SkillMatrix } from "@/features/production/rotation/types";
+import { DoughSettingsEditor, PositionEditor, ReadinessPanel, SkillMatrixEditor } from "../rotationShared";
 
 type MasterDraft = {
   roster: Person[];
   catalog: PositionCatalog;
   skills: SkillMatrix;
+  dough: DoughSettings;
 };
 
 function cloneDraft(draft: MasterDraft): MasterDraft {
@@ -32,6 +27,7 @@ export default function RotationSettingsClient() {
   const [roster, setRoster] = useState<Person[]>([]);
   const [catalog, setCatalog] = useState<PositionCatalog>(DEFAULT_CATALOG);
   const [skills, setSkills] = useState<SkillMatrix>({});
+  const [dough, setDough] = useState<DoughSettings>({ rotationPolicy: "CURRENT_LUNCH_BACKUP" });
   const [hydrated, setHydrated] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveNote, setSaveNote] = useState<string | null>(null);
@@ -52,11 +48,13 @@ export default function RotationSettingsClient() {
           roster: master.workers,
           catalog: master.catalog,
           skills: master.skills,
+          dough: master.ops?.dough ?? { rotationPolicy: "CURRENT_LUNCH_BACKUP" },
         };
         savedRef.current = cloneDraft(draft);
         setRoster(draft.roster);
         setCatalog(draft.catalog);
         setSkills(draft.skills);
+        setDough(draft.dough);
         setEditing(false);
         setHydrated(true);
       } catch (err) {
@@ -70,6 +68,7 @@ export default function RotationSettingsClient() {
     };
   }, []);
 
+  const qualificationCoverage = useMemo(() => buildQualificationCoverage(roster), [roster]);
   const readinessByGroup = useMemo(
     () =>
       Object.fromEntries(
@@ -91,6 +90,7 @@ export default function RotationSettingsClient() {
       setRoster(restored.roster);
       setCatalog(restored.catalog);
       setSkills(restored.skills);
+      setDough(restored.dough);
     }
     setRankError(null);
     setSaveNote(null);
@@ -105,8 +105,20 @@ export default function RotationSettingsClient() {
         workers: roster.map((w) => ({ ...w, present: true })),
         catalog,
         skills,
+        ops: { dough },
       });
-      savedRef.current = cloneDraft({ roster, catalog, skills });
+      const master = await fetchRotationMaster();
+      const draft: MasterDraft = {
+        roster: master.workers,
+        catalog: master.catalog,
+        skills: master.skills,
+        dough: master.ops?.dough ?? dough,
+      };
+      savedRef.current = cloneDraft(draft);
+      setRoster(draft.roster);
+      setCatalog(draft.catalog);
+      setSkills(draft.skills);
+      setDough(draft.dough);
       setEditing(false);
       setSaveNote("저장되었습니다. 바꾸려면 수정을 누르세요.");
     } catch (err) {
@@ -229,7 +241,15 @@ export default function RotationSettingsClient() {
         <p className="mb-3 rounded-lg border border-rose-700/50 bg-rose-950/40 px-3 py-2 text-sm text-rose-100">{rankError}</p>
       )}
 
-      <ReadinessPanel readiness={readinessByGroup} />
+      <ReadinessPanel readiness={readinessByGroup} qualificationCoverage={qualificationCoverage} />
+
+      <DoughSettingsEditor
+        catalog={catalog}
+        skillGroup={skillGroup}
+        dough={dough}
+        onChange={setDough}
+        locked={locked}
+      />
 
       <div className="mb-3 flex shrink-0 flex-wrap gap-1.5">
         {(["skills", "positions"] as const).map((id) => (

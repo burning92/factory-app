@@ -10,12 +10,18 @@ import {
 } from "@/features/production/rotation/catalog";
 import { processNeedsStaffing } from "@/features/production/rotation/staffing";
 import { PRODUCT_GROUPS } from "@/features/production/rotation/seedRoster";
-import { isDoughCorePerson } from "@/features/production/rotation/personRules";
+import { isDoughCorePerson, withSkillGroupConfigured } from "@/features/production/rotation/personRules";
 import { processLabel } from "@/features/production/rotation/rotationEngine";
+import {
+  ROTATION_QUALIFICATIONS,
+  type QualificationCoverage,
+} from "@/features/production/rotation/qualifications";
+import { normalizeDoughSettings } from "@/features/production/rotation/doughPolicy";
 import {
   PERIODS,
   PRIORITY_OPTIONS,
   PROCESSES,
+  type DoughSettings,
   type PeriodId,
   type Person,
   type PersonConstraints,
@@ -24,6 +30,7 @@ import {
   type Priority,
   type ProcessId,
   type ProductGroup,
+  type RotationQualificationKey,
   type SkillMatrix,
 } from "@/features/production/rotation/types";
 
@@ -45,9 +52,20 @@ function patchPersonRule(
   return rows.map((row) => {
     if (row.id !== personId) return row;
     const constraints: PersonConstraints = { ...row.constraints };
-    if (key === "doughCore") constraints.doughCore = value;
-    else if (value) constraints[key] = true;
-    else delete constraints[key];
+    if (key === "qualifications") return row;
+    (constraints as Record<string, unknown>)[key] = value;
+    return { ...row, constraints };
+  });
+}
+
+function patchQualification(rows: Person[], personId: string, key: RotationQualificationKey, value: boolean): Person[] {
+  return rows.map((row) => {
+    if (row.id !== personId) return row;
+    const qualifications = { ...row.constraints?.qualifications };
+    if (value) qualifications[key] = true;
+    else delete qualifications[key];
+    const constraints: PersonConstraints = { ...row.constraints, qualifications };
+    if (Object.keys(qualifications).length === 0) delete constraints.qualifications;
     return { ...row, constraints };
   });
 }
@@ -81,7 +99,10 @@ export function CopyFromSignatureBar(props: { onCopy: (to: ProductGroup) => void
   );
 }
 
-export function ReadinessPanel(props: { readiness: Record<ProductGroup, GroupReadiness> }) {
+export function ReadinessPanel(props: {
+  readiness: Record<ProductGroup, GroupReadiness>;
+  qualificationCoverage?: QualificationCoverage[];
+}) {
   return (
     <details className="mb-3 shrink-0 rounded-xl border border-slate-700/70 bg-slate-800/40">
       <summary className="cursor-pointer px-4 py-2.5 text-sm text-slate-300">
@@ -98,6 +119,19 @@ export function ReadinessPanel(props: { readiness: Record<ProductGroup, GroupRea
         <p className="text-xs text-slate-500 mb-3">
           자리마다 숙련도(상·중상·중·하)를 넣습니다. 같은 숙련은 여러 명이 가능하고, 한 사람은 여러 자리 후보가 될 수 있습니다. 점심 유지는 필수포지션마다 가능자 2명 이상이 필요합니다.
         </p>
+        {props.qualificationCoverage && props.qualificationCoverage.length > 0 && (
+          <ul className="mb-3 space-y-1 text-xs text-slate-300">
+            {props.qualificationCoverage.map((row) => (
+              <li key={row.key}>
+                {row.label} 가능자 등록 {row.registered}명 / 오늘 출근 {row.present}명
+                <span className="ml-2 text-slate-500">
+                  반죽고정 적용 시 현장 가용 {row.presentFreeOfDoughCore}명
+                  {row.presentFieldBackup > 0 ? ` · 현장백업 ${row.presentFieldBackup}명` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
           {PRODUCT_GROUPS.map((pg) => {
             const r = props.readiness[pg.id];
@@ -283,6 +317,61 @@ function PositionStaffingFields(props: {
   );
 }
 
+export function DoughSettingsEditor(props: {
+  catalog: PositionCatalog;
+  skillGroup: ProductGroup;
+  dough: DoughSettings | undefined;
+  onChange: (next: DoughSettings) => void;
+  locked?: boolean;
+}) {
+  const locked = Boolean(props.locked);
+  const normalized = normalizeDoughSettings(props.dough, props.catalog, props.skillGroup);
+  return (
+    <section className="mb-3 shrink-0 rounded-xl border border-slate-700/70 bg-slate-800/40 p-4">
+      <p className="text-sm font-medium text-slate-200 mb-1">반죽팀 운영</p>
+      <p className="text-xs text-slate-500 mb-3">
+        현재 기본은 기존 점심 가열 백업입니다. 전일 반죽고정은 인원이 확보된 뒤 설정만 바꾸면 됩니다. 이번 화면에서 기본값으로 강제하지 않습니다.
+      </p>
+      <div className="flex flex-wrap items-end gap-4">
+        <label className="text-xs text-slate-300">
+          <span className="mb-1 block text-slate-400">운영 정책</span>
+          <select
+            value={normalized.rotationPolicy}
+            disabled={locked}
+            onChange={(e) =>
+              props.onChange({
+                minStaff: normalized.minStaff,
+                rotationPolicy: e.target.value === "FIXED_DOUGH" ? "FIXED_DOUGH" : "CURRENT_LUNCH_BACKUP",
+              })
+            }
+            className="rounded-lg border border-slate-600 bg-slate-900 px-2.5 py-2 text-sm text-slate-100 disabled:opacity-70"
+          >
+            <option value="CURRENT_LUNCH_BACKUP">현행 점심 가열 백업</option>
+            <option value="FIXED_DOUGH">전일 반죽고정 (향후)</option>
+          </select>
+        </label>
+        <label className="text-xs text-slate-300">
+          <span className="mb-1 block text-slate-400">반죽 최소 인원</span>
+          <input
+            type="number"
+            min={0}
+            max={20}
+            value={normalized.minStaff}
+            disabled={locked}
+            onChange={(e) =>
+              props.onChange({
+                minStaff: Number(e.target.value),
+                rotationPolicy: normalized.rotationPolicy,
+              })
+            }
+            className="w-20 rounded-lg border border-slate-600 bg-slate-900 px-2.5 py-2 text-sm text-slate-100 disabled:opacity-70"
+          />
+        </label>
+      </div>
+    </section>
+  );
+}
+
 export function SkillMatrixEditor(props: {
   roster: Person[];
   setRoster: Dispatch<SetStateAction<Person[]>>;
@@ -322,9 +411,9 @@ export function SkillMatrixEditor(props: {
         <CopyFromSignatureBar onCopy={props.onCopyFromSignature} locked={locked} />
       </div>
       <p className="shrink-0 px-4 pb-3 text-sm text-slate-400">
-        상부터 배치하고, 비상은 최소 인원을 숙련자로 못 채울 때만 넣습니다. 불가는 배치하지 않습니다. 같은 숙련은 여러 명이 가능합니다.
-        이 제품군에서 숙련을 하나도 넣지 않은 사람(미입사·본사 공유 등)은 당일 배치표에 나오지 않습니다.
-        사람마다 조건을 켤 수 있습니다. 주공정만·층고정·반죽고정. 제외를 켜면 숙련표에는 남고 당일 배치표에서는 빠집니다.
+        상부터 배치하고, 비상은 최소 인원을 숙련자로 못 채울 때만 넣습니다. 불가는 자동배치하지 않습니다. 같은 숙련은 여러 명이 가능합니다.
+        숙련을 아직 넣지 않은 출근자는 당일 표의 미배치에 남습니다. 제외를 켜면 숙련표에는 남고 당일 표에서는 빠집니다.
+        사람마다 조건과 자격을 따로 둡니다. 조건: 주공정만·층고정·제외·반죽고정·현장백업. 자격: 삼면포장기 관리처럼 기계 가능 여부. 엔진은 이름이 아니라 이 값만 봅니다.
       </p>
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full text-sm border-separate border-spacing-0">
@@ -334,6 +423,7 @@ export function SkillMatrixEditor(props: {
               <th className="sticky top-0 z-20 bg-slate-900 px-2 py-3 text-left text-slate-300 font-medium min-w-[7.5rem] shadow-[0_1px_0_0_#334155]">주공정</th>
               <th className="sticky top-0 z-20 bg-slate-900 px-2 py-3 text-left text-slate-300 font-medium min-w-[6.5rem] shadow-[0_1px_0_0_#334155]">조</th>
               <th className="sticky top-0 z-20 bg-slate-900 px-2 py-3 text-left text-slate-300 font-medium min-w-[10.5rem] shadow-[0_1px_0_0_#334155]">조건</th>
+              <th className="sticky top-0 z-20 bg-slate-900 px-2 py-3 text-left text-slate-300 font-medium min-w-[8.5rem] shadow-[0_1px_0_0_#334155]">자격</th>
               {ordered.map((pos) => {
                 const parts = skillHeaderParts(pos.label);
                 return (
@@ -442,6 +532,36 @@ export function SkillMatrixEditor(props: {
                       />
                       반죽고정
                     </label>
+                    <label className="inline-flex items-center gap-1 text-[11px] text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(person.constraints?.fieldBackup)}
+                        disabled={locked}
+                        onChange={(e) =>
+                          props.setRoster((rows) => patchPersonRule(rows, person.id, "fieldBackup", e.target.checked))
+                        }
+                        className="accent-cyan-500"
+                      />
+                      현장백업
+                    </label>
+                  </div>
+                </td>
+                <td className="px-2 py-2 border-t border-slate-800">
+                  <div className="flex flex-col gap-1">
+                    {ROTATION_QUALIFICATIONS.map((q) => (
+                      <label key={q.key} className="inline-flex items-center gap-1 text-[11px] text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={person.constraints?.qualifications?.[q.key] === true}
+                          disabled={locked}
+                          onChange={(e) =>
+                            props.setRoster((rows) => patchQualification(rows, person.id, q.key, e.target.checked))
+                          }
+                          className="accent-cyan-500"
+                        />
+                        {q.label}
+                      </label>
+                    ))}
                   </div>
                 </td>
                 {ordered.map((pos) => {
@@ -455,6 +575,7 @@ export function SkillMatrixEditor(props: {
                           const n = Number(e.target.value) as Priority;
                           props.onRankError(null);
                           props.setSkills(setPriority(props.skills, person.id, g, pos.id, n));
+                          props.setRoster((rows) => withSkillGroupConfigured(rows, person.id, g));
                         }}
                         className={`w-full min-h-10 rounded-md border border-slate-700 px-1 py-2 text-sm font-medium disabled:cursor-not-allowed ${PRIORITY_CELL[v]}`}
                       >

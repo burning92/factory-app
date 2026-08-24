@@ -4,8 +4,12 @@ import {
   catalogFromRows,
   flattenPositions,
   flattenPriorities,
+  opsFromRow,
+  opsPayloadForSave,
+  applyWorkerConstraintsMap,
   seedPositionRows,
   skillsFromRows,
+  workerConstraintsMapFromPayload,
   workersFromRows,
   type RotationMasterPayload,
 } from "@/features/production/rotation/persist";
@@ -127,19 +131,40 @@ async function factoryProfiles() {
 async function syncWorkersFromProfiles() {
   const { admin, profiles } = await factoryProfiles();
   const org = ROTATION_FACTORY_ORG;
-  const { data: existing, error: eErr } = await admin
+  let existingQuery = await admin
     .from("rotation_workers")
-    .select("worker_id,preferred,shift,worker_group,sort_order,is_active")
+    .select("worker_id,preferred,shift,worker_group,sort_order,is_active,constraints")
     .eq("organization_code", org);
+  if (existingQuery.error && /constraints/i.test(existingQuery.error.message)) {
+    existingQuery = await admin
+      .from("rotation_workers")
+      .select("worker_id,preferred,shift,worker_group,sort_order,is_active")
+      .eq("organization_code", org);
+  }
+  const existing = existingQuery.data;
+  const eErr = existingQuery.error;
   if (eErr) return { admin, error: eErr.message, workerRows: [] as { worker_id: string; name: string; preferred: string; shift: string; worker_group: string; sort_order: number; constraints?: unknown }[], profiles };
 
   const byId = new Map((existing ?? []).map((r) => [String(r.worker_id), r]));
   const keep = new Set(profiles.map((p) => p.id));
   const upserts = profiles.map((p, i) => {
     const name = (p.display_name ?? "").trim() || (p.login_id ?? "").trim() || p.id;
-    const prev = byId.get(p.id);
+    const prev = byId.get(p.id) as
+      | { preferred?: string; shift?: string; worker_group?: string; constraints?: unknown }
+      | undefined;
     const hint = defaultWorkerFields(name);
-    return {
+    const row: {
+      organization_code: string;
+      worker_id: string;
+      name: string;
+      preferred: string;
+      shift: string;
+      worker_group: string;
+      sort_order: number;
+      is_active: boolean;
+      updated_at: string;
+      constraints?: unknown;
+    } = {
       organization_code: org,
       worker_id: p.id,
       name,
@@ -150,6 +175,8 @@ async function syncWorkersFromProfiles() {
       is_active: true,
       updated_at: new Date().toISOString(),
     };
+    if (prev && "constraints" in prev) row.constraints = prev.constraints;
+    return row;
   });
   if (upserts.length > 0) {
     const { error } = await admin.from("rotation_workers").upsert(upserts, { onConflict: "organization_code,worker_id" });
@@ -225,13 +252,23 @@ export async function GET(req: NextRequest) {
     .eq("organization_code", org);
   if (priErr) return NextResponse.json({ error: priErr.message }, { status: 500 });
 
-  const workers = workersFromRows(synced.workerRows).map((w) => {
-    const hire = synced.profiles.find((p) => p.id === w.id)?.hire_date;
-    return { ...w, hireDate: hire ? String(hire).slice(0, 10) : null };
-  });
   const catalog = catalogFromRows(posRows);
+  const opsLoaded = await admin
+    .from("rotation_ops")
+    .select("payload")
+    .eq("organization_code", org)
+    .maybeSingle();
+  const opsMissing = Boolean(opsLoaded.error && /rotation_ops|schema cache/i.test(opsLoaded.error.message));
+  const ops = opsMissing ? opsFromRow({}) : opsFromRow(opsLoaded.data?.payload);
+  const workers = applyWorkerConstraintsMap(
+    workersFromRows(synced.workerRows).map((w) => {
+      const hire = synced.profiles.find((p) => p.id === w.id)?.hire_date;
+      return { ...w, hireDate: hire ? String(hire).slice(0, 10) : null };
+    }),
+    workerConstraintsMapFromPayload(opsMissing ? {} : opsLoaded.data?.payload)
+  );
   const skills = skillsFromRows(priRows ?? [], workers, catalog);
-  return NextResponse.json({ ok: true, data: { workers, catalog, skills } satisfies RotationMasterPayload });
+  return NextResponse.json({ ok: true, data: { workers, catalog, skills, ops } satisfies RotationMasterPayload });
 }
 
 export async function PUT(req: NextRequest) {
@@ -257,6 +294,7 @@ export async function PUT(req: NextRequest) {
   const allowed = new Set(synced.workerRows.map((w) => w.worker_id));
   const workers = body.workers.filter((w) => allowed.has(w.id));
   const admin = synced.admin;
+  let constraintsColumnOk = true;
   const workerRows = workers.map((w, i) => {
     const live = synced.workerRows.find((r) => r.worker_id === w.id);
     return {
@@ -268,7 +306,7 @@ export async function PUT(req: NextRequest) {
       worker_group: w.group,
       sort_order: i,
       is_active: true,
-      constraints: constraintsForSave(w.constraints),
+      constraints: constraintsForSave(w.constraints, live?.constraints),
       updated_at: new Date().toISOString(),
     };
   });
@@ -281,6 +319,7 @@ export async function PUT(req: NextRequest) {
       const without = workerRows.map(({ constraints: _c, ...rest }) => rest);
       const retry = await admin.from("rotation_workers").upsert(without, { onConflict: "organization_code,worker_id" });
       if (retry.error) return NextResponse.json({ error: retry.error.message }, { status: 500 });
+      constraintsColumnOk = false;
     } else if (wErr) {
       return NextResponse.json({ error: wErr.message }, { status: 500 });
     }
@@ -294,6 +333,28 @@ export async function PUT(req: NextRequest) {
   if (priRows.length > 0) {
     const { error: priErr } = await admin.from("rotation_priorities").insert(priRows);
     if (priErr) return NextResponse.json({ error: priErr.message, message: priErr.message }, { status: 409 });
+  }
+
+  const constraintsMap = Object.fromEntries(workerRows.map((r) => [r.worker_id, r.constraints]));
+  const opsPayload = opsPayloadForSave(body.ops, constraintsMap);
+  const opsSave = await admin.from("rotation_ops").upsert(
+    {
+      organization_code: org,
+      payload: opsPayload,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "organization_code" }
+  );
+  if (opsSave.error) {
+    if (!/rotation_ops|schema cache/i.test(opsSave.error.message)) {
+      return NextResponse.json({ error: opsSave.error.message }, { status: 500 });
+    }
+    if (!constraintsColumnOk) {
+      return NextResponse.json(
+        { error: "제외·조건 저장에 실패했습니다. rotation_workers.constraints / rotation_ops 마이그레이션을 적용하세요." },
+        { status: 500 }
+      );
+    }
   }
 
   return NextResponse.json({ ok: true });

@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Printer, RefreshCw, Settings2, Users } from "lucide-react";
-import { DEFAULT_CATALOG, eligibleRotationRoster, getPriority, heatingPositions, isAssignedOfficePerson } from "@/features/production/rotation/catalog";
+import { DEFAULT_CATALOG, getPriority, hasNoSkillConfig, heatingPositions, isAssignedOfficePerson, visibleRotationRoster } from "@/features/production/rotation/catalog";
+import { isRotationExcluded } from "@/features/production/rotation/personRules";
 import { processNeedsStaffing, staffingForPosition, staffingRangeLabel } from "@/features/production/rotation/staffing";
 import { fetchRotationDay, fetchRotationMaster, saveRotationDay } from "@/features/production/rotation/clientApi";
 import { HOURLY_QTY, PRODUCT_LINES, productGroup } from "@/features/production/rotation/seedRoster";
@@ -23,9 +24,11 @@ import {
   peopleOn,
   priorityLabel,
   processLabel,
+  unassignedReasonLabel,
 } from "@/features/production/rotation/rotationEngine";
 import {
   PERIODS,
+  type DoughSettings,
   type PeriodAssignments,
   type PeriodId,
   type Person,
@@ -89,6 +92,7 @@ export default function RotationBoardClient() {
   const [roster, setRoster] = useState<Person[]>([]);
   const [catalog, setCatalog] = useState<PositionCatalog>(DEFAULT_CATALOG);
   const [skills, setSkills] = useState<SkillMatrix>({});
+  const [doughSettings, setDoughSettings] = useState<DoughSettings>({ rotationPolicy: "CURRENT_LUNCH_BACKUP" });
   const [hydrated, setHydrated] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveNote, setSaveNote] = useState<string | null>(null);
@@ -98,6 +102,7 @@ export default function RotationBoardClient() {
   const [plannedMixed, setPlannedMixed] = useState(false);
   const [editing, setEditing] = useState<{ period: PeriodId; personId: string } | null>(null);
   const [moveError, setMoveError] = useState<string | null>(null);
+  const [moveWarning, setMoveWarning] = useState<string | null>(null);
   const [overrides, setOverrides] = useState<PeriodAssignments | null>(null);
   const skipDaySave = useRef(true);
   const leaveItemsRef = useRef<PlanningLeaveItem[]>([]);
@@ -113,6 +118,7 @@ export default function RotationBoardClient() {
         setRoster(master.workers);
         setCatalog(master.catalog);
         setSkills(master.skills);
+        setDoughSettings(master.ops?.dough ?? { rotationPolicy: "CURRENT_LUNCH_BACKUP" });
         setHydrated(true);
       } catch (err) {
         if (cancelled) return;
@@ -176,12 +182,12 @@ export default function RotationBoardClient() {
 
   const group = productGroup(line);
   const boardRoster = useMemo(
-    () => eligibleRotationRoster(roster, skills, catalog, group, date),
-    [roster, skills, catalog, group, date]
+    () => visibleRotationRoster(roster, date),
+    [roster, date]
   );
   const result = useMemo(
-    () => generateRotation({ roster: boardRoster, line, modes, catalog, skills, workDate: date }),
-    [boardRoster, line, modes, catalog, skills]
+    () => generateRotation({ roster: boardRoster, line, modes, catalog, skills, workDate: date, doughSettings }),
+    [boardRoster, line, modes, catalog, skills, date, doughSettings]
   );
 
   useEffect(() => {
@@ -217,17 +223,44 @@ export default function RotationBoardClient() {
       const seen = new Set<string>();
       for (const row of base[period.id]) {
         const person = boardRoster.find((p) => p.id === row.personId);
-        if (!person || seen.has(person.id)) continue;
+        if (!person || isRotationExcluded(person) || seen.has(person.id)) continue;
         seen.add(person.id);
-        next[period.id].push(isAvailableInPeriod(person, period.id) ? row : { personId: person.id, station: "off" });
+        next[period.id].push(
+          isAvailableInPeriod(person, period.id)
+            ? row.station === "unassigned" && !row.unassignedReason
+              ? {
+                  ...row,
+                  unassignedReason: hasNoSkillConfig(skills, person, catalog, group)
+                    ? "NO_SKILL_CONFIG"
+                    : "NO_AVAILABLE_SLOT",
+                }
+              : row
+            : { personId: person.id, station: "off" }
+        );
       }
       for (const person of boardRoster) {
-        if (seen.has(person.id) || isAvailableInPeriod(person, period.id)) continue;
-        next[period.id].push({ personId: person.id, station: "off" });
+        if (seen.has(person.id)) continue;
+        if (isRotationExcluded(person)) continue;
+        if (!isAvailableInPeriod(person, period.id)) {
+          next[period.id].push({ personId: person.id, station: "off" });
+          continue;
+        }
+        const generated = result.assignments[period.id].find((r) => r.personId === person.id);
+        if (generated) {
+          next[period.id].push(generated);
+          continue;
+        }
+        if (person.present && hasNoSkillConfig(skills, person, catalog, group)) {
+          next[period.id].push({
+            personId: person.id,
+            station: "unassigned",
+            unassignedReason: "NO_SKILL_CONFIG",
+          });
+        }
       }
     }
     return next;
-  }, [overrides, result.assignments, boardRoster]);
+  }, [overrides, result.assignments, boardRoster, skills, catalog, group]);
 
   const presentCount = boardRoster.filter((p) => p.present).length;
   const heatN = heatingTarget(catalog, group);
@@ -242,9 +275,11 @@ export default function RotationBoardClient() {
       const moved = movePerson(base, period, personId, station, positionId, skills, group, boardRoster);
       if (moved.error) {
         setMoveError(moved.error);
+        setMoveWarning(null);
         return;
       }
       setMoveError(null);
+      setMoveWarning(moved.warning ?? null);
       setOverrides(moved.assignments);
       setEditing(null);
     },
@@ -302,6 +337,7 @@ export default function RotationBoardClient() {
             onClick={() => {
               setOverrides(null);
               setMoveError(null);
+              setMoveWarning(null);
             }}
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-200 hover:bg-slate-700"
           >
@@ -417,6 +453,9 @@ export default function RotationBoardClient() {
 
       {moveError && (
         <p className="no-print mb-3 rounded-lg border border-rose-700/50 bg-rose-950/40 px-3 py-2 text-sm text-rose-100">{moveError}</p>
+      )}
+      {moveWarning && (
+        <p className="no-print mb-3 rounded-lg border border-amber-600/50 bg-amber-950/40 px-3 py-2 text-sm text-amber-100">⚠ {moveWarning}</p>
       )}
 
       {blocking.length > 0 && (
@@ -560,7 +599,7 @@ function BoardTable(props: {
     { key: "unassigned", title: "미배치", match: { station: "unassigned" as const }, section: "기타" },
   ];
   const rows = allRows.filter((row) => {
-    if (row.heating || row.key === "lunch" || row.key === "off" || row.key === "office") return true;
+    if (row.heating || row.key === "lunch" || row.key === "off" || row.key === "office" || row.key === "unassigned") return true;
     const hasPeople = PERIODS.some((period) => peopleOn(assignments[period.id], roster, row.match).length > 0);
     if (row.staffed && row.match.positionId) {
       const hasNeed = PERIODS.some((period) => {
@@ -751,6 +790,7 @@ function PersonChip(props: {
   const pr = props.assignment.priority;
   const warn = pr === 4;
   const emergency = pr === 5;
+  const unassignedNote = props.assignment.station === "unassigned" ? unassignedReasonLabel(props.assignment.unassignedReason) : undefined;
   return (
     <>
       <button
@@ -769,6 +809,9 @@ function PersonChip(props: {
         } ${open ? "ring-2 ring-cyan-400" : ""}`}
       >
         {props.person.name}
+        {unassignedNote ? (
+          <span className={`text-[10px] font-medium ${props.lunch ? "text-stone-600" : "text-amber-200"}`}>{unassignedNote}</span>
+        ) : null}
         {leave ? <span className={`text-[10px] font-medium ${props.lunch ? "text-stone-600" : "text-amber-200"}`}>{leave}</span> : null}
       </button>
       {open && (
@@ -803,7 +846,8 @@ function MoveMenu(props: {
         미배치
       </button>
       {props.catalog[props.group].map((pos) => {
-        const ok = canAssign(props.skills, props.person.id, props.group, pos.id, pos.process);
+        const noSkill = hasNoSkillConfig(props.skills, props.person, props.catalog, props.group);
+        const ok = noSkill || canAssign(props.skills, props.person.id, props.group, pos.id, pos.process);
         const pr = getPriority(props.skills, props.person.id, props.group, pos.id);
         return (
           <button
@@ -814,7 +858,7 @@ function MoveMenu(props: {
             className="block w-full text-left rounded px-2 py-1.5 text-sm text-slate-200 hover:bg-slate-800 disabled:text-slate-600"
           >
             {processLabel(pos.process)} · {pos.label}
-            {ok ? ` [${priorityLabel(pr)}]` : " [불가]"}
+            {noSkill ? " [숙련 미설정]" : ok ? ` [${priorityLabel(pr)}]` : " [불가]"}
           </button>
         );
       })}

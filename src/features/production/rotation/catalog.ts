@@ -81,6 +81,37 @@ export function hasAssignableSkill(
   return catalog[group].some((pos) => getPriority(skills, personId, group, pos.id) > 0);
 }
 
+/**
+ * 해당 제품군 숙련을 저장한 적 있는지.
+ * DB는 0을 저장하지 않으므로, 1~5 행이 있거나 skillConfiguredGroups 표시가 있으면 설정됨.
+ * 행이 없고 표시도 없으면 미설정. 모든 칸이 0이라고 미설정으로 보지 않는다.
+ */
+export function isSkillConfiguredForGroup(
+  skills: SkillMatrix,
+  person: Person,
+  catalog: PositionCatalog | undefined,
+  group: ProductGroup
+): boolean {
+  if (person.constraints?.skillConfiguredGroups?.includes(group)) return true;
+  const row = skills[person.id]?.[group] ?? {};
+  if (catalog) {
+    return catalog[group].some((pos) => {
+      const v = row[pos.id];
+      return v === 1 || v === 2 || v === 3 || v === 4 || v === 5;
+    });
+  }
+  return Object.values(row).some((v) => v === 1 || v === 2 || v === 3 || v === 4 || v === 5);
+}
+
+export function hasNoSkillConfig(
+  skills: SkillMatrix,
+  person: Person,
+  catalog: PositionCatalog | undefined,
+  group: ProductGroup
+): boolean {
+  return !isSkillConfiguredForGroup(skills, person, catalog, group);
+}
+
 /** 주공정이 사무여도, 숙련 사무가 비어 있으면 배치표에 넣지 않는다 */
 export function hasOfficeSkill(
   skills: SkillMatrix,
@@ -104,7 +135,25 @@ export function isAssignedOfficePerson(
   return isOfficePerson(person) && hasOfficeSkill(skills, person.id, catalog, group);
 }
 
-/** 숙련이 모두 비었거나, 아직 입사 전이거나, 제외면 당일 배치에서 뺀다 */
+/** 제외·입사 전이 아니면 당일 표에 남긴다. 숙련 없음은 여기서 빼지 않는다 */
+export function isRotationBoardVisible(person: Person, workDate?: string): boolean {
+  if (isRotationExcluded(person)) return false;
+  if (workDate && person.hireDate && person.hireDate > workDate) return false;
+  return true;
+}
+
+/** 자동배치 후보. 숙련 1~5가 있는 사람만 */
+export function isRotationAutoAssignable(
+  person: Person,
+  skills: SkillMatrix,
+  catalog: PositionCatalog,
+  group: ProductGroup,
+  workDate?: string
+): boolean {
+  return isRotationBoardVisible(person, workDate) && hasAssignableSkill(skills, person.id, catalog, group);
+}
+
+/** 숙련이 모두 비었거나, 아직 입사 전이거나, 제외면 자동배치에서 뺀다 */
 export function isRotationEligible(
   person: Person,
   skills: SkillMatrix,
@@ -112,9 +161,14 @@ export function isRotationEligible(
   group: ProductGroup,
   workDate?: string
 ): boolean {
-  if (isRotationExcluded(person)) return false;
-  if (workDate && person.hireDate && person.hireDate > workDate) return false;
-  return hasAssignableSkill(skills, person.id, catalog, group);
+  return isRotationAutoAssignable(person, skills, catalog, group, workDate);
+}
+
+export function visibleRotationRoster(
+  roster: Person[],
+  workDate?: string
+): Person[] {
+  return roster.filter((p) => isRotationBoardVisible(p, workDate));
 }
 
 export function eligibleRotationRoster(
