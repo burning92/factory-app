@@ -31,6 +31,7 @@ export default function RotationSettingsClient() {
   const [hydrated, setHydrated] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveNote, setSaveNote] = useState<string | null>(null);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [rankError, setRankError] = useState<string | null>(null);
   const [panel, setPanel] = useState<"positions" | "skills">("skills");
   const [skillGroup, setSkillGroup] = useState<ProductGroup>("phono_signature");
@@ -79,6 +80,7 @@ export default function RotationSettingsClient() {
 
   const startEdit = () => {
     setSaveNote(null);
+    setSaveFailed(false);
     setRankError(null);
     setEditing(true);
   };
@@ -94,34 +96,43 @@ export default function RotationSettingsClient() {
     }
     setRankError(null);
     setSaveNote(null);
+    setSaveFailed(false);
     setEditing(false);
   };
 
   const saveEdit = async () => {
     setSaving(true);
     setSaveNote(null);
+    setSaveFailed(false);
     try {
+      const local: MasterDraft = { roster, catalog, skills, dough };
       await saveRotationMaster({
         workers: roster.map((w) => ({ ...w, present: true })),
         catalog,
         skills,
         ops: { dough },
       });
-      const master = await fetchRotationMaster();
-      const draft: MasterDraft = {
-        roster: master.workers,
-        catalog: master.catalog,
-        skills: master.skills,
-        dough: master.ops?.dough ?? dough,
-      };
-      savedRef.current = cloneDraft(draft);
-      setRoster(draft.roster);
-      setCatalog(draft.catalog);
-      setSkills(draft.skills);
-      setDough(draft.dough);
+      savedRef.current = cloneDraft(local);
       setEditing(false);
       setSaveNote("저장되었습니다. 바꾸려면 수정을 누르세요.");
+      try {
+        const master = await fetchRotationMaster();
+        const draft: MasterDraft = {
+          roster: master.workers,
+          catalog: master.catalog,
+          skills: master.skills,
+          dough: master.ops?.dough ?? dough,
+        };
+        savedRef.current = cloneDraft(draft);
+        setRoster(draft.roster);
+        setCatalog(draft.catalog);
+        setSkills(draft.skills);
+        setDough(draft.dough);
+      } catch {
+        setSaveNote("저장되었습니다. 목록을 다시 읽지는 못했습니다. 당일 배치표에서 반영 여부를 확인해 주세요.");
+      }
     } catch (err) {
+      setSaveFailed(true);
       setSaveNote(err instanceof Error ? err.message : "설정 저장 실패");
     } finally {
       setSaving(false);
@@ -183,20 +194,31 @@ export default function RotationSettingsClient() {
   const locked = !editing;
 
   return (
-    <div className="flex h-[calc(100dvh-3.5rem-4rem)] md:h-[calc(100dvh-3.5rem)] flex-col overflow-hidden p-3 md:p-4">
-      <header className="mb-3 flex shrink-0 flex-wrap items-start justify-between gap-3">
+    <div className="flex h-[calc(100dvh-3.5rem-4rem)] md:h-[calc(100dvh-3.5rem)] flex-col overflow-hidden p-2 md:p-3">
+      <header className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-2">
         <div>
-          <Link href="/production/rotation" className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-cyan-300 mb-1">
+          <Link
+            href="/production/rotation"
+            className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-cyan-300 mb-1"
+            onClick={(e) => {
+              if (!editing) return;
+              if (!window.confirm("저장하지 않은 수정이 있습니다. 당일 배치표로 나가면 지금 화면의 변경은 취소됩니다.")) {
+                e.preventDefault();
+              }
+            }}
+          >
             <ArrowLeft className="w-3.5 h-3.5" /> 당일 배치표
           </Link>
-          <h1 className="text-xl md:text-2xl font-semibold text-slate-100 flex items-center gap-2">
-            <SlidersHorizontal className="w-5 h-5 text-cyan-400" />
+          <h1 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
+            <SlidersHorizontal className="w-4 h-4 text-cyan-400" />
             로테이션 설정
+            <span className="text-xs font-normal text-slate-400">
+              {editing ? "수정 중 · 끝나면 저장" : "잠김 · 수정 후 변경"}
+            </span>
           </h1>
-          <p className="mt-1 text-sm text-slate-400">
-            {editing ? "수정 중입니다. 끝나면 저장하세요." : "잠겨 있습니다. 바꾸려면 수정을 누르세요."}
-          </p>
-          {saveNote && <p className="mt-1 text-[11px] text-slate-500">{saveNote}</p>}
+          {saveNote && (
+            <p className={`text-sm ${saveFailed ? "text-rose-300" : "text-emerald-300"}`}>{saveNote}</p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -251,7 +273,7 @@ export default function RotationSettingsClient() {
         locked={locked}
       />
 
-      <div className="mb-3 flex shrink-0 flex-wrap gap-1.5">
+      <div className="mb-2 flex shrink-0 flex-wrap gap-1.5">
         {(["skills", "positions"] as const).map((id) => (
           <button
             key={id}
@@ -267,6 +289,7 @@ export default function RotationSettingsClient() {
       </div>
 
       {panel === "positions" && (
+        <div className="flex min-h-0 flex-1 flex-col">
         <PositionEditor
           catalog={catalog}
           skillGroup={skillGroup}
@@ -278,6 +301,7 @@ export default function RotationSettingsClient() {
           onCopyFromSignature={copyFromSignature}
           locked={locked}
         />
+        </div>
       )}
 
       {panel === "skills" && (

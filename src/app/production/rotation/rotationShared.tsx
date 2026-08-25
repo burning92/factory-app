@@ -104,8 +104,8 @@ export function ReadinessPanel(props: {
   qualificationCoverage?: QualificationCoverage[];
 }) {
   return (
-    <details className="mb-3 shrink-0 rounded-xl border border-slate-700/70 bg-slate-800/40">
-      <summary className="cursor-pointer px-4 py-2.5 text-sm text-slate-300">
+    <details className="mb-2 shrink-0 rounded-xl border border-slate-700/70 bg-slate-800/40">
+      <summary className="cursor-pointer px-3 py-1.5 text-sm text-slate-300">
         입력 완료 검증
         <span className="ml-2 text-xs text-slate-500">
           {PRODUCT_GROUPS.map((pg) => {
@@ -327,12 +327,9 @@ export function DoughSettingsEditor(props: {
   const locked = Boolean(props.locked);
   const normalized = normalizeDoughSettings(props.dough, props.catalog, props.skillGroup);
   return (
-    <section className="mb-3 shrink-0 rounded-xl border border-slate-700/70 bg-slate-800/40 p-4">
-      <p className="text-sm font-medium text-slate-200 mb-1">반죽팀 운영</p>
-      <p className="text-xs text-slate-500 mb-3">
-        현재 기본은 기존 점심 가열 백업입니다. 전일 반죽고정은 인원이 확보된 뒤 설정만 바꾸면 됩니다. 이번 화면에서 기본값으로 강제하지 않습니다.
-      </p>
-      <div className="flex flex-wrap items-end gap-4">
+    <section className="mb-2 shrink-0 rounded-xl border border-slate-700/70 bg-slate-800/40 px-3 py-2">
+      <div className="flex flex-wrap items-end gap-3">
+        <p className="mb-2 mr-2 text-sm font-medium text-slate-200">반죽팀</p>
         <label className="text-xs text-slate-300">
           <span className="mb-1 block text-slate-400">운영 정책</span>
           <select
@@ -393,7 +390,7 @@ export function SkillMatrixEditor(props: {
 
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-700/70 bg-slate-800/30">
-      <div className="shrink-0 px-4 py-3 flex flex-wrap gap-1.5">
+      <div className="shrink-0 px-3 py-2 flex flex-wrap items-center gap-1.5">
         {PRODUCT_GROUPS.map((pg) => (
           <button
             key={pg.id}
@@ -407,14 +404,17 @@ export function SkillMatrixEditor(props: {
           </button>
         ))}
       </div>
-      <div className="shrink-0 px-4">
+      <div className="shrink-0 px-3 py-1">
         <CopyFromSignatureBar onCopy={props.onCopyFromSignature} locked={locked} />
       </div>
-      <p className="shrink-0 px-4 pb-3 text-sm text-slate-400">
-        상부터 배치하고, 비상은 최소 인원을 숙련자로 못 채울 때만 넣습니다. 불가는 자동배치하지 않습니다. 같은 숙련은 여러 명이 가능합니다.
-        숙련을 아직 넣지 않은 출근자는 당일 표의 미배치에 남습니다. 제외를 켜면 숙련표에는 남고 당일 표에서는 빠집니다.
-        사람마다 조건과 자격을 따로 둡니다. 조건: 주공정만·층고정·제외·반죽고정·현장백업. 자격: 삼면포장기 관리처럼 기계 가능 여부. 엔진은 이름이 아니라 이 값만 봅니다.
-      </p>
+      <details className="shrink-0 px-3 pb-2">
+        <summary className="cursor-pointer text-xs text-slate-500">숙련·조건 안내</summary>
+        <p className="mt-1 text-xs text-slate-400">
+          상부터 배치하고, 비상은 최소 인원을 숙련자로 못 채울 때만 넣습니다. 불가는 자동배치하지 않습니다. 같은 숙련은 여러 명이 가능합니다.
+          숙련을 아직 넣지 않은 출근자는 당일 표의 미배치에 남습니다. 제외를 켜면 숙련표에는 남고 당일 표에서는 빠집니다.
+          사람마다 조건과 자격을 따로 둡니다. 조건: 주공정만·층고정·제외·반죽고정·현장백업. 자격: 삼면포장기 관리처럼 기계 가능 여부. 엔진은 이름이 아니라 이 값만 봅니다.
+        </p>
+      </details>
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full text-sm border-separate border-spacing-0">
           <thead>
@@ -482,8 +482,8 @@ export function SkillMatrixEditor(props: {
                     <option value="0900-1900">09–19</option>
                   </select>
                 </td>
-                <td className="px-2 py-2 border-t border-slate-800">
-                  <div className="flex flex-col gap-1">
+                <td className="px-2 py-1.5 border-t border-slate-800">
+                  <div className="flex min-w-[12rem] flex-wrap gap-x-2 gap-y-0.5">
                     <label className="inline-flex items-center gap-1 text-[11px] text-slate-300">
                       <input
                         type="checkbox"
@@ -546,8 +546,8 @@ export function SkillMatrixEditor(props: {
                     </label>
                   </div>
                 </td>
-                <td className="px-2 py-2 border-t border-slate-800">
-                  <div className="flex flex-col gap-1">
+                <td className="px-2 py-1.5 border-t border-slate-800">
+                  <div className="flex flex-wrap gap-x-2 gap-y-0.5">
                     {ROTATION_QUALIFICATIONS.map((q) => (
                       <label key={q.key} className="inline-flex items-center gap-1 text-[11px] text-slate-300">
                         <input
@@ -577,7 +577,7 @@ export function SkillMatrixEditor(props: {
                           props.setSkills(setPriority(props.skills, person.id, g, pos.id, n));
                           props.setRoster((rows) => withSkillGroupConfigured(rows, person.id, g));
                         }}
-                        className={`w-full min-h-10 rounded-md border border-slate-700 px-1 py-2 text-sm font-medium disabled:cursor-not-allowed ${PRIORITY_CELL[v]}`}
+                        className={`w-full rounded-md border border-slate-700 px-1 py-1 text-sm font-medium disabled:cursor-not-allowed ${PRIORITY_CELL[v]}`}
                       >
                         {PRIORITY_OPTIONS.map((o) => (
                           <option key={o.value} value={o.value}>

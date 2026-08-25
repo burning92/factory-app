@@ -7,13 +7,13 @@ import {
   opsFromRow,
   opsPayloadForSave,
   applyWorkerConstraintsMap,
+  constraintsForPut,
   seedPositionRows,
   skillsFromRows,
   workerConstraintsMapFromPayload,
   workersFromRows,
   type RotationMasterPayload,
 } from "@/features/production/rotation/persist";
-import { constraintsForSave } from "@/features/production/rotation/personRules";
 import { ROTATION_FACTORY_ORG } from "@/features/production/rotation/factoryOrg";
 import { defaultWorkerFields } from "@/features/production/rotation/planningLeave";
 import {
@@ -318,6 +318,13 @@ export async function PUT(req: NextRequest) {
   const workers = body.workers.filter((w) => allowed.has(w.id));
   const admin = synced.admin;
   let constraintsColumnOk = true;
+  const existingOps = await admin
+    .from("rotation_ops")
+    .select("payload")
+    .eq("organization_code", org)
+    .maybeSingle();
+  const opsMissing = Boolean(existingOps.error && /rotation_ops|schema cache/i.test(existingOps.error.message));
+  const prevOpsMap = workerConstraintsMapFromPayload(opsMissing ? {} : existingOps.data?.payload);
   const workerRows = workers.map((w, i) => {
     const live = synced.workerRows.find((r) => r.worker_id === w.id);
     return {
@@ -329,7 +336,7 @@ export async function PUT(req: NextRequest) {
       worker_group: w.group,
       sort_order: i,
       is_active: true,
-      constraints: constraintsForSave(w.constraints, live?.constraints),
+      constraints: constraintsForPut(w.constraints, live?.constraints, prevOpsMap[w.id]),
       updated_at: new Date().toISOString(),
     };
   });
@@ -355,10 +362,15 @@ export async function PUT(req: NextRequest) {
   await admin.from("rotation_priorities").delete().eq("organization_code", org);
   if (priRows.length > 0) {
     const { error: priErr } = await admin.from("rotation_priorities").insert(priRows);
-    if (priErr) return NextResponse.json({ error: priErr.message, message: priErr.message }, { status: 409 });
+    if (priErr) {
+      const msg = /unique|duplicate/i.test(priErr.message)
+        ? "같은 숙련을 여러 명에게 저장하려면 rotation_priorities_unique_rank 인덱스를 제거하세요."
+        : priErr.message;
+      return NextResponse.json({ error: msg, message: msg }, { status: 409 });
+    }
   }
 
-  const constraintsMap = Object.fromEntries(workerRows.map((r) => [r.worker_id, r.constraints]));
+  const constraintsMap = { ...prevOpsMap, ...Object.fromEntries(workerRows.map((r) => [r.worker_id, r.constraints])) };
   const opsPayload = opsPayloadForSave(body.ops, constraintsMap);
   const opsSave = await admin.from("rotation_ops").upsert(
     {

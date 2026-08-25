@@ -25,8 +25,20 @@ export async function saveRotationMaster(payload: RotationMasterPayload): Promis
   const headers = await authHeaders();
   if (!headers) throw new Error("로그인 세션이 없습니다.");
   const res = await fetch("/api/production/rotation/master", { method: "PUT", headers, body: JSON.stringify(payload) });
-  const json = (await res.json()) as { ok?: boolean; error?: string; message?: string };
-  if (!res.ok || !json.ok) throw new Error(json.message ?? json.error ?? "마스터 저장에 실패했습니다.");
+  const text = await res.text();
+  let json: { ok?: boolean; error?: string; message?: string } = {};
+  try {
+    json = text ? (JSON.parse(text) as { ok?: boolean; error?: string; message?: string }) : {};
+  } catch {
+    throw new Error(text.slice(0, 180) || `마스터 저장에 실패했습니다. (${res.status})`);
+  }
+  if (!res.ok || !json.ok) {
+    const raw = json.message ?? json.error ?? `마스터 저장에 실패했습니다. (${res.status})`;
+    if (/unique|duplicate/i.test(raw)) {
+      throw new Error("같은 숙련을 여러 명에게 저장하려면 DB에서 rotation_priorities_unique_rank 인덱스를 제거하세요.");
+    }
+    throw new Error(raw);
+  }
 }
 
 export async function fetchRotationDay(date: string): Promise<RotationDayPayload> {

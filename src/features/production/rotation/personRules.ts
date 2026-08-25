@@ -87,20 +87,13 @@ export function mergePersonConstraints(existing: unknown, incoming: unknown): Pe
     out.doughCore = prev.doughCore;
   }
 
-  if (raw && Object.prototype.hasOwnProperty.call(raw, "qualifications")) {
-    if (next.qualifications) out.qualifications = next.qualifications;
-  } else if (next.qualifications || prev.qualifications) {
-    const qualifications = { ...prev.qualifications, ...next.qualifications };
-    if (Object.keys(qualifications).length > 0) out.qualifications = qualifications;
-  }
+  const qualifications = { ...prev.qualifications, ...next.qualifications };
+  if (Object.keys(qualifications).length > 0) out.qualifications = qualifications;
 
-  if (raw && Object.prototype.hasOwnProperty.call(raw, "skillConfiguredGroups")) {
-    if (next.skillConfiguredGroups) out.skillConfiguredGroups = next.skillConfiguredGroups;
-  } else if (next.skillConfiguredGroups) {
-    out.skillConfiguredGroups = next.skillConfiguredGroups;
-  } else if (prev.skillConfiguredGroups) {
-    out.skillConfiguredGroups = prev.skillConfiguredGroups;
-  }
+  const skillConfiguredGroups = Array.from(
+    new Set([...(prev.skillConfiguredGroups ?? []), ...(next.skillConfiguredGroups ?? [])])
+  ) as ProductGroup[];
+  if (skillConfiguredGroups.length > 0) out.skillConfiguredGroups = skillConfiguredGroups;
 
   return out;
 }

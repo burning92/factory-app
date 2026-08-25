@@ -1,5 +1,5 @@
 import { DEFAULT_CATALOG } from "./catalog";
-import { parsePersonConstraints } from "./personRules";
+import { mergePersonConstraints, parsePersonConstraints } from "./personRules";
 import { productGroup } from "./seedRoster";
 import { normalizePositionStaffing, parsePeriodStaffJson, processNeedsStaffing, withDefaultStaffing } from "./staffing";
 import type { PlanningLeaveItem, RotationLeaveKind } from "./planningLeave";
@@ -56,15 +56,32 @@ export function workerConstraintsMapFromPayload(payload: unknown): Record<string
   return out;
 }
 
+/** GET: workers.constraints를 기본으로 두고 ops 값은 필드 단위로만 얹는다. ops `{}`는 삭제하지 않는다. */
+export function mergeWorkerAndOpsConstraints(
+  workerConstraints: unknown,
+  opsConstraints: unknown
+): PersonConstraints {
+  return mergePersonConstraints(workerConstraints, opsConstraints);
+}
+
 export function applyWorkerConstraintsMap(
   workers: Person[],
   stored: Record<string, PersonConstraints>
 ): Person[] {
   return workers.map((w) => {
     if (!Object.prototype.hasOwnProperty.call(stored, w.id)) return w;
-    const constraints = stored[w.id];
-    return { ...w, constraints: Object.keys(constraints).length > 0 ? constraints : undefined };
+    const merged = mergeWorkerAndOpsConstraints(w.constraints, stored[w.id]);
+    return { ...w, constraints: Object.keys(merged).length > 0 ? merged : w.constraints };
   });
+}
+
+/** PUT: live 워커 + live ops + incoming을 한 helper로 합친다. */
+export function constraintsForPut(
+  incoming: PersonConstraints | undefined,
+  liveWorker: unknown,
+  liveOps: unknown
+): PersonConstraints {
+  return mergePersonConstraints(mergePersonConstraints(liveWorker, liveOps), incoming);
 }
 
 export function opsPayloadForSave(
