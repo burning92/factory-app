@@ -123,6 +123,10 @@ function namesOn(result: ReturnType<typeof generateRotation>, period: "start" | 
     .map((a) => a.personId);
 }
 
+function innerQual(group: ProductGroup = "phono_signature") {
+  return { qualificationsByGroup: { [group]: { threeSidePacker: true } } };
+}
+
 function hasQualCheck(result: ReturnType<typeof generateRotation>, period: "start" | "lunch1" | "lunch2" | "after") {
   return result.checks.find((c) => c.id.startsWith(`qual:${period}:`) && c.id.includes("threeSidePacker"));
 }
@@ -131,14 +135,21 @@ describe("personRules qualifications", () => {
   it("기존 constraints만 있어도 파싱되고 자격은 없는 것으로 본다", () => {
     const parsed = parsePersonConstraints({ lockPreferred: true, doughCore: true });
     expect(parsed?.lockPreferred).toBe(true);
-    expect(parsed?.qualifications).toBeUndefined();
+    expect(parsed?.qualificationsByGroup).toBeUndefined();
     const p = person("a", "inner", { constraints: parsed });
-    expect(hasQualification(p, "threeSidePacker")).toBe(false);
+    expect(hasQualification(p, "threeSidePacker", "phono_signature")).toBe(false);
   });
 
   it("skillConfiguredGroups를 파싱해 명시적 설정과 미설정을 가른다", () => {
     const parsed = parsePersonConstraints({ skillConfiguredGroups: ["phono_signature", "nope"] });
     expect(parsed?.skillConfiguredGroups).toEqual(["phono_signature"]);
+  });
+
+  it("구형 flat qualifications는 포노 제품군에만 이전하고 파베이크에는 넣지 않는다", () => {
+    const parsed = parsePersonConstraints({ qualifications: { threeSidePacker: true } });
+    expect(parsed?.qualificationsByGroup?.phono_signature?.threeSidePacker).toBe(true);
+    expect(parsed?.qualificationsByGroup?.phono_basil_corn?.threeSidePacker).toBe(true);
+    expect(parsed?.qualificationsByGroup?.parbake?.threeSidePacker).toBeUndefined();
   });
 });
 
@@ -146,7 +157,7 @@ describe("내포장 필수자격", () => {
   it("테스트 1: min 인원 안에 자격자가 반드시 포함된다", () => {
     const catalog = miniCatalog({ innerStart: 3 });
     const roster = [
-      person("qual-1", "inner", { constraints: { qualifications: { threeSidePacker: true } } }),
+      person("qual-1", "inner", { constraints: innerQual() }),
       person("pack-a", "inner"),
       person("pack-b", "inner"),
       person("pack-c", "inner"),
@@ -169,10 +180,10 @@ describe("내포장 필수자격", () => {
   it("테스트 2: 자격자 4명도 이름 없이 Boolean만으로 고른다", () => {
     const catalog = miniCatalog({ innerStart: 3 });
     const roster = [
-      person("q1", "inner", { constraints: { qualifications: { threeSidePacker: true } } }),
-      person("q2", "inner", { constraints: { qualifications: { threeSidePacker: true } } }),
-      person("q3", "inner", { constraints: { qualifications: { threeSidePacker: true } } }),
-      person("q4", "inner", { constraints: { qualifications: { threeSidePacker: true } } }),
+      person("q1", "inner", { constraints: innerQual() }),
+      person("q2", "inner", { constraints: innerQual() }),
+      person("q3", "inner", { constraints: innerQual() }),
+      person("q4", "inner", { constraints: innerQual() }),
       person("heat-1", "heating"),
     ];
     const skills = skillsFor(roster, catalog, {
@@ -197,7 +208,7 @@ describe("내포장 필수자격", () => {
       person("heat-1", "heating"),
       person("lead", "office", {
         group: "office",
-        constraints: { fieldBackup: true, qualifications: { threeSidePacker: true } },
+        constraints: { fieldBackup: true, ...innerQual() },
       }),
     ];
     const skills = skillsFor(roster, catalog, {
@@ -219,13 +230,13 @@ describe("내포장 필수자격", () => {
     const innerPos = catalog.phono_signature.find((p) => p.id === "inner")!;
     innerPos.staffing = staffing(3, 3, 4);
     const roster = [
-      person("qual-1", "inner", { constraints: { qualifications: { threeSidePacker: true } } }),
+      person("qual-1", "inner", { constraints: innerQual() }),
       person("pack-a", "inner"),
       person("pack-b", "inner"),
       person("heat-1", "heating"),
       person("lead", "office", {
         group: "office",
-        constraints: { fieldBackup: true, qualifications: { threeSidePacker: true } },
+        constraints: { fieldBackup: true, ...innerQual() },
       }),
     ];
     const skills = skillsFor(roster, catalog, {
@@ -245,8 +256,8 @@ describe("점심 자격·층 앵커", () => {
   it("테스트 3: 자격자 2명을 한 조에 몰지 않고 양쪽 근무조에 나눈다", () => {
     const catalog = miniCatalog({ innerStart: 2, innerLunch: 2, heat: 1 });
     const roster = [
-      person("q1", "inner", { constraints: { qualifications: { threeSidePacker: true } } }),
-      person("q2", "inner", { constraints: { qualifications: { threeSidePacker: true } } }),
+      person("q1", "inner", { constraints: innerQual() }),
+      person("q2", "inner", { constraints: innerQual() }),
       person("pack-a", "inner"),
       person("pack-b", "inner"),
       person("heat-1", "heating"),
@@ -278,7 +289,7 @@ describe("점심 자격·층 앵커", () => {
       person("한상수", "outer"),
       person("한상혁", "outer"),
       person("한진", "heating"),
-      person("심수덕", "inner", { constraints: { qualifications: { threeSidePacker: true } } }),
+      person("심수덕", "inner", { constraints: innerQual() }),
       person("pack-a", "inner"),
       person("heat-1", "heating"),
       person("heat-2", "heating"),
@@ -303,7 +314,7 @@ describe("점심 자격·층 앵커", () => {
     const catalog = miniCatalog({ innerStart: 1, innerLunch: 1, outerStart: 2, outerLunch: 2, heat: 1 });
     const roster = [
       person("outer-1", "outer"),
-      person("stay-2f", "inner", { constraints: { stayFloor: true, qualifications: { threeSidePacker: true } } }),
+      person("stay-2f", "inner", { constraints: { stayFloor: true, ...innerQual() } }),
       person("heat-1", "heating"),
       person("heat-2", "heating"),
     ];
@@ -331,7 +342,7 @@ describe("반죽팀 정책", () => {
     const catalog = miniCatalog({ innerStart: 1, innerLunch: 1, doughStart: 3, heat: 1 });
     const roster = [
       ...doughRoster(3),
-      person("qual-1", "inner", { constraints: { qualifications: { threeSidePacker: true } } }),
+      person("qual-1", "inner", { constraints: innerQual() }),
       person("heat-1", "heating"),
       person("heat-2", "heating"),
     ];
@@ -357,7 +368,7 @@ describe("반죽팀 정책", () => {
 
   it.each([2, 3, 4])("테스트 9: doughCore %s명이어도 3명 하드코딩으로 깨지지 않는다", (n) => {
     const catalog = miniCatalog({ innerStart: 1, doughStart: n, heat: 1 });
-    const roster = [...doughRoster(n), person("qual-1", "inner", { constraints: { qualifications: { threeSidePacker: true } } }), person("heat-1", "heating")];
+    const roster = [...doughRoster(n), person("qual-1", "inner", { constraints: innerQual() }), person("heat-1", "heating")];
     const ranks: Record<string, Partial<Record<string, Priority>>> = {
       "qual-1": { inner: 1 },
       "heat-1": { h1: 1 },
@@ -377,7 +388,7 @@ describe("반죽팀 정책", () => {
     const catalog = miniCatalog({ innerStart: 1, innerLunch: 1, doughStart: 4, heat: 1 });
     const roster = [
       ...doughRoster(4),
-      person("qual-1", "inner", { constraints: { qualifications: { threeSidePacker: true } } }),
+      person("qual-1", "inner", { constraints: innerQual() }),
       person("heat-1", "heating"),
       person("heat-2", "heating"),
     ];
@@ -407,7 +418,7 @@ describe("반죽팀 정책", () => {
     const roster = [
       ...doughRoster(3),
       person("extra-dough", "heating"),
-      person("qual-1", "inner", { constraints: { qualifications: { threeSidePacker: true } } }),
+      person("qual-1", "inner", { constraints: innerQual() }),
       person("heat-1", "heating"),
     ];
     const skills = skillsFor(roster, catalog, {
@@ -433,7 +444,7 @@ describe("숙련·수동이동 회귀", () => {
   it("테스트 12: 숙련 0은 인원 부족이어도 넣지 않는다", () => {
     const catalog = miniCatalog({ innerStart: 3 });
     const roster = [
-      person("qual-1", "inner", { constraints: { qualifications: { threeSidePacker: true } } }),
+      person("qual-1", "inner", { constraints: innerQual() }),
       person("zero", "inner"),
       person("heat-1", "heating"),
     ];
@@ -452,7 +463,7 @@ describe("숙련·수동이동 회귀", () => {
     innerPos.staffing = staffing(2, 2, 2);
     innerPos.staffing.start = { min: 2, max: 4 };
     const roster = [
-      person("qual-1", "inner", { constraints: { qualifications: { threeSidePacker: true } } }),
+      person("qual-1", "inner", { constraints: innerQual() }),
       person("normal", "inner"),
       person("emer-1", "inner"),
       person("emer-2", "inner"),
@@ -477,7 +488,7 @@ describe("숙련·수동이동 회귀", () => {
       person("한상수", "outer"),
       person("곽민정", "outer"),
       person("mover", "outer"),
-      person("qual-1", "inner", { constraints: { qualifications: { threeSidePacker: true } } }),
+      person("qual-1", "inner", { constraints: innerQual() }),
       person("heat-1", "heating"),
     ];
     const skills = skillsFor(roster, catalog, {
@@ -501,7 +512,7 @@ describe("숙련 미설정 출근자", () => {
     const catalog = miniCatalog({ innerStart: 1 });
     const roster = [
       person("new-hire", "heating"),
-      person("qual-1", "inner", { constraints: { qualifications: { threeSidePacker: true } } }),
+      person("qual-1", "inner", { constraints: innerQual() }),
       person("heat-1", "heating"),
     ];
     const skills = skillsFor(roster, catalog, {
@@ -520,7 +531,7 @@ describe("숙련 미설정 출근자", () => {
     const catalog = miniCatalog({ innerStart: 1 });
     const roster = [
       person("out", "heating", { constraints: { excluded: true } }),
-      person("qual-1", "inner", { constraints: { qualifications: { threeSidePacker: true } } }),
+      person("qual-1", "inner", { constraints: innerQual() }),
       person("heat-1", "heating"),
     ];
     const skills = skillsFor(roster, catalog, {
@@ -535,7 +546,7 @@ describe("숙련 미설정 출근자", () => {
     const catalog = miniCatalog({ innerStart: 1 });
     const roster = [
       person("out", "heating", { present: true, constraints: { excluded: true } }),
-      person("qual-1", "inner", { constraints: { qualifications: { threeSidePacker: true } } }),
+      person("qual-1", "inner", { constraints: innerQual() }),
       person("heat-1", "heating"),
     ];
     const skills = skillsFor(roster, catalog, {
@@ -554,7 +565,7 @@ describe("숙련 미설정 출근자", () => {
     const merged = mergePersonConstraints(
       { excluded: true, doughCore: true, stayFloor: true, lockPreferred: true },
       {
-        qualifications: { threeSidePacker: true },
+        qualificationsByGroup: { phono_signature: { threeSidePacker: true } },
         skillConfiguredGroups: ["phono_signature"],
         fieldBackup: true,
       }
@@ -564,13 +575,13 @@ describe("숙련 미설정 출근자", () => {
     expect(merged.stayFloor).toBe(true);
     expect(merged.lockPreferred).toBe(true);
     expect(merged.fieldBackup).toBe(true);
-    expect(merged.qualifications?.threeSidePacker).toBe(true);
+    expect(merged.qualificationsByGroup?.phono_signature?.threeSidePacker).toBe(true);
     expect(merged.skillConfiguredGroups).toContain("phono_signature");
 
     const catalog = miniCatalog({ innerStart: 1 });
     const roster = [
       person("out", "heating", { present: true, constraints: merged }),
-      person("qual-1", "inner", { constraints: { qualifications: { threeSidePacker: true } } }),
+      person("qual-1", "inner", { constraints: innerQual() }),
       person("heat-1", "heating"),
     ];
     const skills = skillsFor(roster, catalog, {
@@ -601,7 +612,7 @@ describe("숙련 미설정 출근자", () => {
     const roster = [
       person("absent", "heating", { present: false }),
       person("leave", "heating", { leaveKind: "annual" }),
-      person("qual-1", "inner", { constraints: { qualifications: { threeSidePacker: true } } }),
+      person("qual-1", "inner", { constraints: innerQual() }),
       person("heat-1", "heating"),
     ];
     const skills = skillsFor(roster, catalog, {
@@ -618,7 +629,7 @@ describe("숙련 미설정 출근자", () => {
     const catalog = miniCatalog({ innerStart: 1 });
     const roster = [
       person("future", "heating", { hireDate: "2026-08-25" }),
-      person("qual-1", "inner", { constraints: { qualifications: { threeSidePacker: true } } }),
+      person("qual-1", "inner", { constraints: innerQual() }),
       person("heat-1", "heating"),
     ];
     const skills = skillsFor(roster, catalog, {
@@ -632,7 +643,7 @@ describe("숙련 미설정 출근자", () => {
   it("테스트 5: 숙련 1~4가 있으면 기존처럼 자동배치 후보", () => {
     const catalog = miniCatalog({ innerStart: 1 });
     const roster = [
-      person("qual-1", "inner", { constraints: { qualifications: { threeSidePacker: true } } }),
+      person("qual-1", "inner", { constraints: innerQual() }),
       person("heat-1", "heating"),
     ];
     const skills = skillsFor(roster, catalog, {
@@ -649,7 +660,7 @@ describe("숙련 미설정 출근자", () => {
     const roster = [
       person("unset", "heating"),
       person("all-zero", "heating", { constraints: { skillConfiguredGroups: ["phono_signature"] } }),
-      person("qual-1", "inner", { constraints: { qualifications: { threeSidePacker: true } } }),
+      person("qual-1", "inner", { constraints: innerQual() }),
       person("heat-1", "heating"),
     ];
     const skills = skillsFor(roster, catalog, {
@@ -669,7 +680,7 @@ describe("숙련 미설정 출근자", () => {
     const catalog = miniCatalog({ innerStart: 2 });
     const roster = [
       person("new-hire", "heating"),
-      person("qual-1", "inner", { constraints: { qualifications: { threeSidePacker: true } } }),
+      person("qual-1", "inner", { constraints: innerQual() }),
       person("pack-a", "inner"),
       person("heat-1", "heating"),
     ];
@@ -714,5 +725,54 @@ describe("숙련 미설정 출근자", () => {
       skills
     );
     expect(checks.some((c) => c.id.startsWith("qual:start:") && !c.ok)).toBe(true);
+  });
+});
+
+describe("제품군별 자격", () => {
+  it("파베이크 내포장은 삼면포장기 자격을 요구하지 않는다", () => {
+    const catalog = miniCatalog({ innerStart: 2 });
+    const roster = [
+      person("pack-a", "inner"),
+      person("pack-b", "inner"),
+      person("heat-1", "heating"),
+    ];
+    const skills = skillsFor(roster, catalog, {
+      "pack-a": { inner: 1 },
+      "pack-b": { inner: 1 },
+      "heat-1": { h1: 1 },
+    });
+    const result = generateRotation({
+      roster,
+      line: "parbake",
+      modes: LUNCH_OFF,
+      catalog,
+      skills,
+    });
+    expect(result.checks.some((c) => c.id.includes("threeSidePacker"))).toBe(false);
+    expect(namesOn(result, "start", "inner")).toHaveLength(2);
+  });
+
+  it("포노 자격만 있고 파베이크 자격이 없으면 파베이크 배치에 자격 검사가 안 걸린다", () => {
+    const catalog = miniCatalog({ innerStart: 2 });
+    const roster = [
+      person("qual-1", "inner", { constraints: innerQual("phono_signature") }),
+      person("pack-a", "inner"),
+      person("heat-1", "heating"),
+    ];
+    const skills = skillsFor(roster, catalog, {
+      "qual-1": { inner: 1 },
+      "pack-a": { inner: 1 },
+      "heat-1": { h1: 1 },
+    });
+    const phono = run({ roster, catalog, skills });
+    expect(hasQualCheck(phono, "start")?.ok).toBe(true);
+    const parbake = generateRotation({
+      roster,
+      line: "parbake",
+      modes: LUNCH_OFF,
+      catalog,
+      skills,
+    });
+    expect(parbake.checks.some((c) => c.id.includes("threeSidePacker"))).toBe(false);
   });
 });

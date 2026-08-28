@@ -346,14 +346,14 @@ function scoreRequired(
     if (prevA && prevA.positionId && prevA.positionId !== a.positionId) vec.changed += 1;
   }
   for (const [process, procSlots] of Array.from(requiredByProcess.entries())) {
-    const keys = requiredQualificationsForProcess(process);
+    const keys = requiredQualificationsForProcess(process, group);
     if (keys.length === 0 || procSlots.length === 0) continue;
     const holders = procSlots
       .map((s) => filled.get(s.key))
       .filter((a): a is Assignment => Boolean(a))
       .map((a) => byId.get(a.personId))
       .filter((p): p is Person => Boolean(p));
-    if (!holders.some((p) => personMeetsProcessQualifications(p, process))) vec.missingQual += 1;
+    if (!holders.some((p) => personMeetsProcessQualifications(p, process, group))) vec.missingQual += 1;
   }
   return vec;
 }
@@ -410,9 +410,9 @@ function pickForSlot(
 ): Person | undefined {
   const all = capableOf(people, skills, group, slot.position.id, taken).filter((p) =>
     isUsablePriority(getPriority(skills, p.id, group, slot.position.id), slot.required) &&
-    canTakeProcess(p, slot.position.process) &&
+    canTakeProcess(p, slot.position.process, group) &&
     eligibleForDoughPolicy(p, slot.position.process, opts) &&
-    (!requireQual || personMeetsProcessQualifications(p, slot.position.process))
+    (!requireQual || personMeetsProcessQualifications(p, slot.position.process, group))
   );
   const normal = all.filter((p) => isNormalRank(getPriority(skills, p.id, group, slot.position.id)));
   const base = normal.length > 0 ? normal : all;
@@ -433,14 +433,15 @@ function processHasQualifiedHolder(
   filled: Map<string, Assignment>,
   slots: Slot[],
   process: ProcessId,
-  byId: Map<string, Person>
+  byId: Map<string, Person>,
+  group: ProductGroup
 ): boolean {
   return slots.some((slot) => {
     if (slot.position.process !== process) return false;
     const a = filled.get(slot.key);
     if (!a) return false;
     const person = byId.get(a.personId);
-    return Boolean(person && personMeetsProcessQualifications(person, process));
+    return Boolean(person && personMeetsProcessQualifications(person, process, group));
   });
 }
 
@@ -460,11 +461,11 @@ function fillRequiredQualifications(
   const required = slots.filter((s) => s.required);
   const processes = Array.from(new Set(required.map((s) => s.position.process)));
   for (const process of processes) {
-    const keys = requiredQualificationsForProcess(process);
+    const keys = requiredQualificationsForProcess(process, group);
     if (keys.length === 0) continue;
     const procSlots = required.filter((s) => s.position.process === process);
     if (procSlots.length === 0) continue;
-    if (processHasQualifiedHolder(filled, procSlots, process, byId)) continue;
+    if (processHasQualifiedHolder(filled, procSlots, process, byId, group)) continue;
 
     const floorPick = pickForSlot(people, procSlots[0], skills, group, taken, prev, catalog, opts, true);
     const backupPick = floorPick
@@ -480,7 +481,7 @@ function fillRequiredQualifications(
         .filter((row): row is { s: Slot; a: Assignment } => Boolean(row.a))
         .filter((row) => {
           const person = byId.get(row.a.personId);
-          return !person || !personMeetsProcessQualifications(person, process);
+          return !person || !personMeetsProcessQualifications(person, process, group);
         })
         .sort((a, b) => (b.a.priority ?? 0) - (a.a.priority ?? 0))[0];
       if (!displace) continue;
@@ -521,7 +522,7 @@ function assignSlots(
   for (const slot of required) {
     for (const person of people) {
       if (getPriority(skills, person.id, group, slot.position.id) !== 1) continue;
-      if (!canTakeProcess(person, slot.position.process)) continue;
+      if (!canTakeProcess(person, slot.position.process, group)) continue;
       if (!eligibleForDoughPolicy(person, slot.position.process, opts)) continue;
       if (!staysOnFloor(person, slot.position.process, prev)) continue;
       if (slot.position.process === "heating" && backupStationCount(person, skills, catalog, group) > 0) continue;
@@ -594,8 +595,8 @@ function assignSlots(
     if (filled.has(slot.key)) continue;
     const needQual =
       slot.required &&
-      requiredQualificationsForProcess(slot.position.process).length > 0 &&
-      !processHasQualifiedHolder(filled, remaining.filter((s) => s.position.process === slot.position.process), slot.position.process, byId);
+      requiredQualificationsForProcess(slot.position.process, group).length > 0 &&
+      !processHasQualifiedHolder(filled, remaining.filter((s) => s.position.process === slot.position.process), slot.position.process, byId, group);
     const pick =
       (needQual ? pickForSlot(people, slot, skills, group, taken, prev, catalog, opts, true) : undefined) ??
       pickForSlot(people, slot, skills, group, taken, prev, catalog, opts, false);
@@ -661,12 +662,12 @@ function optimizeFilled(
         const slotB = required.find((s) => s.key === keys[j])!;
         const personA = people.find((p) => p.id === a.personId);
         const personB = people.find((p) => p.id === b.personId);
-        if (personB && !canTakeProcess(personB, slotA.position.process)) continue;
-        if (personA && !canTakeProcess(personA, slotB.position.process)) continue;
+        if (personB && !canTakeProcess(personB, slotA.position.process, group)) continue;
+        if (personA && !canTakeProcess(personA, slotB.position.process, group)) continue;
         if (personB && hardStayFloor(personB) && floorsDiffer(prev.get(personB.id)?.station, slotA.position.process)) continue;
         if (personA && hardStayFloor(personA) && floorsDiffer(prev.get(personA.id)?.station, slotB.position.process)) continue;
-        if (personB && isReserveBackup(personB) && requiredQualificationsForProcess(slotA.position.process).length === 0) continue;
-        if (personA && isReserveBackup(personA) && requiredQualificationsForProcess(slotB.position.process).length === 0) continue;
+        if (personB && isReserveBackup(personB) && requiredQualificationsForProcess(slotA.position.process, group).length === 0) continue;
+        if (personA && isReserveBackup(personA) && requiredQualificationsForProcess(slotB.position.process, group).length === 0) continue;
         const pa = getPriority(skills, b.personId, group, slotA.position.id);
         const pb = getPriority(skills, a.personId, group, slotB.position.id);
         if (pa === 0 || pb === 0) continue;
@@ -692,9 +693,9 @@ function optimizeFilled(
         (p) =>
           !taken.has(p.id) &&
           getPriority(skills, p.id, group, slot.position.id) > 0 &&
-          canTakeProcess(p, slot.position.process) &&
+          canTakeProcess(p, slot.position.process, group) &&
           !(hardStayFloor(p) && floorsDiffer(prev.get(p.id)?.station, slot.position.process)) &&
-          !(isReserveBackup(p) && requiredQualificationsForProcess(slot.position.process).length === 0)
+          !(isReserveBackup(p) && requiredQualificationsForProcess(slot.position.process, group).length === 0)
       );
       for (const person of others) {
         const pr = getPriority(skills, person.id, group, slot.position.id);
@@ -705,12 +706,13 @@ function optimizeFilled(
             filled,
             required.filter((s) => s.position.process === slot.position.process),
             slot.position.process,
-            byId
+            byId,
+            group
           );
           const current = byId.get(cur.personId);
-          if (already && current && personMeetsProcessQualifications(current, slot.position.process)) continue;
-          if (already && current && !personMeetsProcessQualifications(person, slot.position.process)) continue;
-          if (already && !personMeetsProcessQualifications(person, slot.position.process)) continue;
+          if (already && current && personMeetsProcessQualifications(current, slot.position.process, group)) continue;
+          if (already && current && !personMeetsProcessQualifications(person, slot.position.process, group)) continue;
+          if (already && !personMeetsProcessQualifications(person, slot.position.process, group)) continue;
           if (already) continue;
         }
         const next = new Map(Array.from(filled.entries()));
@@ -763,7 +765,7 @@ function placeLeftovers(
       return defs.flatMap((d) => {
           const pr = getPriority(skills, person.id, group, d.id);
           if (pr === 0) return [];
-          if (!canTakeProcess(person, process)) return [];
+          if (!canTakeProcess(person, process, group)) return [];
           if (!eligibleForDoughPolicy(person, process, opts)) return [];
           const range = staffingForPosition(d, period);
           const cur = counts.get(d.id) ?? 0;
@@ -804,14 +806,14 @@ function dryLunchScore(
   let missingQual = 0;
   const processes = Array.from(new Set(slots.filter((s) => s.required).map((s) => s.position.process)));
   for (const process of processes) {
-    if (requiredQualificationsForProcess(process).length === 0) continue;
+    if (requiredQualificationsForProcess(process, group).length === 0) continue;
     const required = slots.filter((s) => s.required && s.position.process === process);
     if (required.length === 0) continue;
     const holders = out.assignments
       .filter((a) => a.station === process)
       .map((a) => byId.get(a.personId))
       .filter((p): p is Person => Boolean(p));
-    if (!holders.some((p) => personMeetsProcessQualifications(p, process))) missingQual += 1;
+    if (!holders.some((p) => personMeetsProcessQualifications(p, process, group))) missingQual += 1;
   }
   let floorMoves = 0;
   for (const a of out.assignments) {
@@ -848,7 +850,7 @@ function partitionLunch(
 
   const pickFor = (pool: Person[], slot: Slot, preferIds: Set<string>) => {
     const candidates = capableOf(pool, skills, group, slot.position.id, placed).filter((p) =>
-      canTakeProcess(p, slot.position.process)
+      canTakeProcess(p, slot.position.process, group)
     );
     const normal = candidates.filter((p) => isNormalRank(getPriority(skills, p.id, group, slot.position.id)));
     const base = normal.length > 0 ? normal : candidates;
@@ -898,7 +900,7 @@ function partitionLunch(
       arr.filter((p) => getPriority(skills, p.id, group, posId) > 0 && staysOnFloor(p, process, startMap)).length;
     for (const side of [B, A]) {
       while (countIn(side) < need) {
-        const open = eaters.filter((p) => !placed.has(p.id) && canTakeProcess(p, process));
+        const open = eaters.filter((p) => !placed.has(p.id) && canTakeProcess(p, process, group));
         const anchors = open.filter((p) => isOuterAnchor(p) || (process !== "outer" && isProcessAnchor(p) && staysOnFloor(p, process, startMap)));
         const stay = open.filter((p) => staysOnFloor(p, process, startMap));
         const softFallback = open.filter(
@@ -914,12 +916,12 @@ function partitionLunch(
     }
   };
   const fillRequiredQuals = (posId: string, process: ProcessId) => {
-    const keys = requiredQualificationsForProcess(process);
+    const keys = requiredQualificationsForProcess(process, group);
     if (keys.length === 0) return;
     const sideHas = (arr: Person[]) =>
       arr.some(
         (p) =>
-          personMeetsProcessQualifications(p, process) &&
+          personMeetsProcessQualifications(p, process, group) &&
           getPriority(skills, p.id, group, posId) > 0 &&
           staysOnFloor(p, process, startMap)
       );
@@ -928,8 +930,8 @@ function partitionLunch(
       const open = eaters.filter(
         (p) =>
           !placed.has(p.id) &&
-          canTakeProcess(p, process) &&
-          personMeetsProcessQualifications(p, process) &&
+          canTakeProcess(p, process, group) &&
+          personMeetsProcessQualifications(p, process, group) &&
           getPriority(skills, p.id, group, posId) > 0
       );
       const stay = open.filter((p) => staysOnFloor(p, process, startMap));
@@ -1386,7 +1388,7 @@ function finish(
   }
   const byId = new Map(roster.map((p) => [p.id, p]));
   const checks = buildChecks(withOff, targets, roster, modes, catalog, group, skills);
-  warnings.push(...qualificationGapWarnings(withOff, targets, roster));
+  warnings.push(...qualificationGapWarnings(withOff, targets, roster, group));
   if (modes.splitShift) {
     const lateCapable = roster.filter((p) => p.present && p.shift === "0900-1900" && hasAnyHeating(p.id, catalog, group, skills));
     const need = heatingTarget(catalog, group);
@@ -1424,20 +1426,21 @@ function finish(
 function qualificationGapWarnings(
   assignments: PeriodAssignments,
   targets: Record<PeriodId, StaffingTarget>,
-  roster: Person[]
+  roster: Person[],
+  group: ProductGroup
 ): RotationWarning[] {
   const byId = new Map(roster.map((p) => [p.id, p]));
   const out: RotationWarning[] = [];
   for (const period of PERIODS) {
     const rows = assignments[period.id];
     for (const need of targets[period.id].positions) {
-      const keys = requiredQualificationsForProcess(need.process);
+      const keys = requiredQualificationsForProcess(need.process, group);
       if (need.min <= 0 || keys.length === 0) continue;
       const workers = rows
         .filter((r) => r.positionId === need.positionId || (r.station === need.process && !r.positionId))
         .map((r) => byId.get(r.personId))
         .filter((p): p is Person => Boolean(p));
-      if (workers.some((p) => personMeetsProcessQualifications(p, need.process))) continue;
+      if (workers.some((p) => personMeetsProcessQualifications(p, need.process, group))) continue;
       const labels = keys.map((k) => qualificationLabel(k)).join(", ");
       out.push({
         kind: "unfilled",
@@ -1526,13 +1529,13 @@ export function buildChecks(
         actual: `${n}명`,
         expected: rangeLabel,
       });
-      const qualKeys = requiredQualificationsForProcess(need.process);
+      const qualKeys = requiredQualificationsForProcess(need.process, group);
       if (need.min > 0 && qualKeys.length > 0) {
         const workers = rows
           .filter((r) => r.positionId === need.positionId || (r.station === need.process && !r.positionId))
           .map((r) => byId.get(r.personId))
           .filter((p): p is Person => Boolean(p));
-        const ok = workers.some((p) => personMeetsProcessQualifications(p, need.process));
+        const ok = workers.some((p) => personMeetsProcessQualifications(p, need.process, group));
         checks.push({
           id: `qual:${period.id}:${need.positionId}:${qualKeys.join(",")}`,
           label: `${period.short} ${need.label} 필수자격`,

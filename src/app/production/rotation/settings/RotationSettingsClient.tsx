@@ -69,7 +69,7 @@ export default function RotationSettingsClient() {
     };
   }, []);
 
-  const qualificationCoverage = useMemo(() => buildQualificationCoverage(roster), [roster]);
+  const qualificationCoverage = useMemo(() => buildQualificationCoverage(roster, skillGroup), [roster, skillGroup]);
   const readinessByGroup = useMemo(
     () =>
       Object.fromEntries(

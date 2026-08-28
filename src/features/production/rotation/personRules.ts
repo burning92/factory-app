@@ -1,6 +1,10 @@
 import { DOUGH_CORE_IDS } from "./seedRoster";
-import { hasQualification, parseQualifications, requiredQualificationsForProcess } from "./qualifications";
-import type { Person, PersonConstraints, ProcessId, ProductGroup } from "./types";
+import {
+  hasQualification,
+  parseQualificationsByGroup,
+  requiredQualificationsForProcess,
+} from "./qualifications";
+import type { Person, PersonConstraints, ProcessId, ProductGroup, QualificationsByGroup } from "./types";
 
 const PRODUCT_GROUPS: ProductGroup[] = ["phono_signature", "phono_basil_corn", "phono_ricotta", "parbake"];
 
@@ -44,6 +48,25 @@ function asConstraintObject(raw: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
+function mergeQualificationsByGroup(
+  prev: QualificationsByGroup | undefined,
+  next: QualificationsByGroup | undefined
+): QualificationsByGroup | undefined {
+  const out: QualificationsByGroup = { ...(prev ?? {}) };
+  if (!next) return Object.keys(out).length > 0 ? out : undefined;
+  for (const group of PRODUCT_GROUPS) {
+    const incoming = next[group];
+    if (!incoming) continue;
+    const merged = { ...(out[group] ?? {}), ...incoming };
+    for (const [key, value] of Object.entries(merged)) {
+      if (value !== true) delete merged[key];
+    }
+    if (Object.keys(merged).length > 0) out[group] = merged;
+    else delete out[group];
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 export function parsePersonConstraints(raw: unknown): PersonConstraints | undefined {
   const src = asConstraintObject(raw);
   if (!src) return undefined;
@@ -55,8 +78,8 @@ export function parsePersonConstraints(raw: unknown): PersonConstraints | undefi
   if (src.fieldBackup === true) next.fieldBackup = true;
   if (src.doughCore === true) next.doughCore = true;
   if (src.doughCore === false) next.doughCore = false;
-  const qualifications = parseQualifications(src.qualifications);
-  if (qualifications) next.qualifications = qualifications;
+  const qualificationsByGroup = parseQualificationsByGroup(src.qualificationsByGroup, src.qualifications);
+  if (qualificationsByGroup) next.qualificationsByGroup = qualificationsByGroup;
   const skillConfiguredGroups = parseConfiguredGroups(src.skillConfiguredGroups);
   if (skillConfiguredGroups) next.skillConfiguredGroups = skillConfiguredGroups;
   return Object.keys(next).length > 0 ? next : undefined;
@@ -87,8 +110,8 @@ export function mergePersonConstraints(existing: unknown, incoming: unknown): Pe
     out.doughCore = prev.doughCore;
   }
 
-  const qualifications = { ...prev.qualifications, ...next.qualifications };
-  if (Object.keys(qualifications).length > 0) out.qualifications = qualifications;
+  const qualificationsByGroup = mergeQualificationsByGroup(prev.qualificationsByGroup, next.qualificationsByGroup);
+  if (qualificationsByGroup) out.qualificationsByGroup = qualificationsByGroup;
 
   const skillConfiguredGroups = Array.from(
     new Set([...(prev.skillConfiguredGroups ?? []), ...(next.skillConfiguredGroups ?? [])])
@@ -112,14 +135,14 @@ export function isFieldBackup(person: Person): boolean {
   return person.constraints?.fieldBackup === true;
 }
 
-export function canTakeProcess(person: Person, process: ProcessId): boolean {
+export function canTakeProcess(person: Person, process: ProcessId, group: ProductGroup): boolean {
   if (!person.constraints?.lockPreferred) return true;
   if (person.preferred === process) return true;
   if (process === "cleanup" && person.preferred === "dough") return true;
   if (isDoughCorePerson(person) && process === "heating") return true;
   if (
     isFieldBackup(person) &&
-    requiredQualificationsForProcess(process).some((key) => hasQualification(person, key))
+    requiredQualificationsForProcess(process, group).some((key) => hasQualification(person, key, group))
   ) {
     return true;
   }

@@ -57,7 +57,7 @@ describe("constraints 저장→조회 round-trip", () => {
       excluded: true,
       stayFloor: true,
       fieldBackup: true,
-      qualifications: { threeSidePacker: true },
+      qualificationsByGroup: { phono_signature: { threeSidePacker: true } },
       skillConfiguredGroups: ["phono_signature"],
     };
     const saved = constraintsForPut(incoming, live, {});
@@ -85,21 +85,27 @@ describe("constraints 저장→조회 round-trip", () => {
 
   it("테스트 4: ops 일부 필드는 기존 excluded·자격을 유지한 채 합친다", () => {
     const got = roundTripGet(
-      { excluded: true, qualifications: { threeSidePacker: true } },
+      { qualificationsByGroup: { phono_signature: { threeSidePacker: true } } },
       { fieldBackup: true }
     );
-    expect(got?.excluded).toBe(true);
+    expect(got?.excluded).toBeUndefined();
     expect(got?.fieldBackup).toBe(true);
-    expect(got?.qualifications?.threeSidePacker).toBe(true);
+    expect(got?.qualificationsByGroup?.phono_signature?.threeSidePacker).toBe(true);
   });
 
-  it("테스트 5: 중첩 qualification은 ops가 기존 키를 삭제하지 않는다", () => {
+  it("테스트 4b: 구형 flat qualifications 조회 시 포노 제품군으로 이전된다", () => {
+    const got = roundTripGet({ qualifications: { threeSidePacker: true } } as PersonConstraints, {});
+    expect(got?.qualificationsByGroup?.phono_signature?.threeSidePacker).toBe(true);
+    expect(got?.qualificationsByGroup?.parbake?.threeSidePacker).toBeUndefined();
+  });
+
+  it("테스트 5: 제품군별 qualification은 ops가 기존 키를 삭제하지 않는다", () => {
     const got = mergeWorkerAndOpsConstraints(
-      { qualifications: { threeSidePacker: true } },
-      { qualifications: { extraMachine: true } }
+      { qualificationsByGroup: { phono_signature: { threeSidePacker: true } } },
+      { qualificationsByGroup: { phono_signature: { extraMachine: true } } }
     );
-    expect(got.qualifications?.threeSidePacker).toBe(true);
-    expect(got.qualifications?.extraMachine).toBe(true);
+    expect(got.qualificationsByGroup?.phono_signature?.threeSidePacker).toBe(true);
+    expect(got.qualificationsByGroup?.phono_signature?.extraMachine).toBe(true);
   });
 
   it("PUT incoming이 부분 객체여도 live excluded를 덮어쓰지 않는다", () => {

@@ -14,6 +14,8 @@ import { isDoughCorePerson, withSkillGroupConfigured } from "@/features/producti
 import { processLabel } from "@/features/production/rotation/rotationEngine";
 import {
   ROTATION_QUALIFICATIONS,
+  hasQualification,
+  processNeedsQualifications,
   type QualificationCoverage,
 } from "@/features/production/rotation/qualifications";
 import { normalizeDoughSettings } from "@/features/production/rotation/doughPolicy";
@@ -52,20 +54,28 @@ function patchPersonRule(
   return rows.map((row) => {
     if (row.id !== personId) return row;
     const constraints: PersonConstraints = { ...row.constraints };
-    if (key === "qualifications") return row;
     (constraints as Record<string, unknown>)[key] = value;
     return { ...row, constraints };
   });
 }
 
-function patchQualification(rows: Person[], personId: string, key: RotationQualificationKey, value: boolean): Person[] {
+function patchQualification(
+  rows: Person[],
+  personId: string,
+  group: ProductGroup,
+  key: RotationQualificationKey,
+  value: boolean
+): Person[] {
   return rows.map((row) => {
     if (row.id !== personId) return row;
-    const qualifications = { ...row.constraints?.qualifications };
-    if (value) qualifications[key] = true;
-    else delete qualifications[key];
-    const constraints: PersonConstraints = { ...row.constraints, qualifications };
-    if (Object.keys(qualifications).length === 0) delete constraints.qualifications;
+    const byGroup = { ...row.constraints?.qualificationsByGroup };
+    const groupQuals = { ...(byGroup[group] ?? {}) };
+    if (value) groupQuals[key] = true;
+    else delete groupQuals[key];
+    if (Object.keys(groupQuals).length > 0) byGroup[group] = groupQuals;
+    else delete byGroup[group];
+    const constraints: PersonConstraints = { ...row.constraints, qualificationsByGroup: byGroup };
+    if (Object.keys(byGroup).length === 0) delete constraints.qualificationsByGroup;
     return { ...row, constraints };
   });
 }
@@ -383,6 +393,7 @@ export function SkillMatrixEditor(props: {
 }) {
   const g = props.skillGroup;
   const locked = Boolean(props.locked);
+  const showQualifications = processNeedsQualifications("inner", g);
   const cols = props.catalog[g];
   const heat = cols.filter((p) => p.process === "heating");
   const rest = cols.filter((p) => p.process !== "heating");
@@ -412,7 +423,7 @@ export function SkillMatrixEditor(props: {
         <p className="mt-1 text-xs text-slate-400">
           상부터 배치하고, 비상은 최소 인원을 숙련자로 못 채울 때만 넣습니다. 불가는 자동배치하지 않습니다. 같은 숙련은 여러 명이 가능합니다.
           숙련을 아직 넣지 않은 출근자는 당일 표의 미배치에 남습니다. 제외를 켜면 숙련표에는 남고 당일 표에서는 빠집니다.
-          사람마다 조건과 자격을 따로 둡니다. 조건: 주공정만·층고정·제외·반죽고정·현장백업. 자격: 삼면포장기 관리처럼 기계 가능 여부. 엔진은 이름이 아니라 이 값만 봅니다.
+          사람마다 조건과 자격을 따로 둡니다. 조건은 전 제품군 공통이고, 자격(삼면포장기 관리 등)은 현재 탭 제품군에만 적용됩니다.
         </p>
       </details>
       <div className="min-h-0 flex-1 overflow-auto">
@@ -423,7 +434,12 @@ export function SkillMatrixEditor(props: {
               <th className="sticky top-0 z-20 bg-slate-900 px-2 py-3 text-left text-slate-300 font-medium min-w-[7.5rem] shadow-[0_1px_0_0_#334155]">주공정</th>
               <th className="sticky top-0 z-20 bg-slate-900 px-2 py-3 text-left text-slate-300 font-medium min-w-[6.5rem] shadow-[0_1px_0_0_#334155]">조</th>
               <th className="sticky top-0 z-20 bg-slate-900 px-2 py-3 text-left text-slate-300 font-medium min-w-[10.5rem] shadow-[0_1px_0_0_#334155]">조건</th>
-              <th className="sticky top-0 z-20 bg-slate-900 px-2 py-3 text-left text-slate-300 font-medium min-w-[8.5rem] shadow-[0_1px_0_0_#334155]">자격</th>
+              {showQualifications ? (
+                <th className="sticky top-0 z-20 bg-slate-900 px-2 py-3 text-left text-slate-300 font-medium min-w-[8.5rem] shadow-[0_1px_0_0_#334155]">
+                  자격
+                  <span className="mt-0.5 block text-[10px] font-normal text-slate-500">이 제품군만</span>
+                </th>
+              ) : null}
               {ordered.map((pos) => {
                 const parts = skillHeaderParts(pos.label);
                 return (
@@ -546,24 +562,26 @@ export function SkillMatrixEditor(props: {
                     </label>
                   </div>
                 </td>
-                <td className="px-2 py-1.5 border-t border-slate-800">
-                  <div className="flex flex-wrap gap-x-2 gap-y-0.5">
-                    {ROTATION_QUALIFICATIONS.map((q) => (
-                      <label key={q.key} className="inline-flex items-center gap-1 text-[11px] text-slate-300">
-                        <input
-                          type="checkbox"
-                          checked={person.constraints?.qualifications?.[q.key] === true}
-                          disabled={locked}
-                          onChange={(e) =>
-                            props.setRoster((rows) => patchQualification(rows, person.id, q.key, e.target.checked))
-                          }
-                          className="accent-cyan-500"
-                        />
-                        {q.label}
-                      </label>
-                    ))}
-                  </div>
-                </td>
+                {showQualifications ? (
+                  <td className="px-2 py-1.5 border-t border-slate-800">
+                    <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                      {ROTATION_QUALIFICATIONS.map((q) => (
+                        <label key={q.key} className="inline-flex items-center gap-1 text-[11px] text-slate-300">
+                          <input
+                            type="checkbox"
+                            checked={hasQualification(person, q.key, g)}
+                            disabled={locked}
+                            onChange={(e) =>
+                              props.setRoster((rows) => patchQualification(rows, person.id, g, q.key, e.target.checked))
+                            }
+                            className="accent-cyan-500"
+                          />
+                          {q.label}
+                        </label>
+                      ))}
+                    </div>
+                  </td>
+                ) : null}
                 {ordered.map((pos) => {
                   const v = getPriority(props.skills, person.id, g, pos.id);
                   return (

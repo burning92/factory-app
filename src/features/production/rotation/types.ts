@@ -60,6 +60,8 @@ export type RotationQualifications = Partial<Record<RotationQualificationKey, bo
   [key: string]: boolean | undefined;
 };
 
+export type QualificationsByGroup = Partial<Record<ProductGroup, RotationQualifications>>;
+
 export type DoughRotationPolicy = "CURRENT_LUNCH_BACKUP" | "FIXED_DOUGH";
 
 export type DoughSettings = {
@@ -82,8 +84,8 @@ export type PersonConstraints = {
   excluded?: boolean;
   /** 사무 기본이지만 필수자격 자리가 비면 현장에 투입 */
   fieldBackup?: boolean;
-  /** 기계·공정 자격. 이름 하드코딩 대신 이 값만 본다 */
-  qualifications?: RotationQualifications;
+  /** 제품군별 기계·공정 자격. 포노와 파베이크를 따로 둔다 */
+  qualificationsByGroup?: QualificationsByGroup;
   /** 해당 제품군 숙련을 한 번이라도 저장함. 1~5 행이 없어도 명시적 불가와 미설정을 가른다 */
   skillConfiguredGroups?: ProductGroup[];
 };
