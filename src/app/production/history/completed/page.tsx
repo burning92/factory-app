@@ -9,20 +9,13 @@ import { calculateUsageSummary } from "@/features/production/history/calculation
 import { getJournalStorageKey } from "@/features/production/history/journalAllocation";
 import type { DateGroupInput } from "@/features/production/history/types";
 import {
+  collectCompactProductLines,
   compactJournalQtyRowFromComputed,
   downloadCompactJournalQtyCsv,
+  formatCompactProductNames,
   type CompactJournalQtyRow,
 } from "@/features/production/history/compactJournalQty";
-import type { DateGroupState, ProductOutput } from "../page";
-
-/** 제품 표시명: "-일반", "-파베이크사용", "-브레드" 제거 */
-function productDisplayName(label: string): string {
-  const s = (label ?? "").trim();
-  for (const suffix of [" - 일반", " - 파베이크사용", " - 브레드"]) {
-    if (s.endsWith(suffix)) return s.slice(0, -suffix.length).trim();
-  }
-  return s;
-}
+import type { DateGroupState } from "../page";
 
 type MaterialLike = { materialName: string; boxWeightG: number; unitWeightG: number };
 
@@ -191,32 +184,34 @@ export default function CompletedListPage() {
       const snapshot = row.state_snapshot;
       const state = snapshot && typeof snapshot === "object" ? (snapshot as DateGroupState) : null;
       if (!state) continue;
-      const outputs = state.secondClosure?.productOutputs ?? [];
-      const productLines: { name: string; qty: number }[] = outputs
-        .map((o: ProductOutput) => {
-          const name = productDisplayName(o.displayProductLabel ?? o.productName ?? "");
-          const qty = typeof o.finishedQty === "number" ? o.finishedQty : 0;
-          return { name, qty };
-        })
-        .filter((p) => p.name)
-        .sort((a, b) => b.qty - a.qty);
       const authorName =
         (row.author_name ?? state.authorName ?? "").trim() || (state.authorName ?? "");
-      const productNames = productLines
-        .map((p) => `${p.name} ${p.qty.toLocaleString()}개`)
-        .join(", ");
       const computed = calculateUsageSummary(state as unknown as DateGroupInput, bomRefs);
+      const logProductNames = productionLogs
+        .filter((l) => (l.생산일자 ?? "").slice(0, 10) === date)
+        .map((l) => (l.제품명 ?? "").trim())
+        .filter(Boolean);
+      const productLines = collectCompactProductLines({
+        computed,
+        snapshotProducts: state.products,
+        logProductNames,
+      });
       items.push({
         date,
         authorName,
         productLines,
         state,
-        compactQty: compactJournalQtyRowFromComputed(date, authorName, productNames, computed),
+        compactQty: compactJournalQtyRowFromComputed(
+          date,
+          authorName,
+          formatCompactProductNames(productLines),
+          computed
+        ),
       });
     }
     items.sort((a, b) => (b.date < a.date ? -1 : b.date > a.date ? 1 : 0));
     return items;
-  }, [productionHistoryDateStates, datesWithLogs, bomList]);
+  }, [productionHistoryDateStates, datesWithLogs, bomList, productionLogs]);
 
   const filteredList = useMemo(() => {
     let list = completedList;

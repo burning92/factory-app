@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCompactJournalQtyCsv,
+  collectCompactProductLines,
   compactJournalQtyRowFromComputed,
+  formatCompactProductNames,
 } from "./compactJournalQty";
 import type { ComputedResult } from "./types";
 
@@ -70,5 +72,32 @@ describe("compactJournalQty", () => {
       '"생산일자","작성자","제품명","도우반죽량","도우사용량","보관용파베이크사용수량","도우폐기량","완제품폐기량"'
     );
     expect(csv).toContain('"마르게리따 100개, 페퍼로니 50개"');
+  });
+
+  it("uses parbake purpose lines when finished product outputs are empty", () => {
+    const lines = collectCompactProductLines({
+      computed: stubComputed({
+        productSummaries: [],
+        parbakePurposeProductionLines: [
+          { role: "astronaut", parbakeName: "토마토 파베이크", qty: 3086 },
+        ],
+      }),
+    });
+    expect(formatCompactProductNames(lines)).toBe(
+      "우주인 파베이크(보관용) 토마토 파베이크 3,086개"
+    );
+  });
+
+  it("uses outbound 우주인 파베이크 제품명 instead of generic purpose labels", () => {
+    const lines = collectCompactProductLines({
+      computed: stubComputed({
+        productSummaries: [],
+        parbakePurposeProductionLines: [
+          { role: "astronaut", parbakeName: "베샤멜 파베이크", qty: 3086 },
+        ],
+      }),
+      logProductNames: ["우주인 베샤멜 파베이크 - 일반"],
+    });
+    expect(formatCompactProductNames(lines)).toBe("우주인 베샤멜 파베이크 3,086개");
   });
 });

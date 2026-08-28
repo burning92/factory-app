@@ -73,8 +73,10 @@ import {
   type ParbakeProductWasteDerived,
 } from "@/features/production/history/parbakeProductWasteDerived";
 import {
+  collectCompactProductLines,
   compactJournalQtyRowFromComputed,
   downloadCompactJournalQtyCsv,
+  formatCompactProductNames,
 } from "@/features/production/history/compactJournalQty";
 
 /** 생산일지 제품별 페이지 생략 — 원료 사용량은 1차 마감·원료 사용량 화면에서 확인 */
@@ -166,7 +168,7 @@ function JournalPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const date = searchParams.get("date") ?? "";
-  const { bomList, fetchBom, fetchDoughLogs } = useMasterStore();
+  const { bomList, fetchBom, fetchDoughLogs, fetchProductionLogs, productionLogs } = useMasterStore();
   /** 새로고침 직후 store에 BOM이 비어 있으면 fetch 완료까지 제품별 원료 표를 그리지 않음 */
   const [bomReady, setBomReady] = useState(() => bomList.length > 0);
   /** doughLogsMap 갱신 시 구독되어 반죽 사용량이 다시 계산되도록 함 (getDoughLogByDate만 쓰면 useMemo가 갱신 안 됨) */
@@ -192,8 +194,11 @@ function JournalPageContent() {
   }, [fetchBom, bomList.length]);
 
   useEffect(() => {
-    if (date) fetchDoughLogs();
-  }, [date, fetchDoughLogs]);
+    if (date) {
+      fetchDoughLogs();
+      fetchProductionLogs();
+    }
+  }, [date, fetchDoughLogs, fetchProductionLogs]);
 
   useEffect(() => {
     if (!date) {
@@ -379,13 +384,19 @@ function JournalPageContent() {
   }
 
   const comp = stored.computedResult;
-  /** 총괄 P1: 제품명 및 수량 (baseProductName만, 수량 큰 순) */
-  const productLabelsAndQty = [...comp.productSummaries]
-    .filter((p) => !isUjuinParbakeFinishedProductLabel(p.displayProductLabel))
-    .sort((a, b) => (b.finishedQty ?? 0) - (a.finishedQty ?? 0))
-    .map(
-      (p) =>
-        `[${p.baseProductName ?? p.displayProductLabel} : ${(p.finishedQty ?? 0).toLocaleString()}개]`
+  const compactProductLines = collectCompactProductLines({
+    computed: comp,
+    snapshotProducts: stored.dateGroup.products,
+    logProductNames: productionLogs
+      .filter((l) => (l.생산일자 ?? "").slice(0, 10) === date)
+      .map((l) => (l.제품명 ?? "").trim())
+      .filter(Boolean),
+  });
+  const productLabelsAndQty = compactProductLines
+    .map((p) =>
+      p.qty > 0
+        ? `[${p.name} : ${p.qty.toLocaleString()}개]`
+        : `[${p.name}]`
     )
     .join(", ");
   const expiryDate = addDays(date, 364);
@@ -419,7 +430,7 @@ function JournalPageContent() {
   const compactQty = compactJournalQtyRowFromComputed(
     date,
     authorName === "—" ? "" : authorName,
-    productLabelsAndQty.replaceAll("[", "").replaceAll("]", "").replaceAll(" : ", " "),
+    formatCompactProductNames(compactProductLines),
     comp
   );
   const wasteLines = [
