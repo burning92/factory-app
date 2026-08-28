@@ -72,6 +72,10 @@ import {
   findParbakeProductDerived,
   type ParbakeProductWasteDerived,
 } from "@/features/production/history/parbakeProductWasteDerived";
+import {
+  compactJournalQtyRowFromComputed,
+  downloadCompactJournalQtyCsv,
+} from "@/features/production/history/compactJournalQty";
 
 /** 생산일지 제품별 페이지 생략 — 원료 사용량은 1차 마감·원료 사용량 화면에서 확인 */
 const BREAD_PRODUCT_STANDARD = "브레드";
@@ -412,6 +416,12 @@ function JournalPageContent() {
   }] : []);
   const authorName =
     (stored.dateGroup as { authorName?: string }).authorName?.trim() || "—";
+  const compactQty = compactJournalQtyRowFromComputed(
+    date,
+    authorName === "—" ? "" : authorName,
+    productLabelsAndQty.replaceAll("[", "").replaceAll("]", "").replaceAll(" : ", " "),
+    comp
+  );
   const wasteLines = [
     ...journalWasteGramLines(breadIngredientUsageRows),
     ...journalWasteGramLines(parbakeIngredientUsageRows),
@@ -477,6 +487,15 @@ function JournalPageContent() {
           </button>
           <button
             type="button"
+            onClick={() =>
+              downloadCompactJournalQtyCsv([compactQty], `생산일지_수량요약_${date}.csv`)
+            }
+            className="rounded-lg border border-slate-500 px-3 py-1.5 text-sm"
+          >
+            CSV 내려받기
+          </button>
+          <button
+            type="button"
             onClick={backToHistory}
             className="rounded-lg border border-slate-500 px-3 py-1.5 text-sm"
           >
@@ -530,6 +549,41 @@ function JournalPageContent() {
                       <div className="w-full h-full min-h-[28mm]" />
                     </div>
                   </div>
+                </div>
+
+                <div className="overflow-x-auto border border-slate-300 print:border-gray-400">
+                  <table className="w-full min-w-[640px] text-xs sm:text-sm print:text-black">
+                    <thead>
+                      <tr className="bg-slate-50 print:bg-white text-left">
+                        <th className="px-2 py-1.5 font-medium whitespace-nowrap">제품명</th>
+                        <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">도우반죽량</th>
+                        <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">도우사용량</th>
+                        <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">보관용파베이크사용수량</th>
+                        <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">도우폐기량</th>
+                        <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">완제품폐기량</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td className="px-2 py-1.5">{compactQty.productNames || "—"}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
+                          {compactQty.doughMixQty.toLocaleString()}개
+                        </td>
+                        <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
+                          {compactQty.doughUsageQty.toLocaleString()}개
+                        </td>
+                        <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
+                          {compactQty.storedParbakeUsedQty.toLocaleString()}개
+                        </td>
+                        <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
+                          {compactQty.doughWasteQty.toLocaleString()}개
+                        </td>
+                        <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
+                          {compactQty.finishedWasteQty.toLocaleString()}개
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
 
                 <div className="mt-6 print:mt-4 grid grid-cols-2 gap-x-8 gap-y-4 print:gap-y-2 text-sm print:text-black leading-relaxed">

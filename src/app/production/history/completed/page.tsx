@@ -3,10 +3,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Download } from "lucide-react";
 import { useMasterStore, type OutboundLine, type ProductionLog } from "@/store/useMasterStore";
 import { calculateUsageSummary } from "@/features/production/history/calculations";
 import { getJournalStorageKey } from "@/features/production/history/journalAllocation";
 import type { DateGroupInput } from "@/features/production/history/types";
+import {
+  compactJournalQtyRowFromComputed,
+  downloadCompactJournalQtyCsv,
+  type CompactJournalQtyRow,
+} from "@/features/production/history/compactJournalQty";
 import type { DateGroupState, ProductOutput } from "../page";
 
 /** 제품 표시명: "-일반", "-파베이크사용", "-브레드" 제거 */
@@ -132,6 +138,7 @@ type CompletedItem = {
   authorName: string;
   productLines: { name: string; qty: number }[];
   state: DateGroupState;
+  compactQty: CompactJournalQtyRow;
 };
 
 export default function CompletedListPage() {
@@ -144,6 +151,7 @@ export default function CompletedListPage() {
     fetchProductionHistoryDateStates,
     productionHistoryDateStates,
     productionHistoryDateStatesLoading,
+    bomList,
   } = useMasterStore();
   const [searchDate, setSearchDate] = useState("");
   const [searchAuthor, setSearchAuthor] = useState("");
@@ -171,6 +179,12 @@ export default function CompletedListPage() {
 
   const completedList = useMemo((): CompletedItem[] => {
     const items: CompletedItem[] = [];
+    const bomRefs = bomList.map((b) => ({
+      productName: b.productName,
+      materialName: b.materialName,
+      bomGPerEa: b.bomGPerEa,
+      basis: b.basis,
+    }));
     for (const [date, row] of Object.entries(productionHistoryDateStates)) {
       if (!row.second_closed_at) continue;
       if (!datesWithLogs.has(date)) continue;
@@ -186,16 +200,23 @@ export default function CompletedListPage() {
         })
         .filter((p) => p.name)
         .sort((a, b) => b.qty - a.qty);
+      const authorName =
+        (row.author_name ?? state.authorName ?? "").trim() || (state.authorName ?? "");
+      const productNames = productLines
+        .map((p) => `${p.name} ${p.qty.toLocaleString()}개`)
+        .join(", ");
+      const computed = calculateUsageSummary(state as unknown as DateGroupInput, bomRefs);
       items.push({
         date,
-        authorName: (row.author_name ?? state.authorName ?? "").trim() || (state.authorName ?? ""),
+        authorName,
         productLines,
         state,
+        compactQty: compactJournalQtyRowFromComputed(date, authorName, productNames, computed),
       });
     }
     items.sort((a, b) => (b.date < a.date ? -1 : b.date > a.date ? 1 : 0));
     return items;
-  }, [productionHistoryDateStates, datesWithLogs]);
+  }, [productionHistoryDateStates, datesWithLogs, bomList]);
 
   const filteredList = useMemo(() => {
     let list = completedList;
@@ -306,19 +327,36 @@ export default function CompletedListPage() {
 
   return (
     <div className="min-h-screen bg-space-950 text-slate-200 py-8 px-4 print:hidden">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-100">생산일지 완료 목록</h1>
-          <Link
-            href="/production/history"
-            className="text-sm font-medium text-cyan-400 hover:text-cyan-300"
-          >
-            ← 사용량 계산으로
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              disabled={filteredList.length === 0}
+              onClick={() =>
+                downloadCompactJournalQtyCsv(
+                  filteredList.map((item) => item.compactQty),
+                  `생산일지_수량요약_${new Date().toISOString().slice(0, 10)}.csv`
+                )
+              }
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-500 hover:bg-slate-700/80 text-slate-200 px-3 py-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Download className="w-4 h-4" />
+              CSV 내려받기
+            </button>
+            <Link
+              href="/production/history"
+              className="text-sm font-medium text-cyan-400 hover:text-cyan-300"
+            >
+              ← 사용량 계산으로
+            </Link>
+          </div>
         </div>
 
         <p className="text-slate-400 text-sm mb-6">
           2차 마감까지 완료된 날짜만 표시됩니다. 보기·인쇄 시 출고·마감·BOM을 서버에서 다시 불러온 뒤 생산일지를 만듭니다.
+          검색 결과에 보이는 날짜 기준으로 CSV를 내려받을 수 있습니다.
         </p>
 
         {productionHistoryDateStatesLoading && (
@@ -378,13 +416,41 @@ export default function CompletedListPage() {
                     <div className="text-sm text-slate-400 mb-2">
                       작성자: {item.authorName || "—"}
                     </div>
-                    <div className="text-sm text-slate-300 flex flex-wrap gap-x-2 gap-y-1">
-                      {item.productLines.map((p, i) => (
-                        <span key={i}>
-                          [{p.name}: {p.qty.toLocaleString()}개]
-                          {i < item.productLines.length - 1 ? ", " : ""}
-                        </span>
-                      ))}
+                    <div className="overflow-x-auto rounded-lg border border-slate-700 bg-space-900/50">
+                      <table className="w-full min-w-[720px] text-xs sm:text-sm text-slate-200">
+                        <thead>
+                          <tr className="text-slate-400 text-left">
+                            <th className="px-2 py-1.5 font-medium whitespace-nowrap">제품명</th>
+                            <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">도우반죽량</th>
+                            <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">도우사용량</th>
+                            <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">보관용파베이크사용수량</th>
+                            <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">도우폐기량</th>
+                            <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">완제품폐기량</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td className="px-2 py-1.5 text-slate-200">
+                              {item.compactQty.productNames || "—"}
+                            </td>
+                            <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
+                              {item.compactQty.doughMixQty.toLocaleString()}
+                            </td>
+                            <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
+                              {item.compactQty.doughUsageQty.toLocaleString()}
+                            </td>
+                            <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
+                              {item.compactQty.storedParbakeUsedQty.toLocaleString()}
+                            </td>
+                            <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
+                              {item.compactQty.doughWasteQty.toLocaleString()}
+                            </td>
+                            <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
+                              {item.compactQty.finishedWasteQty.toLocaleString()}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
                     </div>
                     <span className="inline-block mt-2 px-3 py-1 rounded-full text-xs font-medium bg-cyan-500/20 text-cyan-300">
                       생산일지 완료
