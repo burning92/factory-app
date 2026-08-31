@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
-import { Pencil, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react";
 
 type LogStatus = "draft" | "submitted" | "approved" | "rejected";
 type LogRow = {
@@ -47,8 +47,28 @@ function formatReceivedAt(iso: string | null): string {
 function formatKgDisplay(weightG: number): string {
   const kg = weightG / 1000;
   if (!Number.isFinite(kg)) return "0";
-  if (Math.abs(kg - Math.round(kg)) < 1e-9) return String(Math.round(kg));
-  return kg.toFixed(1);
+  if (Math.abs(kg - Math.round(kg)) < 1e-9) return Math.round(kg).toLocaleString("ko-KR");
+  return kg.toLocaleString("ko-KR", { maximumFractionDigits: 1 });
+}
+
+function currentYearMonthKst(): { year: number; month: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date());
+  return {
+    year: Number(parts.find((p) => p.type === "year")?.value),
+    month: Number(parts.find((p) => p.type === "month")?.value),
+  };
+}
+
+function monthRangeIsoKst(year: number, month: number): { start: string; end: string } {
+  const start = `${year}-${String(month).padStart(2, "0")}-01T00:00:00+09:00`;
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const nextYear = month === 12 ? year + 1 : year;
+  const end = `${nextYear}-${String(nextMonth).padStart(2, "0")}-01T00:00:00+09:00`;
+  return { start, end };
 }
 
 export default function DailyMaterialReceivingInspectionListPage() {
@@ -60,15 +80,20 @@ export default function DailyMaterialReceivingInspectionListPage() {
   const [toast, setToast] = useState<{ message: string; error?: boolean } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [year, setYear] = useState(() => currentYearMonthKst().year);
+  const [month, setMonth] = useState(() => currentYearMonthKst().month);
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
+    const { start, end } = monthRangeIsoKst(year, month);
     const { data, error } = await supabase
       .from("daily_material_receiving_inspection_logs")
       .select("id, received_at, author_name, status, approved_at, approved_by_name, reject_reason")
       .eq("organization_code", orgCode)
+      .gte("received_at", start)
+      .lt("received_at", end)
       .order("received_at", { ascending: false })
-      .limit(100);
+      .limit(1000);
     if (error) {
       setToast({ message: error.message, error: true });
       setLogs([]);
@@ -103,7 +128,7 @@ export default function DailyMaterialReceivingInspectionListPage() {
       }
     }
     setLoading(false);
-  }, [orgCode]);
+  }, [orgCode, year, month]);
 
   useEffect(() => {
     fetchLogs();
@@ -126,6 +151,14 @@ export default function DailyMaterialReceivingInspectionListPage() {
     });
   }, [logs, itemSummaryByLogId, searchQuery]);
 
+  const monthTotalKgText = useMemo(() => {
+    const totalG = filteredLogs.reduce((sum, log) => sum + (itemSummaryByLogId[log.id]?.totalWeightG ?? 0), 0);
+    return formatKgDisplay(totalG);
+  }, [filteredLogs, itemSummaryByLogId]);
+
+  const nowYm = currentYearMonthKst();
+  const isCurrentMonth = year === nowYm.year && month === nowYm.month;
+
   return (
     <div className="min-h-[calc(100vh-3.5rem)] md:min-h-0 p-4 md:p-6 max-w-2xl mx-auto pb-20 md:pb-6">
       <div className="flex items-center gap-2 mb-4">
@@ -144,7 +177,46 @@ export default function DailyMaterialReceivingInspectionListPage() {
           새 일지 작성
         </Link>
       </div>
-      <div className="mb-4">
+      <div className="mb-4 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => setYear((y) => y - 1)}
+            className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-700/60 bg-slate-900/40 hover:bg-slate-700/40 text-slate-200"
+            aria-label="이전 해"
+          >
+            <ChevronLeft className="w-4 h-4" strokeWidth={2} />
+          </button>
+          <p className="text-sm font-medium text-slate-100 tabular-nums">{year}년</p>
+          <button
+            type="button"
+            onClick={() => setYear((y) => y + 1)}
+            className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-700/60 bg-slate-900/40 hover:bg-slate-700/40 text-slate-200"
+            aria-label="다음 해"
+          >
+            <ChevronRight className="w-4 h-4" strokeWidth={2} />
+          </button>
+        </div>
+        <div className="grid grid-cols-6 gap-1.5">
+          {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
+            const selected = m === month;
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMonth(m)}
+                className={`rounded-lg px-0 py-2 text-xs font-medium tabular-nums transition-colors ${
+                  selected
+                    ? "bg-cyan-600 text-white"
+                    : "bg-slate-900/60 border border-slate-700/60 text-slate-300 hover:bg-slate-700/40"
+                }`}
+                aria-pressed={selected}
+              >
+                {m}월
+              </button>
+            );
+          })}
+        </div>
         <input
           type="search"
           value={searchQuery}
@@ -152,6 +224,13 @@ export default function DailyMaterialReceivingInspectionListPage() {
           placeholder="원료명/작성자/날짜 검색"
           className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 text-slate-100 text-sm"
         />
+        {!loading && logs.length > 0 && (
+          <p className="text-xs text-slate-400">
+            {isCurrentMonth ? "이번 달" : `${year}년 ${month}월`} · {filteredLogs.length.toLocaleString("ko-KR")}건
+            {searchQuery.trim() && logs.length !== filteredLogs.length ? ` (전체 ${logs.length.toLocaleString("ko-KR")}건 중)` : ""}
+            {" · "}총 {monthTotalKgText}kg
+          </p>
+        )}
       </div>
       {toast && (
         <div
@@ -164,7 +243,9 @@ export default function DailyMaterialReceivingInspectionListPage() {
         <p className="text-slate-500 text-sm">불러오는 중…</p>
       ) : logs.length === 0 ? (
         <div className="rounded-xl border border-slate-700/60 bg-slate-800/30 p-8 text-center">
-          <p className="text-slate-500 text-sm mb-4">저장된 일지가 없습니다.</p>
+          <p className="text-slate-500 text-sm mb-4">
+            {year}년 {month}월에 저장된 일지가 없습니다.
+          </p>
           <Link
             href="/materials/material-receiving-inspection/new"
             className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium"
@@ -174,7 +255,7 @@ export default function DailyMaterialReceivingInspectionListPage() {
         </div>
       ) : filteredLogs.length === 0 ? (
         <div className="rounded-xl border border-slate-700/60 bg-slate-800/30 p-8 text-center">
-          <p className="text-slate-400 text-sm">검색 결과가 없습니다.</p>
+          <p className="text-slate-400 text-sm">이 달에서 검색 결과가 없습니다.</p>
         </div>
       ) : (
         <ul className="space-y-2">
