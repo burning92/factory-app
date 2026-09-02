@@ -3,6 +3,8 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useMasterStore, type ProductionLog, type OutboundLine } from "@/store/useMasterStore";
 import DateWheelPicker from "@/components/DateWheelPicker";
+import { useAuth } from "@/contexts/AuthContext";
+import { insertAdditionalOutboundHistory } from "@/features/production/outbound/additionalOutboundHistory";
 
 /** 박스/낱개/g → 총중량(g). g전용이면 boxG=0, unitG=0 → g만 */
 function totalGFromQty(
@@ -365,6 +367,10 @@ export default function OutboundHistoryPage() {
     addProductionLog,
     setLastUsedDate,
   } = useMasterStore();
+  const { profile, viewOrganizationCode, user } = useAuth();
+  const inputterName =
+    (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
+  const orgCode = viewOrganizationCode ?? "100";
   const [closeModalLog, setCloseModalLog] = useState<ProductionLog | null>(null);
   const [emergencyGroup, setEmergencyGroup] = useState<{ 생산일자: string; 제품명: string } | null>(null);
 
@@ -421,8 +427,21 @@ export default function OutboundHistoryPage() {
         출고_박스: 0,
         출고_낱개: 0,
         출고_g: 0,
+        출고자: inputterName || undefined,
       });
       await setLastUsedDate(원료명, 소비기한);
+      await insertAdditionalOutboundHistory({
+        organizationCode: orgCode,
+        productionDate: 생산일자,
+        productName: 제품명,
+        materialName: 원료명,
+        lotExpiry: 소비기한,
+        boxQty: 박스,
+        bagQty: 낱개,
+        gQty: g,
+        authorName: inputterName || undefined,
+        authorUserId: user?.id,
+      });
       setEmergencyGroup(null);
     } catch {
       alert("출고 추가에 실패했습니다. 다시 시도해 주세요.");

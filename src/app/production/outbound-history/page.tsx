@@ -12,6 +12,7 @@ import {
   resolveOutboundExpiry,
 } from "@/features/production/outbound/inventoryLots";
 import { getBomMaterialNamesForAdditionalOutbound } from "@/features/production/outbound/additionalOutboundMaterials";
+import { insertAdditionalOutboundHistory } from "@/features/production/outbound/additionalOutboundHistory";
 
 type MaterialLike = {
   materialName: string;
@@ -594,8 +595,11 @@ function additionalOutboundHref(date: string, productName: string): string {
 }
 
 export default function OutboundHistoryPage() {
-  const { profile } = useAuth();
+  const { profile, viewOrganizationCode, user } = useAuth();
   const isRestrictedWorker = profile?.role === "worker";
+  const inputterName =
+    (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
+  const orgCode = viewOrganizationCode ?? "100";
   const {
     fetchProductionLogs,
     fetchBom,
@@ -745,15 +749,27 @@ export default function OutboundHistoryPage() {
             출고_박스: 0,
             출고_낱개: 0,
             출고_g: 0,
-            출고자: group.작성자 === "—" ? undefined : group.작성자,
+            출고자: inputterName || (group.작성자 === "—" ? undefined : group.작성자),
           });
         }
+        await insertAdditionalOutboundHistory({
+          organizationCode: orgCode,
+          productionDate: group.생산일자,
+          productName: group.제품명,
+          materialName: cleanMaterial,
+          lotExpiry: cleanExpiry,
+          boxQty,
+          bagQty: Math.max(0, payload.bagQty || 0),
+          gQty,
+          authorName: inputterName || undefined,
+          authorUserId: user?.id,
+        });
         setToast({ message: "추가 출고 원료가 반영되었습니다.", type: "success" });
       } catch {
         setToast({ message: "추가 출고 저장에 실패했습니다.", type: "error" });
       }
     },
-    [appendOutboundLine, addProductionLog]
+    [appendOutboundLine, addProductionLog, inputterName, orgCode, user?.id]
   );
 
   const handleUpdateRunDate = useCallback(

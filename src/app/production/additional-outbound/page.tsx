@@ -19,6 +19,7 @@ import {
   resolveOutboundExpiry,
   type InventoryLotOption,
 } from "@/features/production/outbound/inventoryLots";
+import { insertAdditionalOutboundHistory } from "@/features/production/outbound/additionalOutboundHistory";
 import { useMasterStore, type OutboundLine } from "@/store/useMasterStore";
 
 function todayLocalIso(): string {
@@ -28,9 +29,10 @@ function todayLocalIso(): string {
 
 function AdditionalOutboundClient() {
   const searchParams = useSearchParams();
-  const { profile } = useAuth();
+  const { profile, viewOrganizationCode, user } = useAuth();
   const inputterName =
     (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
+  const orgCode = viewOrganizationCode ?? "100";
 
   const {
     fetchProductionLogs,
@@ -224,6 +226,18 @@ function AdditionalOutboundClient() {
         });
       }
       await setLastUsedDate(cleanMaterial, expiry);
+      await insertAdditionalOutboundHistory({
+        organizationCode: orgCode,
+        productionDate: date,
+        productName,
+        materialName: cleanMaterial,
+        lotExpiry: expiry,
+        boxQty: box,
+        bagQty: bag,
+        gQty: g,
+        authorName: inputterName || undefined,
+        authorUserId: user?.id,
+      });
       resetQty();
       setToast({ message: `${cleanMaterial} 추가 출고가 저장되었습니다.`, type: "success" });
     } catch {
@@ -240,11 +254,13 @@ function AdditionalOutboundClient() {
     gQty,
     inputterName,
     materialName,
+    orgCode,
     productLogs,
     productName,
     qType,
     resolvedExpiry,
     setLastUsedDate,
+    user?.id,
   ]);
 
   const busy = pending || saving === "logs";
@@ -275,6 +291,12 @@ function AdditionalOutboundClient() {
             생산 중에 원료를 더 올렸으면, 올린 사람이 여기서 바로 입력하세요.
             저장하면 사용량에도 반영됩니다.
           </p>
+          <Link
+            href="/production/additional-outbound-history"
+            className="mt-2 inline-block text-sm text-cyan-400 hover:text-cyan-300 underline"
+          >
+            추가 출고 내역 보기
+          </Link>
         </div>
 
         <section className="mb-5 rounded-2xl border border-slate-700 bg-space-800/80 p-4">

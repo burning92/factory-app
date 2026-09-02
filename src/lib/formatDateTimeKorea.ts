@@ -1,6 +1,8 @@
-/** Asia/Seoul, 24시간제. 형식: YYYY.MM.DD HH:mm */
-export function formatDateTimeKorea(iso: string | null): string {
-  if (!iso) return "—";
+function koreaDateTimeParts(iso: string | null): {
+  date: string;
+  time: string;
+} | null {
+  if (!iso) return null;
   try {
     const d = new Date(iso);
     const fmt = new Intl.DateTimeFormat("ko-KR", {
@@ -18,8 +20,28 @@ export function formatDateTimeKorea(iso: string | null): string {
     const day = parts.find((p) => p.type === "day")?.value.padStart(2, "0") ?? "";
     const hour = parts.find((p) => p.type === "hour")?.value.padStart(2, "0") ?? "";
     const minute = parts.find((p) => p.type === "minute")?.value.padStart(2, "0") ?? "";
-    return `${y}.${m}.${day} ${hour}:${minute}`;
+    return {
+      date: `${y}.${m}.${day}`,
+      time: `${hour}:${minute}`,
+    };
   } catch {
-    return "—";
+    return null;
   }
+}
+
+/** Asia/Seoul 날짜. 형식: YYYY.MM.DD */
+export function formatDateKorea(iso: string | null): string {
+  return koreaDateTimeParts(iso)?.date ?? "—";
+}
+
+/** Asia/Seoul 시간. 형식: HH:mm */
+export function formatTimeKorea(iso: string | null): string {
+  return koreaDateTimeParts(iso)?.time ?? "—";
+}
+
+/** Asia/Seoul, 24시간제. 형식: YYYY.MM.DD HH:mm */
+export function formatDateTimeKorea(iso: string | null): string {
+  const parts = koreaDateTimeParts(iso);
+  if (!parts) return "—";
+  return `${parts.date} ${parts.time}`;
 }

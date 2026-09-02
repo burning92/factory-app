@@ -36,6 +36,7 @@ const DESKTOP_DROPDOWN_MATERIALS: DropdownItem[] = [
   { href: "/inventory/ecount", label: "재고 현황" },
   { href: "/production/outbound", label: "생산 출고 입력" },
   { href: "/production/additional-outbound", label: "추가 출고" },
+  { href: "/production/additional-outbound-history", label: "추가 출고 내역" },
   { href: "/production/outbound-history", label: "생산 출고 현황" },
   { href: "/daily/raw-thawing", label: "원료 해동 일지" },
   { href: "/materials/material-receiving-inspection", label: "원료 입고 검수일지" },
@@ -90,6 +91,7 @@ const WORKER_DESKTOP_PRODUCTION: DropdownItem[] = [
 const WORKER_DESKTOP_MATERIALS: DropdownItem[] = [
   { href: "/inventory/ecount", label: "재고 현황" },
   { href: "/production/additional-outbound", label: "추가 출고" },
+  { href: "/production/additional-outbound-history", label: "추가 출고 내역" },
   { href: "/production/outbound-history", label: "생산 출고 현황" },
 ];
 

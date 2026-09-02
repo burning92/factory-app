@@ -16,6 +16,7 @@ export function isAffWorkerAllowedPath(pathname: string): boolean {
   if (pathname.startsWith("/production/plan")) return true;
   if (pathname.startsWith("/inventory/ecount")) return true;
   if (pathname.startsWith("/production/outbound-history")) return true;
+  if (pathname.startsWith("/production/additional-outbound-history")) return true;
   if (pathname.startsWith("/production/additional-outbound")) return true;
   return false;
 }

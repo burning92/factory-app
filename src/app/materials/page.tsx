@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Boxes, Package, ClipboardList, PackagePlus, Refrigerator, PackageSearch, ShoppingCart, Film } from "lucide-react";
+import { Boxes, Package, ClipboardList, PackagePlus, Refrigerator, PackageSearch, ShoppingCart, Film, History } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 const LINK_ITEMS = [
   { href: "/inventory/ecount", label: "재고 현황", Icon: Boxes },
   { href: "/production/outbound", label: "생산 출고 입력", Icon: Package },
   { href: "/production/additional-outbound", label: "추가 출고", Icon: PackagePlus },
+  { href: "/production/additional-outbound-history", label: "추가 출고 내역", Icon: History },
   { href: "/production/outbound-history", label: "생산 출고 현황", Icon: ClipboardList },
   { href: "/daily/raw-thawing", label: "원료 해동 일지", Icon: Refrigerator },
   { href: "/materials/material-receiving-inspection", label: "원료 입고 검수일지", Icon: PackageSearch },
@@ -20,6 +21,7 @@ const LINK_ITEMS = [
 const WORKER_MATERIAL_HREFS = new Set<string>([
   "/inventory/ecount",
   "/production/additional-outbound",
+  "/production/additional-outbound-history",
   "/production/outbound-history",
 ]);
 
