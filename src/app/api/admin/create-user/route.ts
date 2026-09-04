@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { toAuthEmailLocal } from "@/lib/authEmail";
 import { isAdminLikeRole } from "@/lib/roles";
+import { isFieldHeadcountRole } from "@/lib/profileFieldHeadcount";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -21,13 +22,14 @@ export async function POST(request: Request) {
     display_name?: string;
     password?: string;
     role?: string;
+    include_in_field_headcount?: boolean;
   };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "잘못된 요청" }, { status: 400 });
   }
-  const { access_token, refresh_token, organization_code, login_id, display_name, password, role } = body;
+  const { access_token, refresh_token, organization_code, login_id, display_name, password, role, include_in_field_headcount } = body;
   const allowedRoles = new Set([
     "worker",
     "assistant_manager",
@@ -36,6 +38,8 @@ export async function POST(request: Request) {
     "headquarters",
   ]);
   const profileRole = allowedRoles.has(String(role)) ? String(role) : "worker";
+  const includeInFieldHeadcount =
+    typeof include_in_field_headcount === "boolean" ? include_in_field_headcount : isFieldHeadcountRole(profileRole);
   if (!access_token || !refresh_token || !organization_code?.trim() || !login_id?.trim() || !password) {
     return NextResponse.json(
       { error: "access_token, refresh_token, organization_code, login_id, password 필요" },
@@ -93,6 +97,7 @@ export async function POST(request: Request) {
     role: profileRole,
     is_active: true,
     must_change_password: false,
+    include_in_field_headcount: includeInFieldHeadcount,
   });
   if (insertError) {
     return NextResponse.json({ error: insertError.message }, { status: 400 });

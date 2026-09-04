@@ -6,6 +6,7 @@ import { Eye, EyeOff, Copy, KeyRound, Search } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { isAdminLikeRole } from "@/lib/roles";
+import { isFieldHeadcountRole } from "@/lib/profileFieldHeadcount";
 
 function generateTempPassword(length = 12): string {
   const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -43,6 +44,7 @@ interface ProfileRow {
   role: string;
   is_active: boolean;
   must_change_password: boolean;
+  include_in_field_headcount: boolean;
   /** Supabase relation: 단일 객체 또는 배열로 올 수 있음 */
   organizations?: { organization_code: string; name: string } | { organization_code: string; name: string }[] | null;
 }
@@ -79,7 +81,7 @@ export default function ManagePage() {
   const loadProfiles = useCallback(async () => {
     const { data, error: e } = await supabase
       .from("profiles")
-      .select("id, organization_id, login_id, display_name, role, is_active, must_change_password, organizations(organization_code, name)");
+      .select("id, organization_id, login_id, display_name, role, is_active, must_change_password, include_in_field_headcount, organizations(organization_code, name)");
     if (e) {
       setError(e.message);
       return;
@@ -99,9 +101,11 @@ export default function ManagePage() {
   const [newPassword, setNewPassword] = useState("");
   const [newUserOrgCode, setNewUserOrgCode] = useState("");
   const [newUserRole, setNewUserRole] = useState<AssignableRole>("worker");
+  const [newUserIncludeInHeadcount, setNewUserIncludeInHeadcount] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [showInitialPassword, setShowInitialPassword] = useState(false);
   const [savingRoleId, setSavingRoleId] = useState<string | null>(null);
+  const [savingHeadcountId, setSavingHeadcountId] = useState<string | null>(null);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [userSearch, setUserSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("");
@@ -171,6 +175,7 @@ export default function ManagePage() {
         display_name: newDisplayName.trim() || undefined,
         password: newPassword,
         role: newUserRole,
+        include_in_field_headcount: newUserIncludeInHeadcount,
       }),
     });
     const json = await res.json();
@@ -182,13 +187,16 @@ export default function ManagePage() {
     setNewLoginId("");
     setNewDisplayName("");
     setNewPassword("");
+    setNewUserIncludeInHeadcount(isFieldHeadcountRole(newUserRole));
     loadProfiles();
   }
 
   const handleRoleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const v = e.target.value;
     const matched = ROLE_OPTIONS.find((r) => r.value === v);
-    setNewUserRole(matched?.value ?? "worker");
+    const nextRole = matched?.value ?? "worker";
+    setNewUserRole(nextRole);
+    setNewUserIncludeInHeadcount(isFieldHeadcountRole(nextRole));
   };
 
   async function handleResetPassword(userId: string) {
@@ -222,6 +230,18 @@ export default function ManagePage() {
       .from("profiles")
       .update({ is_active: !pro.is_active })
       .eq("id", pro.id);
+    if (e) setError(e.message);
+    else loadProfiles();
+  }
+
+  async function toggleIncludeInHeadcount(pro: ProfileRow) {
+    setError(null);
+    setSavingHeadcountId(pro.id);
+    const { error: e } = await supabase
+      .from("profiles")
+      .update({ include_in_field_headcount: !pro.include_in_field_headcount })
+      .eq("id", pro.id);
+    setSavingHeadcountId(null);
     if (e) setError(e.message);
     else loadProfiles();
   }
@@ -453,7 +473,7 @@ export default function ManagePage() {
         </div>
 
         <div className="mb-6 overflow-x-auto rounded-lg border border-slate-700/80 -mx-1 sm:mx-0">
-          <table className="w-full min-w-[640px] text-left text-sm text-slate-300">
+          <table className="w-full min-w-[760px] text-left text-sm text-slate-300">
             <thead>
               <tr className="border-b border-slate-600 bg-space-900/90 text-xs font-medium uppercase tracking-wide text-slate-500">
                 <th className="px-3 py-2.5 whitespace-nowrap">아이디</th>
@@ -461,13 +481,14 @@ export default function ManagePage() {
                 <th className="px-3 py-2.5 whitespace-nowrap w-20">회사</th>
                 <th className="px-3 py-2.5 whitespace-nowrap min-w-[8rem]">권한</th>
                 <th className="px-3 py-2.5 whitespace-nowrap">상태</th>
+                <th className="px-3 py-2.5 whitespace-nowrap">총원</th>
                 <th className="px-3 py-2.5 text-right whitespace-nowrap min-w-[12rem]">작업</th>
               </tr>
             </thead>
             <tbody>
               {displayedProfiles.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
+                  <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
                     조건에 맞는 사용자가 없습니다. 검색어나 필터를 바꿔 보세요.
                   </td>
                 </tr>
@@ -521,6 +542,25 @@ export default function ManagePage() {
                           </span>
                         ) : null}
                       </div>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <button
+                        type="button"
+                        onClick={() => void toggleIncludeInHeadcount(p)}
+                        disabled={submitting || savingHeadcountId === p.id}
+                        className={`rounded px-1.5 py-0.5 text-[11px] font-medium disabled:opacity-50 ${
+                          p.include_in_field_headcount
+                            ? "bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/25"
+                            : "bg-slate-700/60 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+                        }`}
+                        aria-pressed={p.include_in_field_headcount}
+                      >
+                        {savingHeadcountId === p.id
+                          ? "저장…"
+                          : p.include_in_field_headcount
+                            ? "총원에서 빼기"
+                            : "총원에 넣기"}
+                      </button>
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1">
@@ -585,6 +625,18 @@ export default function ManagePage() {
                 </option>
               ))}
             </select>
+          </div>
+          <div className="flex items-center gap-2 pb-1">
+            <input
+              id="new-user-include-headcount"
+              type="checkbox"
+              checked={newUserIncludeInHeadcount}
+              onChange={(e) => setNewUserIncludeInHeadcount(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-500 bg-space-900 text-cyan-500"
+            />
+            <label htmlFor="new-user-include-headcount" className="text-xs text-slate-300">
+              총원에 포함
+            </label>
           </div>
           <div>
             <label className="block text-xs text-slate-400 mb-1">아이디</label>
@@ -659,7 +711,8 @@ export default function ManagePage() {
         </form>
         <p className="mt-2 text-xs text-slate-500">
           추가된 사용자는 설정한 초기 비밀번호로 로그인합니다. 필요 시 비밀번호 재설정 버튼으로 변경하세요. 계정 삭제는 로그인
-          자격을 영구 제거합니다(비활성과 다름). 다른 업무 데이터에 연결된 계정은 DB 제약으로 삭제가 막힐 수 있습니다.
+          자격을 영구 제거합니다(비활성과 다름). 다른 업무 데이터에 연결된 계정은 DB 제약으로 삭제가 막힐 수 있습니다. 총원
+          포함은 월간 플래닝·인력 KPI의 현장 인원 집계에만 쓰이며, 역할과 별개입니다.
         </p>
       </section>
     </div>

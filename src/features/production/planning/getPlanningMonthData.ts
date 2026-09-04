@@ -1,8 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
-import {
-  organizationCodeFromProfileRow,
-  profileCountsTowardFieldHeadcount,
-} from "@/lib/profileFieldHeadcount";
+import { profileCountsTowardFieldHeadcount } from "@/lib/profileFieldHeadcount";
 import type {
   PlanningBomRow,
   PlanningEntryRow,
@@ -161,7 +158,7 @@ export async function getPlanningMonthData(year: number, month: number, version:
       .not("lot_no", "is", null),
     supabase
       .from("profiles")
-      .select("id,display_name,login_id,role,is_active,organizations(organization_code)")
+      .select("id,display_name,login_id,is_active,include_in_field_headcount")
       .eq("is_active", true),
   ]);
   if (leavesRes.error) throw leavesRes.error;
@@ -286,16 +283,14 @@ export async function getPlanningMonthData(year: number, month: number, version:
     id: string;
     display_name: string | null;
     login_id: string | null;
-    role?: string | null;
     is_active?: boolean | null;
-    organizations?: { organization_code?: string | null } | { organization_code?: string | null }[] | null;
+    include_in_field_headcount?: boolean | null;
   }>;
 
   const fieldHeadcountProfiles = profileRows.filter((p) =>
     profileCountsTowardFieldHeadcount({
       isActive: p.is_active !== false,
-      role: p.role,
-      organizationCode: organizationCodeFromProfileRow(p.organizations),
+      includeInFieldHeadcount: p.include_in_field_headcount === true,
       loginId: p.login_id,
     })
   );

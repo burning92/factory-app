@@ -1,8 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  organizationCodeFromProfileRow,
-  profileCountsTowardFieldHeadcount,
-} from "@/lib/profileFieldHeadcount";
+import { profileCountsTowardFieldHeadcount } from "@/lib/profileFieldHeadcount";
 
 export type ManpowerKpis = {
   periodLabel?: string;
@@ -32,7 +29,7 @@ export type ManpowerRangeParams = {
  *
  * 정책(고정):
  * - 총원 기준: production_plan_months.baseline_headcount 우선
- * - 참고 «활성 프로필» 수: 회사코드 100~199 + worker·assistant_manager·manager (로그인 test·admin 계열 제외)
+ * - 참고 «활성 프로필» 수: include_in_field_headcount=true (로그인 test·admin 계열 제외)
  * - 가동일 기준: actual_manpower > 0 인 날짜
  * - 평균 투입 인원: 가동일의 actual_manpower 평균
  * - 평균 투입률: 평균 투입 인원 / baseline_headcount
@@ -65,7 +62,7 @@ export async function getManpowerKpis(
       .eq("version_type", "master"),
     supabase
       .from("profiles")
-      .select("id,login_id,role,is_active,organizations(organization_code)")
+      .select("id,login_id,is_active,include_in_field_headcount")
       .eq("is_active", true),
   ]);
   if (monthErr) throw monthErr;
@@ -74,14 +71,12 @@ export async function getManpowerKpis(
   const totalMembers = (profileRows ?? []).filter((row) => {
     const r = row as {
       login_id?: string | null;
-      role?: string | null;
       is_active?: boolean | null;
-      organizations?: { organization_code?: string | null } | { organization_code?: string | null }[] | null;
+      include_in_field_headcount?: boolean | null;
     };
     return profileCountsTowardFieldHeadcount({
       isActive: r.is_active !== false,
-      role: r.role,
-      organizationCode: organizationCodeFromProfileRow(r.organizations),
+      includeInFieldHeadcount: r.include_in_field_headcount === true,
       loginId: r.login_id,
     });
   }).length;

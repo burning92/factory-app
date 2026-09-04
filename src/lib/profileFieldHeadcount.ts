@@ -1,4 +1,4 @@
-/** 월간 플래닝·인력 KPI 등 «현장 총원» 참고 집계에 쓰는 역할 */
+/** 월간 플래닝·인력 KPI 등 «현장 총원» 참고 집계에 쓰는 역할 (로테이션 명단·신규 계정 기본값용) */
 export const FIELD_HEADCOUNT_ROLES = ["worker", "assistant_manager", "manager"] as const;
 
 export type FieldHeadcountRole = (typeof FIELD_HEADCOUNT_ROLES)[number];
@@ -38,17 +38,16 @@ export function isExcludedFromRotationRosterByLoginId(loginId: string | null | u
   return id === "test" || id.startsWith("test");
 }
 
-/** 활성 + 100번대 조직 + 현장 직군만 «총원» 참고 집계에 포함 (test·admin 계열 로그인 제외) */
+/** 활성 + 총원 포함 지정만 «총원» 참고 집계에 포함 (test·admin 계열 로그인은 지정과 무관하게 제외) */
 export function profileCountsTowardFieldHeadcount(params: {
   isActive: boolean;
-  role: string | null | undefined;
-  organizationCode: string | null | undefined;
+  includeInFieldHeadcount: boolean;
   loginId?: string | null | undefined;
 }): boolean {
   if (!params.isActive) return false;
+  if (!params.includeInFieldHeadcount) return false;
   if (isExcludedFromFieldHeadcountByLoginId(params.loginId)) return false;
-  if (!isFieldHeadcountRole(params.role)) return false;
-  return isOrgCodeHundredSeries(params.organizationCode);
+  return true;
 }
 
 export function organizationCodeFromProfileRow(

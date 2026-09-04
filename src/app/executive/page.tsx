@@ -941,8 +941,8 @@ export default function ExecutiveDashboardPage() {
                   </button>
                 }
               >
-                선택한 기간의 평균 투입 인원을 기준 총원(baseline headcount)과 비교한 수치입니다. 참고 인원 수는 회사코드
-                100~199 소속이면서 worker·준매니저·매니저 역할만 집계합니다. 생산성은 1인당 하루 평균 생산량입니다.
+                선택한 기간의 평균 투입 인원을 기준 총원(baseline headcount)과 비교한 수치입니다. 참고 인원 수는 관리
+                화면에서 «총원 포함»으로 지정한 활성 계정만 집계합니다. 생산성은 1인당 하루 평균 생산량입니다.
               </ExecutivePortalTooltip>
             </div>
             {manpower?.productivityPerPersonDay != null && (

@@ -1045,7 +1045,7 @@ export default function PlanningBoardClient() {
                               </p>
                             )}
                             <p className="text-[10px] text-slate-500 mt-1">
-                              현장 인원 집계(100~199조직, 워커·준매니저·매니저, test·admin 로그인 제외) {operationalMetrics.totalMembers}명 (참고)
+                              현장 인원 집계(총원 포함으로 지정한 활성 계정, test·admin 로그인 제외) {operationalMetrics.totalMembers}명 (참고)
                             </p>
                             {canEdit ? (
                               <p className="text-[10px] text-slate-600 mt-1 leading-snug">월별로 다를 때만 숫자 바꾼 뒤 적용하세요.</p>
