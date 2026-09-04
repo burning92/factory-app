@@ -349,25 +349,36 @@ export function computeProcessedRows(params: {
   entries: PlanningEntryRow[];
   notes: PlanningNoteRow[];
   manpowerRows: PlanningManpowerRow[];
+  totalMembers: number;
 }): PlanningProcessedRow[] {
-  const { entries, notes, manpowerRows } = params;
+  const { entries, notes, manpowerRows, totalMembers } = params;
   const notesByDate = new Map<string, string>();
   for (const n of notes) {
     const prev = notesByDate.get(n.plan_date);
     notesByDate.set(n.plan_date, prev ? `${prev}\n${n.note_text}` : n.note_text);
   }
-  const manpowerByDate = new Map<string, number>();
+  const leaveByDate = new Map<string, { annual: number; half: number; other: number }>();
   for (const m of manpowerRows) {
-    manpowerByDate.set(m.plan_date, Number(m.actual_manpower ?? 0));
+    leaveByDate.set(m.plan_date, {
+      annual: Number(m.annual_leave_count) || 0,
+      half: Number(m.half_day_count) || 0,
+      other: Number(m.other_count) || 0,
+    });
   }
   return entries
     .slice()
     .sort((a, b) => a.plan_date.localeCompare(b.plan_date) || a.sort_order - b.sort_order)
-    .map((e) => ({
-      plan_date: e.plan_date,
-      product_name: e.product_name_snapshot,
-      qty: e.qty,
-      manpower: manpowerByDate.get(e.plan_date) ?? 0,
-      note: notesByDate.get(e.plan_date) ?? "",
-    }));
+    .map((e) => {
+      const leave = leaveByDate.get(e.plan_date);
+      const manpower = leave
+        ? computeActualManpower(totalMembers, leave.annual, leave.half, leave.other)
+        : totalMembers;
+      return {
+        plan_date: e.plan_date,
+        product_name: e.product_name_snapshot,
+        qty: e.qty,
+        manpower,
+        note: notesByDate.get(e.plan_date) ?? "",
+      };
+    });
 }

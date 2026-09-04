@@ -8,6 +8,7 @@ import {
   opsPayloadForSave,
   applyWorkerConstraintsMap,
   constraintsForPut,
+  constraintsJsonForDb,
   seedPositionRows,
   skillsFromRows,
   workerConstraintsMapFromPayload,
@@ -16,10 +17,7 @@ import {
 } from "@/features/production/rotation/persist";
 import { ROTATION_FACTORY_ORG } from "@/features/production/rotation/factoryOrg";
 import { defaultWorkerFields } from "@/features/production/rotation/planningLeave";
-import {
-  isExcludedFromRotationRosterByLoginId,
-  isRotationRosterRole,
-} from "@/lib/profileFieldHeadcount";
+import { profileCountsTowardFieldHeadcount } from "@/lib/profileFieldHeadcount";
 import type { Person, ProductGroup } from "@/features/production/rotation/types";
 
 const READ_ROLES = ["manager", "quality_manager", "headquarters", "admin"];
@@ -96,9 +94,9 @@ type ProfileRow = {
   id: string;
   display_name: string | null;
   login_id: string | null;
-  role: string | null;
   is_active: boolean | null;
   hire_date: string | null;
+  include_in_field_headcount: boolean | null;
 };
 
 async function factoryProfiles() {
@@ -111,14 +109,15 @@ async function factoryProfiles() {
   if (!org?.id) return { admin, profiles: [] as ProfileRow[] };
   const { data } = await admin
     .from("profiles")
-    .select("id,display_name,login_id,role,is_active,hire_date")
+    .select("id,display_name,login_id,is_active,hire_date,include_in_field_headcount")
     .eq("organization_id", org.id)
     .eq("is_active", true);
-  const profiles = ((data ?? []) as ProfileRow[]).filter(
-    (p) =>
-      p.is_active !== false &&
-      isRotationRosterRole(p.role) &&
-      !isExcludedFromRotationRosterByLoginId(p.login_id)
+  const profiles = ((data ?? []) as ProfileRow[]).filter((p) =>
+    profileCountsTowardFieldHeadcount({
+      isActive: p.is_active !== false,
+      includeInFieldHeadcount: p.include_in_field_headcount === true,
+      loginId: p.login_id,
+    })
   );
   profiles.sort((a, b) => {
     const an = (a.display_name ?? a.login_id ?? "").trim();
@@ -176,18 +175,7 @@ async function syncWorkersFromProfiles() {
       | { preferred?: string; shift?: string; worker_group?: string; constraints?: unknown }
       | undefined;
     const hint = defaultWorkerFields(name);
-    const row: {
-      organization_code: string;
-      worker_id: string;
-      name: string;
-      preferred: string;
-      shift: string;
-      worker_group: string;
-      sort_order: number;
-      is_active: boolean;
-      updated_at: string;
-      constraints?: unknown;
-    } = {
+    const row = {
       organization_code: org,
       worker_id: p.id,
       name,
@@ -197,8 +185,8 @@ async function syncWorkersFromProfiles() {
       sort_order: i,
       is_active: true,
       updated_at: new Date().toISOString(),
+      constraints: constraintsJsonForDb(prev?.constraints),
     };
-    if (prev && "constraints" in prev) row.constraints = prev.constraints;
     return row;
   });
   if (upserts.length > 0) {
@@ -336,7 +324,7 @@ export async function PUT(req: NextRequest) {
       worker_group: w.group,
       sort_order: i,
       is_active: true,
-      constraints: constraintsForPut(w.constraints, live?.constraints, prevOpsMap[w.id]),
+      constraints: constraintsJsonForDb(constraintsForPut(w.constraints, live?.constraints, prevOpsMap[w.id])),
       updated_at: new Date().toISOString(),
     };
   });
@@ -346,10 +334,10 @@ export async function PUT(req: NextRequest) {
   if (workerRows.length > 0) {
     const { error: wErr } = await admin.from("rotation_workers").upsert(workerRows, { onConflict: "organization_code,worker_id" });
     if (wErr && /constraints/i.test(wErr.message)) {
-      const without = workerRows.map(({ constraints: _c, ...rest }) => rest);
-      const retry = await admin.from("rotation_workers").upsert(without, { onConflict: "organization_code,worker_id" });
+      const withEmpty = workerRows.map((r) => ({ ...r, constraints: constraintsJsonForDb(r.constraints) }));
+      const retry = await admin.from("rotation_workers").upsert(withEmpty, { onConflict: "organization_code,worker_id" });
       if (retry.error) return NextResponse.json({ error: retry.error.message }, { status: 500 });
-      constraintsColumnOk = false;
+      constraintsColumnOk = true;
     } else if (wErr) {
       return NextResponse.json({ error: wErr.message }, { status: 500 });
     }

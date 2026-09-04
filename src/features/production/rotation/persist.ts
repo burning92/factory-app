@@ -84,6 +84,14 @@ export function constraintsForPut(
   return mergePersonConstraints(mergePersonConstraints(liveWorker, liveOps), incoming);
 }
 
+/** rotation_workers.constraints는 NOT NULL이라 upsert 시 null/누락을 빈 객체로 보낸다. */
+export function constraintsJsonForDb(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
+}
+
 export function opsPayloadForSave(
   ops: RotationOps | undefined,
   workerConstraints: Record<string, PersonConstraints>

@@ -3,6 +3,7 @@ import { constraintsForSave } from "./personRules";
 import {
   applyWorkerConstraintsMap,
   constraintsForPut,
+  constraintsJsonForDb,
   mergeWorkerAndOpsConstraints,
   workerConstraintsMapFromPayload,
   workersFromRows,
@@ -44,6 +45,12 @@ function roundTripGet(
 }
 
 describe("constraints 저장→조회 round-trip", () => {
+  it("DB upsert용 constraints는 null이면 빈 객체다", () => {
+    expect(constraintsJsonForDb(null)).toEqual({});
+    expect(constraintsJsonForDb(undefined)).toEqual({});
+    expect(constraintsJsonForDb({ excluded: true })).toEqual({ excluded: true });
+  });
+
   it("테스트 1: excluded 저장 후 조회하면 true다", () => {
     const saved = constraintsForPut({ excluded: true }, {}, {});
     expect(saved.excluded).toBe(true);

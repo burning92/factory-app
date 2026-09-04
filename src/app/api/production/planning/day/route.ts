@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { computeActualManpower } from "@/features/production/planning/calculations";
+import { countFactoryFieldHeadcount } from "@/features/production/planning/countFactoryFieldHeadcount";
 import {
   isHalfDayLeaveType,
   parsePlanningLeaveType,
@@ -58,18 +59,18 @@ export async function POST(request: Request) {
   const annualFromLeaves = leavesForCount.filter((l) => !isHalfDayLeaveType(l.leave_type)).length;
   const halfFromLeaves = leavesForCount.filter((l) => isHalfDayLeaveType(l.leave_type)).length;
 
-  const actualManpower = computeActualManpower(
-    Number(payload.baseline_headcount) || 0,
-    annualFromLeaves,
-    halfFromLeaves,
-    Number(payload.other_count) || 0
-  );
-
   try {
     const monthId = payload.month_id;
     const planDate = payload.plan_date;
     const planYear = Number(planDate.slice(0, 4));
     const planMonth = Number(planDate.slice(5, 7));
+    const totalMembers = await countFactoryFieldHeadcount(admin);
+    const actualManpower = computeActualManpower(
+      totalMembers,
+      annualFromLeaves,
+      halfFromLeaves,
+      Number(payload.other_count) || 0
+    );
 
     const { error: delEntriesErr } = await admin
       .from("production_plan_entries")

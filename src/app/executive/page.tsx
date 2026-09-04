@@ -941,8 +941,8 @@ export default function ExecutiveDashboardPage() {
                   </button>
                 }
               >
-                선택한 기간의 평균 투입 인원을 기준 총원(baseline headcount)과 비교한 수치입니다. 참고 인원 수는 관리
-                화면에서 «총원 포함»으로 지정한 활성 계정만 집계합니다. 생산성은 1인당 하루 평균 생산량입니다.
+                선택한 기간의 평균 투입 인원을 총원(관리 화면에서 총원 포함으로 지정한 공장 계정)과 비교한 수치입니다.
+                일자별 투입은 총원에서 연차·반차·기타를 뺀 값입니다. 생산성은 1인당 하루 평균 생산량입니다.
               </ExecutivePortalTooltip>
             </div>
             {manpower?.productivityPerPersonDay != null && (
@@ -997,9 +997,8 @@ export default function ExecutiveDashboardPage() {
 
                     <div className={`mt-8 border-t border-slate-700/35 pt-5 ${dashMutedMeta} leading-relaxed`}>
                       <p className="tabular-nums">
-                        평균 투입 인원 {manpower.avgActualManpowerThisMonth?.toFixed(1) ?? "—"}명 · 기준 총원{" "}
-                        {manpower.baselineHeadcount}명
-                        <span className="text-slate-500"> (현장 인원 집계 {manpower.totalMembers}명)</span>
+                        평균 투입 인원 {manpower.avgActualManpowerThisMonth?.toFixed(1) ?? "—"}명 · 총원{" "}
+                        {manpower.totalMembers}명
                       </p>
                       <p className="mt-2 flex flex-wrap items-center gap-x-1 tabular-nums text-slate-400">
                         <span>

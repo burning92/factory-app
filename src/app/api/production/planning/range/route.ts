@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { computeActualManpower } from "@/features/production/planning/calculations";
+import { countFactoryFieldHeadcount } from "@/features/production/planning/countFactoryFieldHeadcount";
 import {
   isHalfDayLeaveType,
   parsePlanningLeaveType,
@@ -117,9 +118,7 @@ async function ensureMonthId(admin: AdminClient, year: number, month: number): P
 }
 
 async function rebuildDayDerived(admin: AdminClient, planDate: string, monthId: string) {
-  const { data: monthRow, error: monthErr } = await admin.from("production_plan_months").select("baseline_headcount").eq("id", monthId).single();
-  if (monthErr) throw monthErr;
-  const baseline = Number(monthRow.baseline_headcount ?? 25) || 25;
+  const baseline = await countFactoryFieldHeadcount(admin);
 
   const [{ data: leaves }, { data: notes }, { data: entries }, { data: profiles }] = await Promise.all([
     admin.from("production_plan_leaves").select("leave_type,person_name").eq("month_id", monthId).eq("plan_date", planDate),

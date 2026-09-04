@@ -16,7 +16,7 @@ export function isFieldHeadcountRole(role: string | null | undefined): boolean {
   return r === "worker" || r === "assistant_manager" || r === "manager";
 }
 
-/** 당일 로테이션 명단. 현장 총원보다 넓게, 공장 관리자·품질팀장도 넣는다 */
+/** 당일 로테이션 명단도 총원 포함 지정과 같다. 역할로 넣지 않는다 */
 export function isRotationRosterRole(role: string | null | undefined): boolean {
   const r = (role ?? "").trim();
   return isFieldHeadcountRole(r) || r === "admin" || r === "quality_manager";

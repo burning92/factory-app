@@ -171,8 +171,6 @@ export default function PlanningBoardClient() {
   const [rightPanelTab, setRightPanelTab] = useState<"summary" | "products" | "materials" | "processed">("summary");
   const [productPlanExpanded, setProductPlanExpanded] = useState(false);
   const [showNoteInput, setShowNoteInput] = useState(false);
-  const [baselineSaving, setBaselineSaving] = useState(false);
-  const [baselineInput, setBaselineInput] = useState("");
   const [rangeModalOpen, setRangeModalOpen] = useState(false);
   const [rangeSaving, setRangeSaving] = useState(false);
   const [rangeError, setRangeError] = useState<string | null>(null);
@@ -260,43 +258,6 @@ export default function PlanningBoardClient() {
     setSelectedDate((prev) => (prev < start || prev > end ? start : prev));
   }, [authLoading, canView, month, year]);
 
-  const saveBaselineHeadcount = useCallback(async () => {
-    if (!canEdit || !data) return;
-    const n = Number(baselineInput);
-    if (!Number.isFinite(n) || n < 1 || n > 500) {
-      setError("기준 인원은 1~500 사이 숫자로 입력하세요.");
-      return;
-    }
-    setBaselineSaving(true);
-    setError(null);
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session?.access_token) {
-      setBaselineSaving(false);
-      setError("로그인 세션이 없습니다.");
-      return;
-    }
-    const res = await fetch("/api/production/planning/month", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        access_token: session.access_token,
-        refresh_token: session.refresh_token ?? "",
-        year,
-        month,
-        baseline_headcount: Math.round(n),
-      }),
-    });
-    const json = (await res.json()) as { ok?: boolean; error?: string; message?: string };
-    setBaselineSaving(false);
-    if (!res.ok || !json.ok) {
-      setError(json.message ?? json.error ?? "기준 인원 저장 실패");
-      return;
-    }
-    await loadMonth();
-  }, [baselineInput, canEdit, data, loadMonth, month, year]);
-
   useEffect(() => {
     loadMonth();
   }, [loadMonth]);
@@ -309,12 +270,6 @@ export default function PlanningBoardClient() {
     );
   }
   if (!canView) return null;
-
-  useEffect(() => {
-    if (data?.month) {
-      setBaselineInput(String(Number(data.month.baseline_headcount) || 25));
-    }
-  }, [data?.month?.baseline_headcount, data?.month?.id]);
 
   useEffect(() => {
     setDayDrawerOpen(false);
@@ -513,7 +468,7 @@ export default function PlanningBoardClient() {
       year,
       month,
       entries: data.entries,
-      baselineHeadcount: Number(data.month.baseline_headcount) || 25,
+      baselineHeadcount: data.totalMembers ?? 0,
       totalMembers: data.totalMembers ?? 0,
     });
   }, [data, month, year]);
@@ -524,6 +479,7 @@ export default function PlanningBoardClient() {
       entries: data.entries,
       notes: data.notes,
       manpowerRows: data.manpower,
+      totalMembers: data.totalMembers ?? 0,
     });
   }, [data]);
 
@@ -543,9 +499,9 @@ export default function PlanningBoardClient() {
     () => draft.leaves.filter((l) => isHalfDayLeaveType(l.leave_type) && l.person_name.trim().length > 0).length,
     [draft.leaves]
   );
-  const baselineHeadcount = data?.month.baseline_headcount ?? Math.max(1, data?.totalMembers ?? 25);
+  const rosterHeadcount = data?.totalMembers ?? 0;
   const selectedActualManpower = computeActualManpower(
-    baselineHeadcount,
+    rosterHeadcount,
     annualCount,
     halfCount,
     draft.otherItems.filter((x) => x.person_name.trim() && x.detail.trim()).length
@@ -601,7 +557,7 @@ export default function PlanningBoardClient() {
       annual_leave_count: annualCount,
       half_day_count: halfCount,
       other_count: draft.otherItems.filter((x) => x.person_name.trim() && x.detail.trim()).length,
-      baseline_headcount: baselineHeadcount,
+      baseline_headcount: rosterHeadcount,
     };
 
     const res = await fetch("/api/production/planning/day", {
@@ -727,7 +683,7 @@ export default function PlanningBoardClient() {
       annual_leave_count: annualCount,
       half_day_count: halfCount,
       other_count: draft.otherItems.filter((x) => x.person_name.trim() && x.detail.trim()).length,
-      baseline_headcount: baselineHeadcount,
+      baseline_headcount: rosterHeadcount,
     };
     const {
       data: { session },
@@ -1017,39 +973,13 @@ export default function PlanningBoardClient() {
                         <h3 className="text-sm font-semibold text-slate-100">운영 지표</h3>
                         <div className="mt-3 grid grid-cols-2 gap-3">
                           <div className="rounded-xl border border-slate-600/70 bg-space-900/55 p-3">
-                            <p className="text-[10px] font-medium text-slate-500">기준 인원</p>
-                            {canEdit ? (
-                              <div className="mt-1 flex flex-wrap items-center gap-2">
-                                <input
-                                  type="number"
-                                  min={1}
-                                  max={500}
-                                  inputMode="numeric"
-                                  className="w-[5.5rem] rounded-lg border border-slate-600 bg-space-800 px-2 py-1.5 text-lg font-semibold tabular-nums text-slate-100"
-                                  value={baselineInput}
-                                  onChange={(e) => setBaselineInput(e.target.value)}
-                                />
-                                <span className="text-sm text-slate-400">명</span>
-                                <button
-                                  type="button"
-                                  onClick={() => void saveBaselineHeadcount()}
-                                  disabled={baselineSaving}
-                                  className="rounded-md border border-cyan-500/50 bg-cyan-950/40 px-2 py-1 text-[11px] font-medium text-cyan-200 hover:bg-cyan-900/50 disabled:opacity-50"
-                                >
-                                  {baselineSaving ? "저장…" : "적용"}
-                                </button>
-                              </div>
-                            ) : (
-                              <p className="mt-1 text-xl font-semibold tabular-nums text-slate-100">
-                                {operationalMetrics.baselineHeadcount.toLocaleString("ko-KR")}
-                              </p>
-                            )}
-                            <p className="text-[10px] text-slate-500 mt-1">
-                              현장 인원 집계(총원 포함으로 지정한 활성 계정, test·admin 로그인 제외) {operationalMetrics.totalMembers}명 (참고)
+                            <p className="text-[10px] font-medium text-slate-500">총원</p>
+                            <p className="mt-1 text-xl font-semibold tabular-nums text-slate-100">
+                              {operationalMetrics.totalMembers.toLocaleString("ko-KR")}
                             </p>
-                            {canEdit ? (
-                              <p className="text-[10px] text-slate-600 mt-1 leading-snug">월별로 다를 때만 숫자 바꾼 뒤 적용하세요.</p>
-                            ) : null}
+                            <p className="text-[10px] text-slate-500 mt-1">
+                              관리 화면에서 총원 포함으로 지정한 공장 활성 계정. 일자별 투입 인원은 여기서 연차·반차·기타를 뺀 값입니다.
+                            </p>
                           </div>
                           <div className="rounded-xl border border-slate-600/70 bg-space-900/55 p-3">
                             <p className="text-[10px] font-medium text-slate-500">총 가동일</p>
@@ -1287,7 +1217,7 @@ export default function PlanningBoardClient() {
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
                           <h3 className="text-sm font-semibold text-slate-100">가공 데이터</h3>
-                          <p className="text-[10px] text-slate-500 mt-0.5">가공 시트 연동 행 · 스크롤 또는 CSV</p>
+                          <p className="text-[10px] text-slate-500 mt-0.5">일자별 투입 인원 = 총원 − 연차 − 반차×0.5 − 기타 · CSV 동일</p>
                         </div>
                         <button
                           type="button"
@@ -1755,7 +1685,7 @@ export default function PlanningBoardClient() {
                     <p className="text-slate-300">
                       실투입인원(자동){" "}
                       <span className="tabular-nums text-base font-semibold text-cyan-200">{selectedActualManpower.toLocaleString("ko-KR")}</span>
-                      <span className="text-slate-500"> (기준 {baselineHeadcount})</span>
+                      <span className="text-slate-500"> (총원 {rosterHeadcount})</span>
                     </p>
                     <p className="text-slate-400">연차 {annualCount} · 반차 {halfCount}</p>
                   </div>

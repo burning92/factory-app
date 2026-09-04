@@ -1,5 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
-import { profileCountsTowardFieldHeadcount } from "@/lib/profileFieldHeadcount";
+import { isFactoryFieldHeadcountProfile } from "@/features/production/planning/countFactoryFieldHeadcount";
 import type {
   PlanningBomRow,
   PlanningEntryRow,
@@ -158,7 +158,7 @@ export async function getPlanningMonthData(year: number, month: number, version:
       .not("lot_no", "is", null),
     supabase
       .from("profiles")
-      .select("id,display_name,login_id,is_active,include_in_field_headcount")
+      .select("id,display_name,login_id,is_active,include_in_field_headcount,organizations(organization_code)")
       .eq("is_active", true),
   ]);
   if (leavesRes.error) throw leavesRes.error;
@@ -285,15 +285,10 @@ export async function getPlanningMonthData(year: number, month: number, version:
     login_id: string | null;
     is_active?: boolean | null;
     include_in_field_headcount?: boolean | null;
+    organizations?: { organization_code?: string | null } | { organization_code?: string | null }[] | null;
   }>;
 
-  const fieldHeadcountProfiles = profileRows.filter((p) =>
-    profileCountsTowardFieldHeadcount({
-      isActive: p.is_active !== false,
-      includeInFieldHeadcount: p.include_in_field_headcount === true,
-      loginId: p.login_id,
-    })
-  );
+  const fieldHeadcountProfiles = profileRows.filter((p) => isFactoryFieldHeadcountProfile(p));
 
   const people = fieldHeadcountProfiles
     .map((p) => ({
