@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -9,21 +9,57 @@ import {
   formatAdditionalOutboundWeight,
   type AdditionalOutboundHistoryRow,
 } from "@/features/production/outbound/additionalOutboundHistory";
+import {
+  listProductionOutboundDates,
+  pickProductionOutboundDate,
+} from "@/features/production/outbound/additionalOutboundMaterials";
 import { formatDateKorea, formatTimeKorea } from "@/lib/formatDateTimeKorea";
+import { useMasterStore } from "@/store/useMasterStore";
+
+function todayLocalIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 export default function AdditionalOutboundHistoryPage() {
   const { viewOrganizationCode } = useAuth();
   const orgCode = viewOrganizationCode ?? "100";
 
+  const { fetchProductionLogs, productionLogs, productionLogsLoading } = useMasterStore();
+
+  const [filterDate, setFilterDate] = useState("");
   const [rows, setRows] = useState<AdditionalOutboundHistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    fetchProductionLogs();
+  }, [fetchProductionLogs]);
+
+  const outboundDates = useMemo(
+    () => listProductionOutboundDates(productionLogs),
+    [productionLogs]
+  );
+
+  useEffect(() => {
+    if (productionLogsLoading) return;
+    setFilterDate((prev) =>
+      pickProductionOutboundDate(outboundDates, prev, todayLocalIso())
+    );
+  }, [productionLogsLoading, outboundDates]);
+
   const load = useCallback(async () => {
+    if (!filterDate) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchAdditionalOutboundHistory(orgCode);
+      const data = await fetchAdditionalOutboundHistory(orgCode, {
+        productionDate: filterDate,
+      });
       setRows(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "내역을 불러오지 못했습니다.");
@@ -31,7 +67,7 @@ export default function AdditionalOutboundHistoryPage() {
     } finally {
       setLoading(false);
     }
-  }, [orgCode]);
+  }, [orgCode, filterDate]);
 
   useEffect(() => {
     void load();
@@ -53,19 +89,44 @@ export default function AdditionalOutboundHistoryPage() {
           </p>
         </div>
 
+        <section className="mb-5 rounded-2xl border border-slate-700 bg-space-800/80 p-4">
+          <label className="block text-xs font-medium text-slate-400 mb-1.5">출고 날짜</label>
+          {productionLogsLoading ? (
+            <p className="text-sm text-slate-500 py-2">출고 날짜 불러오는 중…</p>
+          ) : outboundDates.length === 0 ? (
+            <p className="text-sm text-slate-400 py-2">
+              생산 출고가 잡힌 날짜가 없습니다. 1차 출고 입력 후 조회할 수 있습니다.
+            </p>
+          ) : (
+            <select
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+              className="w-full max-w-xs px-3 py-2.5 rounded-xl bg-space-900 border border-slate-600 text-slate-100"
+            >
+              {outboundDates.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          )}
+        </section>
+
         {error ? (
           <div className="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
             {error}
           </div>
         ) : null}
 
-        {loading ? (
+        {productionLogsLoading || loading ? (
           <p className="text-sm text-slate-500 py-10 text-center">불러오는 중…</p>
-        ) : rows.length === 0 ? (
+        ) : outboundDates.length === 0 ? null : rows.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-600 bg-space-800/50 p-8 text-center">
-            <p className="text-sm text-slate-300">저장된 추가 출고 내역이 없습니다.</p>
+            <p className="text-sm text-slate-300">
+              {filterDate}에 저장된 추가 출고 내역이 없습니다.
+            </p>
             <Link
-              href="/production/additional-outbound"
+              href={`/production/additional-outbound?date=${encodeURIComponent(filterDate)}`}
               className="mt-4 inline-flex items-center justify-center px-4 py-2 rounded-xl bg-cyan-500 text-space-900 text-sm font-medium hover:bg-cyan-400"
             >
               추가 출고 입력

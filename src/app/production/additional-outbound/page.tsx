@@ -10,6 +10,8 @@ import {
   getBomMaterialNamesForAdditionalOutbound,
   getMaterialQuantityType,
   listAdditionalOutboundProducts,
+  listProductionOutboundDates,
+  pickProductionOutboundDate,
   planAdditionalOutbound,
   validateAdditionalOutboundQty,
 } from "@/features/production/outbound/additionalOutboundMaterials";
@@ -51,7 +53,7 @@ function AdditionalOutboundClient() {
   const queryDate = (searchParams.get("date") ?? "").slice(0, 10);
   const queryProduct = (searchParams.get("product") ?? "").trim();
 
-  const [date, setDate] = useState(queryDate || todayLocalIso());
+  const [date, setDate] = useState("");
   const [productName, setProductName] = useState(queryProduct);
   const [materialName, setMaterialName] = useState("");
   const [boxQty, setBoxQty] = useState("");
@@ -72,9 +74,18 @@ function AdditionalOutboundClient() {
   }, [fetchProductionLogs, fetchBom, fetchMaterials]);
 
   useEffect(() => {
-    if (queryDate) setDate(queryDate);
     if (queryProduct) setProductName(queryProduct);
-  }, [queryDate, queryProduct]);
+  }, [queryProduct]);
+
+  const outboundDates = useMemo(
+    () => listProductionOutboundDates(productionLogs),
+    [productionLogs]
+  );
+
+  useEffect(() => {
+    if (productionLogsLoading) return;
+    setDate((prev) => pickProductionOutboundDate(outboundDates, queryDate || prev, todayLocalIso()));
+  }, [productionLogsLoading, outboundDates, queryDate]);
 
   const products = useMemo(
     () => listAdditionalOutboundProducts(productionLogs, date),
@@ -301,23 +312,43 @@ function AdditionalOutboundClient() {
 
         <section className="mb-5 rounded-2xl border border-slate-700 bg-space-800/80 p-4">
           <label className="block text-xs font-medium text-slate-400 mb-1.5">출고 날짜</label>
-          <DateWheelPicker
-            value={date}
-            onChange={(v) => {
-              setDate(v);
-              setProductName("");
-              setMaterialName("");
-              resetQty();
-            }}
-            className="w-full px-3 py-2.5 rounded-xl bg-space-900 border border-slate-600 text-slate-100"
-            placeholder="날짜 선택"
-          />
+          {productionLogsLoading ? (
+            <p className="text-sm text-slate-500 py-2">출고 날짜 불러오는 중…</p>
+          ) : outboundDates.length === 0 ? (
+            <p className="text-sm text-slate-400 py-2">
+              생산 출고가 잡힌 날짜가 없습니다. 1차 출고 입력 후 이용해 주세요.
+            </p>
+          ) : (
+            <select
+              value={date}
+              onChange={(e) => {
+                setDate(e.target.value);
+                setProductName("");
+                setMaterialName("");
+                resetQty();
+              }}
+              className="w-full px-3 py-2.5 rounded-xl bg-space-900 border border-slate-600 text-slate-100"
+            >
+              {outboundDates.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          )}
         </section>
 
         <section className="mb-5">
           <h2 className="text-sm font-semibold text-slate-200 mb-2">1. 제품 선택</h2>
           {productionLogsLoading ? (
             <p className="text-sm text-slate-500 py-6 text-center">출고 목록 불러오는 중…</p>
+          ) : outboundDates.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-600 bg-space-800/50 p-5 text-center">
+              <p className="text-sm text-slate-300">생산 출고가 잡힌 날짜가 없습니다.</p>
+              <p className="mt-1 text-xs text-slate-500">
+                1차 출고 입력 후 추가 출고할 수 있습니다.
+              </p>
+            </div>
           ) : products.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-600 bg-space-800/50 p-5 text-center">
               <p className="text-sm text-slate-300">이 날짜에 이미 출고된 제품이 없습니다.</p>

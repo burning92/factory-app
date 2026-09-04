@@ -444,19 +444,7 @@ function totalGFromQty(
   return box * material.boxWeightG + nack * unitG + g;
 }
 
-function getLines(log: ProductionLog): OutboundLine[] {
-  if (Array.isArray(log.출고_라인) && log.출고_라인.length > 0) {
-    return log.출고_라인;
-  }
-  return [
-    {
-      소비기한: log.소비기한 ?? "",
-      박스: log.출고_박스 ?? 0,
-      낱개: log.출고_낱개 ?? 0,
-      g: log.출고_g ?? 0,
-    },
-  ];
-}
+import { getOutboundLinesFromLog } from "@/features/production/history/outboundFromLogs";
 
 /** 날짜별 그룹: 날짜 + 해당 날짜 로그 목록 */
 function groupLogsByDate(logs: ProductionLog[]): { date: string; logs: ProductionLog[] }[] {
@@ -734,7 +722,7 @@ function buildInitialMaterials(
     const materialName = (log.원료명 ?? "").trim();
     if (!materialName) continue;
     const mat = materials.find((m) => m.materialName === materialName);
-    const lines = getLines(log);
+    const lines = getOutboundLinesFromLog(log);
     for (const line of lines) {
       const outboundG = totalGFromQty(
         line.박스 ?? 0,
@@ -1261,6 +1249,24 @@ function UsageCalculationPageContent() {
     requiredBomMaterialsByDate,
   ]);
 
+  const applyMergedOutbound = useCallback(
+    (date: string, state: DateGroupState): DateGroupState => {
+      const logs = productionLogs.filter((l) => (l.생산일자 ?? "").slice(0, 10) === date);
+      return {
+        ...state,
+        materials: mergeOutboundFromLogsForDate(
+          date,
+          state.materials,
+          logs,
+          materialsList,
+          requiredBomMaterialsByDate[date] ?? [],
+          groupStateByDate
+        ),
+      };
+    },
+    [productionLogs, materialsList, groupStateByDate, requiredBomMaterialsByDate]
+  );
+
   const getOrInitGroupState = useCallback(
     (date: string): DateGroupState => {
       const cached = groupStateByDate[date];
@@ -1320,18 +1326,18 @@ function UsageCalculationPageContent() {
             },
             defaultAuthor
           );
-          return {
+          return applyMergedOutbound(date, {
             ...migrated,
             products: products,
             secondClosure: normalizeGroupSecondClosure(migrated, logs, bomList),
-          };
+          });
         }
         const migrated = migrateSingleState(cached, defaultAuthor);
-        return {
+        return applyMergedOutbound(date, {
           ...migrated,
           products: getFinishedProductsFromLogs(logs),
           secondClosure: normalizeGroupSecondClosure(migrated, logs, bomList),
-        };
+        });
       }
       return createInitialDateGroupState(
         date,
@@ -1342,7 +1348,7 @@ function UsageCalculationPageContent() {
         groupStateByDate
       );
     },
-    [groupStateByDate, productionLogs, materialsList, defaultAuthor, bomList]
+    [groupStateByDate, productionLogs, materialsList, defaultAuthor, bomList, applyMergedOutbound]
   );
 
   const setGroupState = useCallback((date: string, state: DateGroupState) => {

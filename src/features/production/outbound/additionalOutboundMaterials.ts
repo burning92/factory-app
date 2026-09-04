@@ -60,6 +60,31 @@ export function planAdditionalOutbound(
   return { action: "create" };
 }
 
+/** production_logs에 출고가 잡힌 생산일자 목록 (최신순) */
+export function listProductionOutboundDates(
+  logs: Array<{ 생산일자: string }>
+): string[] {
+  const set = new Set<string>();
+  for (const log of logs) {
+    const day = (log.생산일자 ?? "").slice(0, 10);
+    if (day) set.add(day);
+  }
+  return Array.from(set).sort((a, b) => b.localeCompare(a));
+}
+
+/** URL·오늘·최근 출고일 순으로 유효한 생산일자 선택 */
+export function pickProductionOutboundDate(
+  dates: string[],
+  preferred?: string,
+  todayIso?: string
+): string {
+  const day = (preferred ?? "").slice(0, 10);
+  if (day && dates.includes(day)) return day;
+  const today = (todayIso ?? "").slice(0, 10);
+  if (today && dates.includes(today)) return today;
+  return dates[0] ?? day ?? today ?? "";
+}
+
 export function listAdditionalOutboundProducts(
   logs: Array<{
     생산일자: string;

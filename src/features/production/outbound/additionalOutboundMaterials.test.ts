@@ -3,6 +3,8 @@ import {
   getBomMaterialNamesForAdditionalOutbound,
   getMaterialQuantityType,
   listAdditionalOutboundProducts,
+  listProductionOutboundDates,
+  pickProductionOutboundDate,
   planAdditionalOutbound,
   validateAdditionalOutboundQty,
 } from "./additionalOutboundMaterials";
@@ -51,6 +53,31 @@ describe("planAdditionalOutbound", () => {
     expect(planAdditionalOutbound([{ id: "a", 원료명: "버터" }], "소금")).toEqual({
       action: "create",
     });
+  });
+});
+
+describe("listProductionOutboundDates", () => {
+  it("출고가 있는 날짜만 최신순으로 반환", () => {
+    expect(
+      listProductionOutboundDates([
+        { 생산일자: "2026-08-21" },
+        { 생산일자: "2026-08-21" },
+        { 생산일자: "2026-08-20" },
+      ])
+    ).toEqual(["2026-08-21", "2026-08-20"]);
+  });
+});
+
+describe("pickProductionOutboundDate", () => {
+  const dates = ["2026-08-21", "2026-08-20"];
+
+  it("preferred가 목록에 있으면 우선", () => {
+    expect(pickProductionOutboundDate(dates, "2026-08-20", "2026-08-22")).toBe("2026-08-20");
+  });
+
+  it("없으면 오늘, 그다음 최근 출고일", () => {
+    expect(pickProductionOutboundDate(dates, "2026-08-19", "2026-08-21")).toBe("2026-08-21");
+    expect(pickProductionOutboundDate(dates, "2026-08-19", "2026-08-19")).toBe("2026-08-21");
   });
 });
 

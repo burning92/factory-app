@@ -59,9 +59,11 @@ export async function insertAdditionalOutboundHistory(
 
 export async function fetchAdditionalOutboundHistory(
   organizationCode: string,
-  limit = 200
+  options?: { productionDate?: string; limit?: number }
 ): Promise<AdditionalOutboundHistoryRow[]> {
-  const { data, error } = await supabase
+  const limit = options?.limit ?? 200;
+  const productionDate = (options?.productionDate ?? "").slice(0, 10);
+  let query = supabase
     .from("additional_outbound_logs")
     .select(
       "id, production_date, product_name, material_name, lot_expiry, box_qty, bag_qty, g_qty, author_name, created_at"
@@ -69,6 +71,10 @@ export async function fetchAdditionalOutboundHistory(
     .eq("organization_code", organizationCode)
     .order("created_at", { ascending: false })
     .limit(limit);
+  if (productionDate) {
+    query = query.eq("production_date", productionDate);
+  }
+  const { data, error } = await query;
   if (error) throw error;
   return (data ?? []).map((row) => ({
     id: row.id,
