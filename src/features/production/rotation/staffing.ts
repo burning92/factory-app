@@ -37,6 +37,15 @@ export function defaultStaffingForProcess(process: ProcessId): PositionStaffing 
       after: { min: 4, max: 4 },
     };
   }
+  if (process === "topping") {
+    // min 0: 필수는 아님. max만 열어 표에 자리가 보이고 수동·잔여 배치가 되게 한다.
+    return {
+      start: { min: 0, max: 6 },
+      lunch1: { min: 0, max: 2 },
+      lunch2: { min: 0, max: 4 },
+      after: { min: 0, max: 6 },
+    };
+  }
   if (process === "dough") {
     return {
       start: { min: 3, max: 3 },
@@ -56,15 +65,24 @@ export function defaultStaffingForProcess(process: ProcessId): PositionStaffing 
   return emptyPositionStaffing();
 }
 
+/** 전 구간 min·max가 0이면 정원 미설정으로 본다 */
+export function staffingHasCapacity(staffing: PositionStaffing | undefined): boolean {
+  if (!staffing) return false;
+  return PERIODS.some((period) => (staffing[period.id]?.min ?? 0) > 0 || (staffing[period.id]?.max ?? 0) > 0);
+}
+
 export function normalizePositionStaffing(
   process: ProcessId,
   staffing: PositionStaffing | undefined
 ): PositionStaffing | undefined {
   if (!processNeedsStaffing(process)) return undefined;
   const fallback = defaultStaffingForProcess(process) ?? emptyPositionStaffing();
+  // 토핑이 예전에 0/0으로만 저장돼 표에서 사라진 경우 → 기본 정원으로 복구 (숙련·인원은 유지)
+  const useSaved =
+    process === "topping" && !staffingHasCapacity(staffing) ? undefined : staffing;
   const next = emptyPositionStaffing();
   for (const period of PERIODS) {
-    const src = staffing?.[period.id] ?? fallback[period.id];
+    const src = useSaved?.[period.id] ?? fallback[period.id];
     const min = clampStaff(src?.min, fallback[period.id].min);
     const max = Math.max(min, clampStaff(src?.max, fallback[period.id].max));
     next[period.id] = { min, max };

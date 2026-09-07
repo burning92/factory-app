@@ -523,7 +523,7 @@ type BoardRow = {
   match: { station?: StationId; positionId?: string };
   heating?: boolean;
   staffed?: boolean;
-  section: "가열" | "포장" | "반죽" | "기타";
+  section: "가열" | "포장" | "토핑" | "반죽" | "기타";
 };
 
 function splitSeatLabel(label: string): { title: string; hint?: string } {
@@ -534,7 +534,8 @@ function splitSeatLabel(label: string): { title: string; hint?: string } {
 
 function sectionForStation(station?: StationId, heating?: boolean): BoardRow["section"] {
   if (heating || station === "heating") return "가열";
-  if (station === "inner" || station === "outer" || station === "topping") return "포장";
+  if (station === "inner" || station === "outer") return "포장";
+  if (station === "topping") return "토핑";
   if (station === "dough" || station === "cleanup") return "반죽";
   return "기타";
 }
@@ -542,6 +543,7 @@ function sectionForStation(station?: StationId, heating?: boolean): BoardRow["se
 const SECTION_HEAD: Record<BoardRow["section"], string> = {
   가열: "bg-orange-500/15 text-orange-100",
   포장: "bg-sky-500/15 text-sky-100",
+  토핑: "bg-violet-500/15 text-violet-100",
   반죽: "bg-emerald-500/15 text-emerald-100",
   기타: "bg-slate-700/70 text-slate-200",
 };
@@ -549,6 +551,7 @@ const SECTION_HEAD: Record<BoardRow["section"], string> = {
 const SECTION_BAR: Record<BoardRow["section"], string> = {
   가열: "border-l-[3px] border-orange-400",
   포장: "border-l-[3px] border-sky-400",
+  토핑: "border-l-[3px] border-violet-400",
   반죽: "border-l-[3px] border-emerald-400",
   기타: "border-l-[3px] border-slate-500",
 };
