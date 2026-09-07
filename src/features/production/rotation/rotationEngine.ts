@@ -1090,6 +1090,67 @@ function applyFixedDoughTargets(
   }
 }
 
+/** 점심 가열 백업: 13시 이후 반죽 복귀 자리 확보 */
+function applyLunchBackupAfterDoughTargets(
+  targets: Record<PeriodId, StaffingTarget>,
+  catalog: PositionCatalog,
+  group: ProductGroup,
+  doughCoreCount: number
+) {
+  const doughPos = positionsForProcess(catalog, group, "dough")[0];
+  if (!doughPos || doughCoreCount <= 0) return;
+  const max = doughCoreCount;
+  const existing = targets.after.positions.find((p) => p.process === "dough" && p.positionId === doughPos.id);
+  if (existing) {
+    existing.min = Math.max(existing.min, max);
+    existing.max = Math.max(existing.max, max);
+  } else {
+    targets.after.positions.push({
+      positionId: doughPos.id,
+      process: "dough",
+      label: doughPos.label,
+      min: max,
+      max,
+    });
+  }
+}
+
+/** 반죽팀 11~12시 가열 백업 강제 배치 */
+function forceDoughHeatingBackup(
+  people: Person[],
+  catalog: PositionCatalog,
+  group: ProductGroup,
+  skills: SkillMatrix,
+  warnings: RotationWarning[]
+): { taken: Set<string>; forced: Assignment[] } {
+  const taken = new Set<string>();
+  const forced: Assignment[] = [];
+  const heat = heatingPositions(catalog, group);
+  const used = new Set<string>();
+  for (const person of people) {
+    const slot = heat.find((pos) => {
+      if (used.has(pos.id)) return false;
+      return getPriority(skills, person.id, group, pos.id) > 0;
+    });
+    if (!slot) {
+      warnings.push({
+        kind: "other",
+        message: `${person.name}은(는) 반죽팀 점심 가열 백업 숙련이 없어 11시 가열에 넣지 못했습니다.`,
+      });
+      continue;
+    }
+    used.add(slot.id);
+    taken.add(person.id);
+    forced.push({
+      personId: person.id,
+      station: "heating",
+      positionId: slot.id,
+      priority: getPriority(skills, person.id, group, slot.id),
+    });
+  }
+  return { taken, forced };
+}
+
 function forceDoughPeople(
   people: Person[],
   doughPos: PositionDef | undefined,
@@ -1147,9 +1208,13 @@ export function generateRotation(input: GenerateInput): GenerateResult {
   const doughPolicy = doughSettings.rotationPolicy;
   const doughMin = doughSettings.minStaff;
   const doughCanRotate = doughPolicy === "FIXED_DOUGH" ? false : impact.doughCanRotate && doughCore.length > 0;
+  /** 반죽팀만: 11~12 가열백업 → 12~13 식사 → 13시 반죽복귀 */
+  const useLunchBackupSchedule = doughPolicy === "CURRENT_LUNCH_BACKUP" && doughCanRotate;
   const targets = periodTargets(catalog, group, doughCore.length, doughCanRotate);
   if (doughPolicy === "FIXED_DOUGH") {
     applyFixedDoughTargets(targets, catalog, group, doughMin, doughCore.length);
+  } else if (useLunchBackupSchedule) {
+    applyLunchBackupAfterDoughTargets(targets, catalog, group, doughCore.length);
   }
   const assignOpts: AssignOptions = {
     doughPolicy,
@@ -1208,15 +1273,20 @@ export function generateRotation(input: GenerateInput): GenerateResult {
   const allDayFloor = floor.filter((p) => isAvailableInPeriod(p, "start") && isAvailableInPeriod(p, "after"));
   const halfAm = floor.filter((p) => p.leaveKind === "half_am" || p.leaveKind === "half");
   const halfPm = floor.filter((p) => p.leaveKind === "half_pm");
-  const eaters = doughCanRotate ? allDayFloor : allDayFloor.filter((p) => !isDoughCorePerson(p));
-  const part = partitionLunch(eaters, lunchSlots, skills, group, doughCore, doughCanRotate, catalog, toPrevWorkMap(start));
+  // 반죽팀은 일반 점심 교대 분배에 넣지 않는다 (FIXED·점심백업·차단 모두)
+  const eaters = allDayFloor.filter((p) => !isDoughCorePerson(p));
+  const part = partitionLunch(eaters, lunchSlots, skills, group, doughCore, false, catalog, toPrevWorkMap(start));
   warnings.push(...part.warnings);
   const doughHeld =
-    doughPolicy === "FIXED_DOUGH"
+    doughPolicy === "FIXED_DOUGH" || useLunchBackupSchedule
       ? []
-      : doughCanRotate
-        ? []
-        : doughCore.filter((p) => eaters.every((e) => e.id !== p.id) && lunch1Floor.some((x) => x.id === p.id));
+      : doughCore.filter((p) => lunch1Floor.some((x) => x.id === p.id));
+  const doughLunchBackup = useLunchBackupSchedule
+    ? doughCore.filter((p) => lunch1Floor.some((x) => x.id === p.id))
+    : [];
+  const lunchHeatForce = useLunchBackupSchedule
+    ? forceDoughHeatingBackup(doughLunchBackup, catalog, group, skills, warnings)
+    : { taken: new Set<string>(), forced: [] as Assignment[] };
   const lunchDoughForce =
     doughPolicy === "FIXED_DOUGH"
       ? forceDoughPeople(
@@ -1229,26 +1299,42 @@ export function generateRotation(input: GenerateInput): GenerateResult {
         )
       : { taken: new Set<string>(), forced: [] as Assignment[] };
   const lunch1Work = [
-    ...part.waveB.filter((p) => lunch1Floor.some((x) => x.id === p.id) && !lunchDoughForce.taken.has(p.id)),
+    ...part.waveB.filter(
+      (p) =>
+        lunch1Floor.some((x) => x.id === p.id) &&
+        !lunchDoughForce.taken.has(p.id) &&
+        !lunchHeatForce.taken.has(p.id)
+    ),
     ...doughHeld,
   ];
   const lunch2Work = [
     ...part.waveA.filter((p) => lunch2Floor.some((x) => x.id === p.id) && !lunchDoughForce.taken.has(p.id)),
     ...doughHeld.filter((p) => lunch2Floor.some((x) => x.id === p.id)),
-    ...halfPm.filter((p) => !lunchDoughForce.taken.has(p.id)),
+    ...halfPm.filter((p) => !lunchDoughForce.taken.has(p.id) && !isDoughCorePerson(p)),
   ];
   const lunch1Eat = [...part.waveA.filter((p) => lunch1Floor.some((x) => x.id === p.id)), ...halfAm];
-  const lunch2Eat = part.waveB.filter((p) => lunch2Floor.some((x) => x.id === p.id));
+  const lunch2Eat = [
+    ...part.waveB.filter((p) => lunch2Floor.some((x) => x.id === p.id)),
+    ...doughLunchBackup.filter((p) => lunch2Floor.some((x) => x.id === p.id)),
+  ];
 
-  const lunchRemain = doughPolicy === "FIXED_DOUGH" ? lunchSlots.filter((s) => s.position.process !== "dough") : lunchSlots;
+  const lunchHeatTakenKeys = new Set(
+    lunchHeatForce.forced.map((a) => a.positionId).filter((id): id is string => Boolean(id))
+  );
+  const lunchRemain = (doughPolicy === "FIXED_DOUGH" ? lunchSlots.filter((s) => s.position.process !== "dough") : lunchSlots).filter(
+    (s) => !(s.position.process === "heating" && lunchHeatTakenKeys.has(s.position.id))
+  );
   const lunch1Out = assignSlots(lunch1Work, lunchRemain, skills, group, toPrevWorkMap(start), catalog, {
     ...assignOpts,
     backups: fieldBackupPool(roster, skills, catalog, group, "lunch1"),
   });
   warnings.push(...lunch1Out.warnings, ...unfilledWarnings(lunch1Out.unfilled, "1차 교대"));
+  const doughMissedHeat = doughLunchBackup
+    .filter((p) => !lunchHeatForce.taken.has(p.id))
+    .map((p) => ({ personId: p.id, station: "unassigned" as const, unassignedReason: "NO_AVAILABLE_SLOT" as const }));
   const lunch1Placed = [
     ...placeLeftovers(
-      [...lunchDoughForce.forced, ...lunch1Out.assignments],
+      [...lunchDoughForce.forced, ...lunchHeatForce.forced, ...lunch1Out.assignments],
       roster,
       skills,
       catalog,
@@ -1257,6 +1343,7 @@ export function generateRotation(input: GenerateInput): GenerateResult {
       "lunch1",
       assignOpts
     ),
+    ...doughMissedHeat,
     ...lunch1Eat.map((p) => ({ personId: p.id, station: "lunch" as const })),
   ];
   const lunch1 = appendOfficeAndOff(lunch1Placed, roster, "lunch1", catalog, group, skills);
@@ -1296,7 +1383,7 @@ export function generateRotation(input: GenerateInput): GenerateResult {
 
   const afterSlots = buildSlots(catalog, group, "after", targets.after);
   const afterDoughForce =
-    doughPolicy === "FIXED_DOUGH"
+    doughPolicy === "FIXED_DOUGH" || useLunchBackupSchedule
       ? forceDoughPeople(
           doughCore.filter((p) => afterFloor.some((x) => x.id === p.id)),
           doughPos,
@@ -1307,7 +1394,10 @@ export function generateRotation(input: GenerateInput): GenerateResult {
         )
       : { taken: new Set<string>(), forced: [] as Assignment[] };
   const afterPool = afterFloor.filter((p) => !afterDoughForce.taken.has(p.id));
-  const afterRemain = doughPolicy === "FIXED_DOUGH" ? afterSlots.filter((s) => s.position.process !== "dough") : afterSlots;
+  const afterRemain =
+    doughPolicy === "FIXED_DOUGH" || useLunchBackupSchedule
+      ? afterSlots.filter((s) => s.position.process !== "dough")
+      : afterSlots;
   const afterOut = assignSlots(afterPool, afterRemain, skills, group, toPrevWorkMap(start, lunch1Placed, lunch2Placed), catalog, {
     ...assignOpts,
     backups: fieldBackupPool(roster, skills, catalog, group, "after"),

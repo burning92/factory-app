@@ -338,21 +338,27 @@ describe("반죽팀 정책", () => {
     );
   }
 
-  it("테스트 8: CURRENT_LUNCH_BACKUP에서 doughCore가 점심 가열 백업 후보로 남는다", () => {
-    const catalog = miniCatalog({ innerStart: 1, innerLunch: 1, doughStart: 3, heat: 1 });
+  it("테스트 8: CURRENT_LUNCH_BACKUP에서 반죽팀은 11시 가열→12시 식사→13시 반죽복귀로 고정된다", () => {
+    const catalog = miniCatalog({ innerStart: 1, innerLunch: 1, doughStart: 3, heat: 4 });
     const roster = [
       ...doughRoster(3),
       person("qual-1", "inner", { constraints: innerQual() }),
       person("heat-1", "heating"),
       person("heat-2", "heating"),
+      person("pack-a", "inner"),
+      person("floor-a", "heating"),
+      person("floor-b", "heating"),
     ];
     const skills = skillsFor(roster, catalog, {
-      "dough-1": { dough: 1, h1: 2 },
-      "dough-2": { dough: 1, h1: 2 },
-      "dough-3": { dough: 1, h1: 2, inner: 2 },
+      "dough-1": { dough: 1, h1: 2, h2: 2, h3: 2, h4: 2 },
+      "dough-2": { dough: 1, h1: 2, h2: 2, h3: 2, h4: 2 },
+      "dough-3": { dough: 1, h1: 2, h2: 2, h3: 2, h4: 2 },
       "qual-1": { inner: 1 },
-      "heat-1": { h1: 1 },
-      "heat-2": { h1: 1 },
+      "pack-a": { inner: 1 },
+      "heat-1": { h1: 1, h2: 1, h3: 1, h4: 1 },
+      "heat-2": { h1: 1, h2: 1, h3: 1, h4: 1 },
+      "floor-a": { h1: 1, h2: 1, h3: 1, h4: 1 },
+      "floor-b": { h1: 1, h2: 1, h3: 1, h4: 1 },
     });
     const result = run({
       roster,
@@ -361,9 +367,13 @@ describe("반죽팀 정책", () => {
       modes: LUNCH_ON,
       doughSettings: { minStaff: 3, rotationPolicy: "CURRENT_LUNCH_BACKUP" },
     });
-    const lunchHeat = [...namesOn(result, "lunch1", "heating"), ...namesOn(result, "lunch2", "heating")];
-    expect(lunchHeat.some((id) => id.startsWith("dough-"))).toBe(true);
-    expect(namesOn(result, "start", "dough")).toHaveLength(3);
+    const doughIds = ["dough-1", "dough-2", "dough-3"];
+    expect(namesOn(result, "start", "dough").sort()).toEqual(doughIds);
+    expect(namesOn(result, "lunch1", "heating").filter((id) => doughIds.includes(id)).sort()).toEqual(doughIds);
+    expect(namesOn(result, "lunch1", "lunch").some((id) => doughIds.includes(id))).toBe(false);
+    expect(namesOn(result, "lunch2", "lunch").filter((id) => doughIds.includes(id)).sort()).toEqual(doughIds);
+    expect(namesOn(result, "lunch2", "heating").some((id) => doughIds.includes(id))).toBe(false);
+    expect(namesOn(result, "after", "dough").sort()).toEqual(doughIds);
   });
 
   it.each([2, 3, 4])("테스트 9: doughCore %s명이어도 3명 하드코딩으로 깨지지 않는다", (n) => {

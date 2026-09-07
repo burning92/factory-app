@@ -353,8 +353,8 @@ export function DoughSettingsEditor(props: {
             }
             className="rounded-lg border border-slate-600 bg-slate-900 px-2.5 py-2 text-sm text-slate-100 disabled:opacity-70"
           >
-            <option value="CURRENT_LUNCH_BACKUP">현행 점심 가열 백업</option>
-            <option value="FIXED_DOUGH">전일 반죽고정 (향후)</option>
+            <option value="CURRENT_LUNCH_BACKUP">점심 백업 (11시 가열→12시 식사→13시 반죽)</option>
+            <option value="FIXED_DOUGH">전일 반죽고정</option>
           </select>
         </label>
         <label className="text-xs text-slate-300">
