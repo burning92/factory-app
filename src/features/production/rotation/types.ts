@@ -42,10 +42,11 @@ export const STATIONS = [
 
 export type StationId = (typeof STATIONS)[number]["id"];
 
-/** 0 불가 · 1 상 · 2 중상 · 3 중 · 4 하 · 5 비상(숙련 가능자 없을 때만). 같은 숙련은 여러 명 가능 */
-export type Priority = 0 | 1 | 2 | 3 | 4 | 5;
+/** 0 불가 · 1 상 · 2 중상 · 3 중 · 4 하. 같은 숙련은 여러 명 가능 */
+export type Priority = 0 | 1 | 2 | 3 | 4;
 
-export const EMERGENCY_PRIORITY: Priority = 5;
+/** 없앤 '비상' 등급. 저장본에 남아 있으면 '하'로 읽는다. 그 역할은 개인조건의 현장백업이 한다 */
+export const LEGACY_EMERGENCY_PRIORITY = 5;
 
 export const PRIORITY_OPTIONS: { value: Priority; label: string; short: string }[] = [
   { value: 0, label: "불가", short: "불가" },
@@ -53,7 +54,6 @@ export const PRIORITY_OPTIONS: { value: Priority; label: string; short: string }
   { value: 2, label: "중상", short: "중상" },
   { value: 3, label: "중", short: "중" },
   { value: 4, label: "하", short: "하" },
-  { value: 5, label: "비상", short: "비상" },
 ];
 
 /** 근무조. "HHMM-HHMM" 문자열이라 06:00–15:30 같은 조는 값만 늘리면 된다 */
@@ -96,13 +96,13 @@ export type PersonConstraints = {
   doughCore?: boolean;
   /** 당일 배치표에서 뺌. 숙련표에는 그대로 둠 */
   excluded?: boolean;
-  /** 사무 기본이지만 필수자격 자리가 비면 현장에 투입 */
+  /** 백업 인원. 최소 인원을 다른 사람으로 못 채울 때만 투입하고 여유 자리 채우기에는 쓰지 않는다 */
   fieldBackup?: boolean;
   /** 09~19조에 결원이 나면 그날 하루 09~19로 바꿔 쓸 수 있는 사람 */
   nightShiftBackup?: boolean;
   /** 제품군별 기계·공정 자격. 포노와 파베이크를 따로 둔다 */
   qualificationsByGroup?: QualificationsByGroup;
-  /** 해당 제품군 숙련을 한 번이라도 저장함. 1~5 행이 없어도 명시적 불가와 미설정을 가른다 */
+  /** 해당 제품군 숙련을 한 번이라도 저장함. 1~4 행이 없어도 명시적 불가와 미설정을 가른다 */
   skillConfiguredGroups?: ProductGroup[];
 };
 
@@ -188,7 +188,7 @@ export type ConstraintCheck = {
 };
 
 export type RotationWarning = {
-  kind: "emergency" | "rank4" | "rank3" | "preferredLeave" | "unfilled" | "lunchCoverage" | "other";
+  kind: "fieldBackup" | "rank4" | "rank3" | "preferredLeave" | "unfilled" | "lunchCoverage" | "other";
   message: string;
 };
 

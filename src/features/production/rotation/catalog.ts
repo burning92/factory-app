@@ -2,7 +2,7 @@ import { LEGACY_EXTRA_PROCESSES, SEED_ROSTER } from "./seedRoster";
 import { isRotationExcluded } from "./personRules";
 import { defaultStaffingForProcess, withDefaultStaffing } from "./staffing";
 import type { Person, PositionCatalog, PositionDef, Priority, ProcessId, ProductGroup, SkillMatrix } from "./types";
-import { EMERGENCY_PRIORITY } from "./types";
+import { LEGACY_EMERGENCY_PRIORITY } from "./types";
 
 /** 포노 가열 순서. 리코타는 리코타 배합이 하나 더 붙어 8자리 */
 const PHONO_HEAT_LABELS = [
@@ -135,9 +135,16 @@ export function isExperiencedRank(v: Priority): boolean {
   return v === 1 || v === 2 || v === 3;
 }
 
-/** 하·비상 — 초보/임시. 공정에 이 숙련만 있으면 안 됨 */
+/** 하 — 초보. 공정에 이 숙련만 있으면 안 됨 */
 export function isJuniorRank(v: Priority): boolean {
-  return v === 4 || v === 5;
+  return v === 4;
+}
+
+/** 저장본 숙련값을 읽는다. 없앤 '비상'(5)은 '하'로 본다 */
+export function toPriority(value: unknown): Priority | undefined {
+  if (value === 0 || value === 1 || value === 2 || value === 3 || value === 4) return value;
+  if (value === LEGACY_EMERGENCY_PRIORITY) return 4;
+  return undefined;
 }
 
 /**
@@ -158,12 +165,10 @@ export function getPriority(
   group: ProductGroup,
   positionId: string
 ): Priority {
-  const v = skills[personId]?.[group]?.[positionId];
-  if (v === 1 || v === 2 || v === 3 || v === 4 || v === 5) return v;
-  return 0;
+  return toPriority(skills[personId]?.[group]?.[positionId]) ?? 0;
 }
 
-/** 이 제품군에서 배치 가능한 숙련(상~비상)이 하나라도 있으면 true */
+/** 이 제품군에서 배치 가능한 숙련(상~하)이 하나라도 있으면 true */
 export function hasAssignableSkill(
   skills: SkillMatrix,
   personId: string,
@@ -175,7 +180,7 @@ export function hasAssignableSkill(
 
 /**
  * 해당 제품군 숙련을 저장한 적 있는지.
- * DB는 0을 저장하지 않으므로, 1~5 행이 있거나 skillConfiguredGroups 표시가 있으면 설정됨.
+ * DB는 0을 저장하지 않으므로, 1~4 행이 있거나 skillConfiguredGroups 표시가 있으면 설정됨.
  * 행이 없고 표시도 없으면 미설정. 모든 칸이 0이라고 미설정으로 보지 않는다.
  */
 export function isSkillConfiguredForGroup(
@@ -186,13 +191,9 @@ export function isSkillConfiguredForGroup(
 ): boolean {
   if (person.constraints?.skillConfiguredGroups?.includes(group)) return true;
   const row = skills[person.id]?.[group] ?? {};
-  if (catalog) {
-    return catalog[group].some((pos) => {
-      const v = row[pos.id];
-      return v === 1 || v === 2 || v === 3 || v === 4 || v === 5;
-    });
-  }
-  return Object.values(row).some((v) => v === 1 || v === 2 || v === 3 || v === 4 || v === 5);
+  const assignable = (v: unknown) => (toPriority(v) ?? 0) > 0;
+  if (catalog) return catalog[group].some((pos) => assignable(row[pos.id]));
+  return Object.values(row).some(assignable);
 }
 
 export function hasNoSkillConfig(
@@ -347,10 +348,8 @@ export function mergeSkills(saved: SkillMatrix | undefined, roster: Person[], ca
         ((group === "phono_signature" || group === "phono_basil_corn") ? legacyStd : undefined);
       if (!row) continue;
       for (const pos of catalog[group]) {
-        const v = row[pos.id];
-        if (v === 0 || v === 1 || v === 2 || v === 3 || v === 4 || v === 5) {
-          base[person.id][group]![pos.id] = v;
-        }
+        const v = toPriority(row[pos.id]);
+        if (v !== undefined) base[person.id][group]![pos.id] = v;
       }
     }
   }
@@ -469,4 +468,3 @@ export function buildGroupReadiness(
   };
 }
 
-export { EMERGENCY_PRIORITY };

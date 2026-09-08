@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Printer, RefreshCw, Settings2, Users } from "lucide-react";
 import { DEFAULT_CATALOG, getPriority, hasNoSkillConfig, heatingPositions, isAssignedOfficePerson, visibleRotationRoster } from "@/features/production/rotation/catalog";
-import { isRotationExcluded } from "@/features/production/rotation/personRules";
+import { isFieldBackup, isRotationExcluded } from "@/features/production/rotation/personRules";
 import { processNeedsStaffing, staffingForPosition, staffingRangeLabel } from "@/features/production/rotation/staffing";
 import { fetchRotationDay, fetchRotationMaster, saveRotationDay } from "@/features/production/rotation/clientApi";
 import { HOURLY_QTY, PRODUCT_LINES, productGroup } from "@/features/production/rotation/seedRoster";
@@ -349,7 +349,9 @@ export default function RotationBoardClient() {
   const heatReady = heatingPositions(catalog, group).every((pos) =>
     boardRoster.some((p) => p.present && getPriority(skills, p.id, group, pos.id) > 0)
   );
-  const blocking = result.warnings.filter((w) => w.kind === "unfilled" || w.kind === "lunchCoverage" || w.kind === "emergency");
+  const blocking = result.warnings.filter(
+    (w) => w.kind === "unfilled" || w.kind === "lunchCoverage" || w.kind === "fieldBackup"
+  );
 
   const handleMove = useCallback(
     (period: PeriodId, personId: string, station: StationId, positionId?: string) => {
@@ -894,7 +896,7 @@ function PersonChip(props: {
   const leave = leaveKindLabel(props.person.leaveKind);
   const pr = props.assignment.priority;
   const warn = pr === 4;
-  const emergency = pr === 5;
+  const backupUsed = isFieldBackup(props.person) && Boolean(props.assignment.positionId);
   const unassignedNote = props.assignment.station === "unassigned" ? unassignedReasonLabel(props.assignment.unassignedReason) : undefined;
   return (
     <>
@@ -906,7 +908,7 @@ function PersonChip(props: {
         } ${
           props.lunch
             ? "bg-white text-stone-900 shadow-sm hover:bg-amber-50"
-            : emergency
+            : backupUsed
               ? "print-chip-em bg-rose-500 text-white hover:bg-rose-400"
               : warn
                 ? "print-chip-warn bg-orange-500/90 text-white hover:bg-orange-400"

@@ -43,7 +43,6 @@ import {
   type StaffingTarget,
   type StationId,
   type UnassignedReason,
-  EMERGENCY_PRIORITY,
 } from "./types";
 
 export type Slot = {
@@ -227,9 +226,14 @@ function capableOf(
   return people.filter((p) => !taken.has(p.id) && getPriority(skills, p.id, group, positionId) > 0);
 }
 
-function isUsablePriority(priority: Priority, allowEmergency: boolean): boolean {
-  if (isNormalRank(priority)) return true;
-  return allowEmergency && priority === EMERGENCY_PRIORITY;
+/**
+ * 배치 가능 여부.
+ * 현장백업으로 표시한 사람은 최소 인원을 다른 사람으로 못 채울 때만 투입하고, 여유 자리 채우기에는 쓰지 않는다.
+ * 들어갈 때는 다른 사람과 똑같이 본인 숙련 기준으로 자리를 잡는다.
+ */
+function isUsableCandidate(person: Person, priority: Priority, fillingRequired: boolean): boolean {
+  if (!isNormalRank(priority)) return false;
+  return fillingRequired || !isFieldBackup(person);
 }
 
 function pickPreferredCapable(
@@ -237,13 +241,13 @@ function pickPreferredCapable(
   skills: SkillMatrix,
   group: ProductGroup,
   positionId: string,
-  allowEmergency: boolean
+  fillingRequired: boolean
 ): Person | undefined {
   const ranked = people
     .map((p) => ({ p, pr: getPriority(skills, p.id, group, positionId) }))
-    .filter((row) => isUsablePriority(row.pr, allowEmergency));
-  const normal = ranked.filter((row) => isNormalRank(row.pr));
-  const pool = normal.length > 0 ? normal : ranked;
+    .filter((row) => isUsableCandidate(row.p, row.pr, fillingRequired));
+  const regular = ranked.filter((row) => !isFieldBackup(row.p));
+  const pool = regular.length > 0 ? regular : ranked;
   return [...pool].sort((a, b) => a.pr - b.pr || byName(a.p, b.p))[0]?.p;
 }
 
@@ -289,7 +293,7 @@ type ScoreVec = {
   missingQual: number;
   juniorOnly: number;
   unfilled: number;
-  emergency: number;
+  backupUsed: number;
   floorMoves: number;
   flexOnHeat: number;
   rank4: number;
@@ -305,7 +309,7 @@ function cmpScore(a: ScoreVec, b: ScoreVec): number {
     "missingQual",
     "juniorOnly",
     "unfilled",
-    "emergency",
+    "backupUsed",
     "floorMoves",
     "flexOnHeat",
     "rank4",
@@ -346,7 +350,7 @@ function scoreRequired(
     missingQual: 0,
     juniorOnly: 0,
     unfilled: 0,
-    emergency: 0,
+    backupUsed: 0,
     floorMoves: 0,
     flexOnHeat: 0,
     rank4: 0,
@@ -370,7 +374,7 @@ function scoreRequired(
     const pr = a.priority ?? 0;
     const person = byId.get(a.personId);
     vec.rankSum += pr;
-    if (pr === EMERGENCY_PRIORITY) vec.emergency += 1;
+    if (person && isFieldBackup(person)) vec.backupUsed += 1;
     if (pr === 4) vec.rank4 += 1;
     if (pr === 3) vec.rank3 += 1;
     if (slot.position.process === "heating" && person && backupStationCount(person, skills, catalog, group) > 0) {
@@ -401,17 +405,18 @@ function scoreRequired(
   return vec;
 }
 
-function warnForPriority(personName: string, label: string, priority: Priority, preferred: ProcessId, process: ProcessId): RotationWarning[] {
+function warnForPriority(person: Person, label: string, priority: Priority, process: ProcessId): RotationWarning[] {
   const out: RotationWarning[] = [];
-  if (priority === EMERGENCY_PRIORITY) {
-    out.push({ kind: "emergency", message: `${personName} → ${label} [비상]` });
-  } else if (priority === 4) {
-    out.push({ kind: "rank4", message: `${personName} → ${label} [하]` });
-  } else if (priority === 3) {
-    out.push({ kind: "rank3", message: `${personName} → ${label} [중]` });
+  if (isFieldBackup(person)) {
+    out.push({ kind: "fieldBackup", message: `${person.name} → ${label} [현장백업 투입]` });
   }
-  if (preferred !== process) {
-    out.push({ kind: "preferredLeave", message: `${personName} 주공정 ${processLabel(preferred)} → ${label}` });
+  if (priority === 4) {
+    out.push({ kind: "rank4", message: `${person.name} → ${label} [하]` });
+  } else if (priority === 3) {
+    out.push({ kind: "rank3", message: `${person.name} → ${label} [중]` });
+  }
+  if (person.preferred !== process) {
+    out.push({ kind: "preferredLeave", message: `${person.name} 주공정 ${processLabel(person.preferred)} → ${label}` });
   }
   return out;
 }
@@ -453,14 +458,14 @@ function pickForSlot(
   requireExperienced = false
 ): Person | undefined {
   const all = capableOf(people, skills, group, slot.position.id, taken).filter((p) =>
-    isUsablePriority(getPriority(skills, p.id, group, slot.position.id), slot.required) &&
+    isUsableCandidate(p, getPriority(skills, p.id, group, slot.position.id), slot.required) &&
     canTakeProcess(p, slot.position.process, group) &&
     eligibleForDoughPolicy(p, slot.position.process, opts) &&
     (!requireQual || personMeetsProcessQualifications(p, slot.position.process, group)) &&
     (!requireExperienced || meetsAnchorRank(slot.position.process, getPriority(skills, p.id, group, slot.position.id)))
   );
-  const normal = all.filter((p) => isNormalRank(getPriority(skills, p.id, group, slot.position.id)));
-  const base = normal.length > 0 ? normal : all;
+  const regular = all.filter((p) => !isFieldBackup(p));
+  const base = regular.length > 0 ? regular : all;
   const stay = base.filter((p) => staysOnFloor(p, slot.position.process, prev));
   const fallback = base.filter((p) => !hardStayFloor(p));
   const pool = stay.length > 0 ? stay : slot.required && !opts.strictFloor ? fallback : [];
@@ -626,6 +631,8 @@ function assignSlots(
   for (const slot of required) {
     for (const person of people) {
       if (getPriority(skills, person.id, group, slot.position.id) !== 1) continue;
+      // 백업은 상 숙련이어도 자리를 선점하지 않는다. 정원이 모자랄 때 아래 채우기 단계에서만 들어온다
+      if (isFieldBackup(person)) continue;
       if (!canTakeProcess(person, slot.position.process, group)) continue;
       if (!eligibleForDoughPolicy(person, slot.position.process, opts)) continue;
       if (!staysOnFloor(person, slot.position.process, prev)) continue;
@@ -738,7 +745,7 @@ function assignSlots(
     }
     assignments.push(a);
     const person = byId.get(a.personId);
-    if (person) warnings.push(...warnForPriority(person.name, slot.position.label, a.priority ?? 0, person.preferred, slot.position.process));
+    if (person) warnings.push(...warnForPriority(person, slot.position.label, a.priority ?? 0, slot.position.process));
   }
   for (const process of Array.from(new Set(required.map((s) => s.position.process)))) {
     if (!processNeedsExperiencedAnchor(process)) continue;
@@ -759,10 +766,6 @@ function assignSlots(
   return { assignments, unfilled, warnings };
 }
 
-function isReserveBackup(person: Person): boolean {
-  return isFieldBackup(person) && (person.group === "office" || person.preferred === "office");
-}
-
 function optimizeFilled(
   people: Person[],
   slots: Slot[],
@@ -773,6 +776,7 @@ function optimizeFilled(
   catalog: PositionCatalog
 ) {
   const required = slots.filter((s) => s.required);
+  const byId = new Map(people.map((p) => [p.id, p]));
   let best = scoreRequired(filled, required, people, prev, skills, catalog, group);
   for (let n = 0; n < 120; n++) {
     let improved = false;
@@ -789,13 +793,9 @@ function optimizeFilled(
         if (personA && !canTakeProcess(personA, slotB.position.process, group)) continue;
         if (personB && hardStayFloor(personB) && floorsDiffer(prev.get(personB.id)?.station, slotA.position.process)) continue;
         if (personA && hardStayFloor(personA) && floorsDiffer(prev.get(personA.id)?.station, slotB.position.process)) continue;
-        if (personB && isReserveBackup(personB) && requiredQualificationsForProcess(slotA.position.process, group).length === 0) continue;
-        if (personA && isReserveBackup(personA) && requiredQualificationsForProcess(slotB.position.process, group).length === 0) continue;
         const pa = getPriority(skills, b.personId, group, slotA.position.id);
         const pb = getPriority(skills, a.personId, group, slotB.position.id);
         if (pa === 0 || pb === 0) continue;
-        if (isNormalRank(getPriority(skills, a.personId, group, slotA.position.id)) && pa === EMERGENCY_PRIORITY) continue;
-        if (isNormalRank(getPriority(skills, b.personId, group, slotB.position.id)) && pb === EMERGENCY_PRIORITY) continue;
         const next = new Map(Array.from(filled.entries()));
         next.set(keys[i], { personId: b.personId, station: slotA.position.process, positionId: slotA.position.id, priority: pa });
         next.set(keys[j], { personId: a.personId, station: slotB.position.process, positionId: slotB.position.id, priority: pb });
@@ -817,26 +817,23 @@ function optimizeFilled(
           !taken.has(p.id) &&
           getPriority(skills, p.id, group, slot.position.id) > 0 &&
           canTakeProcess(p, slot.position.process, group) &&
-          !(hardStayFloor(p) && floorsDiffer(prev.get(p.id)?.station, slot.position.process)) &&
-          !(isReserveBackup(p) && requiredQualificationsForProcess(slot.position.process, group).length === 0)
+          !(hardStayFloor(p) && floorsDiffer(prev.get(p.id)?.station, slot.position.process))
       );
       for (const person of others) {
         const pr = getPriority(skills, person.id, group, slot.position.id);
-        if (isNormalRank(cur.priority ?? 0) && pr === EMERGENCY_PRIORITY) continue;
-        if (isReserveBackup(person)) {
-          const byId = new Map(people.map((p) => [p.id, p]));
-          const already = processHasQualifiedHolder(
-            filled,
-            required.filter((s) => s.position.process === slot.position.process),
-            slot.position.process,
-            byId,
-            group
-          );
-          const current = byId.get(cur.personId);
-          if (already && current && personMeetsProcessQualifications(current, slot.position.process, group)) continue;
-          if (already && current && !personMeetsProcessQualifications(person, slot.position.process, group)) continue;
-          if (already && !personMeetsProcessQualifications(person, slot.position.process, group)) continue;
-          if (already) continue;
+        const current = byId.get(cur.personId);
+        if (isFieldBackup(person) && current && !isFieldBackup(current)) {
+          // 백업은 이미 자리를 채운 일반 인원을 밀어내지 않는다. 필수자격이나 숙련 앵커가 비었을 때만 대신 들어간다
+          const procSlots = required.filter((s) => s.position.process === slot.position.process);
+          const fixesQual =
+            requiredQualificationsForProcess(slot.position.process, group).length > 0 &&
+            !processHasQualifiedHolder(filled, procSlots, slot.position.process, byId, group) &&
+            personMeetsProcessQualifications(person, slot.position.process, group);
+          const fixesAnchor =
+            processNeedsExperiencedAnchor(slot.position.process) &&
+            !processHasExperiencedHolder(filled, procSlots, slot.position.process) &&
+            meetsAnchorRank(slot.position.process, pr);
+          if (!fixesQual && !fixesAnchor) continue;
         }
         const next = new Map(Array.from(filled.entries()));
         next.set(slot.key, { personId: person.id, station: slot.position.process, positionId: slot.position.id, priority: pr });
@@ -879,10 +876,6 @@ function placeLeftovers(
   for (const row of leftover) {
     const person = byId.get(row.personId);
     if (!person) continue;
-    if (isFieldBackup(person) && isAssignedOfficePerson(person, skills, catalog, group)) {
-      extra.push(row);
-      continue;
-    }
     const scored = fallback.flatMap((process) => {
       const defs = positionsForProcess(catalog, group, process);
       return defs.flatMap((d) => {
@@ -893,7 +886,7 @@ function placeLeftovers(
           const range = staffingForPosition(d, period);
           const cur = counts.get(d.id) ?? 0;
           if (cur >= range.max) return [];
-          if (!isUsablePriority(pr, cur < range.min)) return [];
+          if (!isUsableCandidate(person, pr, cur < range.min)) return [];
           let sc = (6 - pr) * 10;
           if (person.preferred === process) sc += 8;
           if (prev.get(person.id)?.positionId === d.id) sc += 12;
@@ -1172,19 +1165,9 @@ function onDuty(
   });
 }
 
-function fieldBackupPool(
-  roster: Person[],
-  skills: SkillMatrix,
-  catalog: PositionCatalog,
-  group: ProductGroup,
-  period: PeriodId
-): Person[] {
-  return roster.filter(
-    (p) =>
-      isAvailableInPeriod(p, period) &&
-      isFieldBackup(p) &&
-      isAssignedOfficePerson(p, skills, catalog, group)
-  );
+/** 현장 풀에 없는 백업 인원. 사무·현장 구분 없이 현장백업으로 표시한 사람이면 부족할 때 끌어올 수 있다 */
+function fieldBackupPool(roster: Person[], period: PeriodId): Person[] {
+  return roster.filter((p) => isAvailableInPeriod(p, period) && isFieldBackup(p));
 }
 
 function setPositionTarget(
@@ -1435,7 +1418,7 @@ export function generateRotation(input: GenerateInput): GenerateResult {
       group,
       prev,
       catalog,
-      { ...assignOpts, backups: fieldBackupPool(roster, skills, catalog, group, args.period) }
+      { ...assignOpts, backups: fieldBackupPool(roster, args.period) }
     );
     warnings.push(...out.warnings, ...unfilledWarnings(out.unfilled, periodLabelOf(args.period)));
     const placed = placeLeftovers(
@@ -1554,7 +1537,7 @@ export function generateRotation(input: GenerateInput): GenerateResult {
   );
   const lunch1Out = assignSlots(lunch1Work, lunchRemain, skills, group, toPrevWorkMap(start), catalog, {
     ...assignOpts,
-    backups: fieldBackupPool(roster, skills, catalog, group, "lunch1"),
+    backups: fieldBackupPool(roster, "lunch1"),
   });
   warnings.push(...lunch1Out.warnings, ...unfilledWarnings(lunch1Out.unfilled, "1차 교대"));
   const doughMissedHeat = doughLunchBackup
@@ -1591,7 +1574,7 @@ export function generateRotation(input: GenerateInput): GenerateResult {
       : lunchDoughForce;
   const lunch2Out = assignSlots(lunch2Work, lunch2Remain, skills, group, toPrevWorkMap(start, lunch1Placed), catalog, {
     ...assignOpts,
-    backups: fieldBackupPool(roster, skills, catalog, group, "lunch2"),
+    backups: fieldBackupPool(roster, "lunch2"),
   });
   warnings.push(...lunch2Out.warnings, ...unfilledWarnings(lunch2Out.unfilled, "2차 교대"));
   const lunch2Placed = [

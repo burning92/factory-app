@@ -48,7 +48,6 @@ export const PRIORITY_CELL: Record<Priority, string> = {
   2: "bg-slate-800 text-slate-200",
   3: "bg-amber-950 text-amber-200",
   4: "bg-orange-950 text-orange-200",
-  5: "bg-rose-950 text-rose-200",
 };
 
 function patchPersonRule(
@@ -499,7 +498,8 @@ export function SkillMatrixEditor(props: {
       <details className="shrink-0 px-3 pb-2">
         <summary className="cursor-pointer text-xs text-slate-500">숙련·조건 안내</summary>
         <p className="mt-1 text-xs text-slate-400">
-          상부터 배치하고, 비상은 최소 인원을 숙련자로 못 채울 때만 넣습니다. 불가는 자동배치하지 않습니다. 같은 숙련은 여러 명이 가능합니다.
+          상부터 배치하고 불가는 자동배치하지 않습니다. 같은 숙련은 여러 명이 가능합니다.
+          현장백업으로 체크한 사람은 최소 인원을 다른 사람으로 못 채울 때만 투입하고, 들어갈 때는 본인 숙련 기준으로 자리를 잡습니다.
           숙련을 아직 넣지 않은 출근자는 당일 표의 미배치에 남습니다. 제외를 켜면 숙련표에는 남고 당일 표에서는 빠집니다.
           사람마다 조건과 자격을 따로 둡니다. 조건은 전 제품군 공통이고, 자격(삼면포장기 관리 등)은 현재 탭 제품군에만 적용됩니다.
         </p>
@@ -632,7 +632,10 @@ export function SkillMatrixEditor(props: {
                       />
                       반죽고정
                     </label>
-                    <label className="inline-flex items-center gap-1 text-[11px] text-slate-300">
+                    <label
+                      className="inline-flex items-center gap-1 text-[11px] text-slate-300"
+                      title="정원이 모자랄 때만 투입. 여유 자리 채우기에는 쓰지 않고, 들어갈 때는 본인 숙련 기준으로 배치합니다"
+                    >
                       <input
                         type="checkbox"
                         checked={Boolean(person.constraints?.fieldBackup)}

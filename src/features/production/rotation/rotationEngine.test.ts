@@ -681,7 +681,7 @@ describe("숙련·수동이동 회귀", () => {
     expect(namesOn(result, "start", "inner")).not.toContain("zero");
   });
 
-  it("테스트 13: 비상은 min 부족일 때만 쓰고 max 패딩에는 안 쓴다", () => {
+  it("테스트 13: 현장백업은 min 부족일 때만 쓰고 max 패딩에는 안 쓴다", () => {
     const catalog = miniCatalog({ innerStart: 2 });
     const innerPos = catalog.phono_signature.find((p) => p.id === "inner")!;
     innerPos.staffing = staffing(2, 2, 2);
@@ -689,21 +689,44 @@ describe("숙련·수동이동 회귀", () => {
     const roster = [
       person("qual-1", "inner", { constraints: innerQual() }),
       person("normal", "inner"),
-      person("emer-1", "inner"),
-      person("emer-2", "inner"),
+      person("backup-1", "inner", { constraints: { fieldBackup: true } }),
+      person("backup-2", "inner", { constraints: { fieldBackup: true } }),
       person("heat-1", "heating"),
     ];
     const skills = skillsFor(roster, catalog, {
       "qual-1": { inner: 2 },
       normal: { inner: 3 },
-      "emer-1": { inner: 5 },
-      "emer-2": { inner: 5 },
+      "backup-1": { inner: 1 },
+      "backup-2": { inner: 1 },
+      "heat-1": { h1: 1 },
+    });
+    const result = run({ roster, catalog, skills });
+    const inner = namesOn(result, "start", "inner");
+    expect(inner).toContain("qual-1");
+    expect(inner).toContain("normal");
+    expect(inner).not.toContain("backup-1");
+    expect(inner).not.toContain("backup-2");
+  });
+
+  it("테스트 13-1: 정원이 모자라면 현장백업을 본인 숙련 자리에 넣는다", () => {
+    const catalog = miniCatalog({ innerStart: 2 });
+    const innerPos = catalog.phono_signature.find((p) => p.id === "inner")!;
+    innerPos.staffing = staffing(2, 2, 2);
+    const roster = [
+      person("qual-1", "inner", { constraints: innerQual() }),
+      person("backup-1", "inner", { constraints: { fieldBackup: true } }),
+      person("heat-1", "heating"),
+    ];
+    const skills = skillsFor(roster, catalog, {
+      "qual-1": { inner: 2 },
+      "backup-1": { inner: 3 },
       "heat-1": { h1: 1 },
     });
     const result = run({ roster, catalog, skills });
     const inner = result.assignments.start.filter((a) => a.station === "inner");
-    expect(inner.some((a) => a.priority === 5)).toBe(false);
-    expect(inner.length).toBeLessThanOrEqual(2);
+    expect(inner.map((a) => a.personId)).toContain("backup-1");
+    expect(inner.find((a) => a.personId === "backup-1")?.priority).toBe(3);
+    expect(result.warnings.some((w) => w.kind === "fieldBackup")).toBe(true);
   });
 
   it("테스트 14: 외포장 수동 이동은 기존 배치자를 밀어내지 않는다", () => {

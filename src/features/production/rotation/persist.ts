@@ -1,5 +1,6 @@
 import {
   DEFAULT_CATALOG,
+  toPriority,
   withFixedPhonoHeating,
   withRequiredProcesses,
   withoutRetiredProcesses,
@@ -194,11 +195,11 @@ export function skillsFromRows(
   }
   for (const row of rows) {
     const g = row.product_group as ProductGroup;
-    const p = row.priority;
     if (!skills[row.worker_id]) continue;
-    if (!(p === 0 || p === 1 || p === 2 || p === 3 || p === 4 || p === 5)) continue;
+    const rank = toPriority(row.priority);
+    if (rank === undefined) continue;
     if (!skills[row.worker_id][g]) skills[row.worker_id][g] = {};
-    skills[row.worker_id][g]![row.position_id] = p;
+    skills[row.worker_id][g]![row.position_id] = rank;
   }
   return skills;
 }
@@ -274,7 +275,7 @@ export function flattenPriorities(org: string, skills: SkillMatrix, catalog: Pos
   for (const w of workers) {
     for (const g of GROUPS) {
       for (const pos of catalog[g]) {
-        const priority = skills[w.id]?.[g]?.[pos.id] ?? 0;
+        const priority = toPriority(skills[w.id]?.[g]?.[pos.id]) ?? 0;
         if (priority === 0) continue;
         rows.push({
           organization_code: org,
