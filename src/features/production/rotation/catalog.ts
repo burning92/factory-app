@@ -32,7 +32,6 @@ function shared(prefix: string): PositionDef[] {
     { id: `${prefix}-outer`, label: "외포장", process: "outer" },
     { id: `${prefix}-topping`, label: "토핑", process: "topping" },
     { id: `${prefix}-dough`, label: "반죽", process: "dough" },
-    { id: `${prefix}-cleanup`, label: "반죽 마감", process: "cleanup" },
     { id: `${prefix}-rnd`, label: "R&D", process: "rnd" },
     { id: `${prefix}-office`, label: "사무", process: "office" },
   ];
@@ -91,6 +90,13 @@ export function withFixedPhonoHeating(group: ProductGroup, positions: PositionDe
 
 /** 저장본에 없던 시스템 공정 자리를 기본값으로 채운다 (가열 마감 등 나중에 추가된 공정) */
 const REQUIRED_PROCESSES: ProcessId[] = ["heatingClose"];
+
+/** 더 쓰지 않는 공정. 저장본에 남아 있어도 표에서 뺀다 (반죽 마감은 반죽으로 합쳤다) */
+const RETIRED_PROCESSES = new Set<string>(["cleanup"]);
+
+export function withoutRetiredProcesses(positions: PositionDef[]): PositionDef[] {
+  return positions.filter((p) => !RETIRED_PROCESSES.has(p.process));
+}
 
 export function withRequiredProcesses(group: ProductGroup, positions: PositionDef[]): PositionDef[] {
   const missing = REQUIRED_PROCESSES.filter((process) => !positions.some((p) => p.process === process));
@@ -298,7 +304,7 @@ export function mergeCatalog(saved: PositionCatalog | undefined): PositionCatalo
         group,
         withFixedPhonoHeating(
           group,
-          source
+          withoutRetiredProcesses(source)
             .filter((p) => p && typeof p.id === "string" && typeof p.label === "string")
             .map((p) =>
               withDefaultStaffing({
@@ -358,11 +364,10 @@ function bestPriorityForProcess(
 /** 마감 공정은 해당 생산공정 숙련을 물려받는다 */
 const CLOSE_PROCESS_SOURCE: Partial<Record<ProcessId, ProcessId>> = {
   heatingClose: "heating",
-  cleanup: "dough",
 };
 
 /**
- * 가열 마감·반죽 마감 숙련을 따로 넣지 않았으면 가열·반죽 숙련을 그대로 쓴다.
+ * 가열 마감 숙련을 따로 넣지 않았으면 가열 숙련을 그대로 쓴다.
  * 설비를 돌릴 수 있으면 정리·세척도 가능하다고 보는 기본값이고, 설정에서 값을 넣으면 그 값이 우선한다.
  */
 export function withCloseProcessFallback(skills: SkillMatrix, catalog: PositionCatalog): SkillMatrix {

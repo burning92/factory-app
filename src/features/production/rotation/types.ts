@@ -25,7 +25,6 @@ export const PROCESSES = [
   { id: "outer", label: "외포장" },
   { id: "topping", label: "토핑" },
   { id: "dough", label: "반죽" },
-  { id: "cleanup", label: "반죽 마감" },
   { id: "rnd", label: "R&D" },
   { id: "office", label: "사무" },
 ] as const;

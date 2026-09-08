@@ -118,10 +118,6 @@ export function defaultStaffingForProcess(process: ProcessId): PositionStaffing 
       start: { min: 3, max: 4 },
     });
   }
-  if (process === "cleanup") {
-    // 13시 복귀 인원만큼 자동으로 최소인원이 잡힌다. 기본은 자리만 열어 둔다
-    return staffingOf({ after: { min: 0, max: 3 } });
-  }
   if (process === "heatingClose") {
     // 가열실 설비 정리·세척. 생산이 끝난 18시 이후에만 둔다
     return staffingOf({ closing: { min: 4, max: 4 } });

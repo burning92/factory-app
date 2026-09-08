@@ -146,7 +146,6 @@ export function isNightShiftBackup(person: Person): boolean {
 export function canTakeProcess(person: Person, process: ProcessId, group: ProductGroup): boolean {
   if (!person.constraints?.lockPreferred) return true;
   if (person.preferred === process) return true;
-  if (process === "cleanup" && person.preferred === "dough") return true;
   if (isDoughCorePerson(person) && process === "heating") return true;
   if (
     isFieldBackup(person) &&

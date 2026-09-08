@@ -98,8 +98,6 @@ const CAPABLE: Record<ProcessId, string[]> = {
   outer: ["곽민정", "한상수", "한상혁", "신규3", "심수덕"],
   topping: ["김순이", "김성아", "고은주", "장야핑", "홍수정", "심수덕"],
   dough: DAWN,
-  // 반죽 마감 숙련은 설정에 없다고 보고 반죽 숙련에서 물려받는지 확인한다
-  cleanup: [],
   rnd: [],
   office: ["최민권", "김동호"],
 };
@@ -190,14 +188,13 @@ describe("2026-09-09 운영 흐름", () => {
     const counts = (period: PeriodId) => ({
       가열: namesAt(result, period, "heating").length,
       반죽: namesAt(result, period, "dough").length,
-      반죽마감: namesAt(result, period, "cleanup").length,
       내포장: namesAt(result, period, "inner").length,
       외포장: namesAt(result, period, "outer").length,
       토핑: namesAt(result, period, "topping").length,
       가열마감: namesAt(result, period, "heatingClose").length,
     });
     expect(counts("start")).toMatchObject({ 가열: 8, 반죽: 3, 내포장: 4, 외포장: 4 });
-    expect(counts("after")).toMatchObject({ 가열: 8, 반죽마감: 3, 내포장: 5, 외포장: 4, 토핑: 6 });
+    expect(counts("after")).toMatchObject({ 가열: 8, 반죽: 3, 내포장: 5, 외포장: 4, 토핑: 6 });
     expect(counts("late")).toMatchObject({ 가열: 8, 내포장: 5, 외포장: 4, 토핑: 6 });
     expect(counts("closing")).toMatchObject({ 가열마감: 4, 내포장: 4, 외포장: 2, 토핑: 0 });
     // 정원을 다 채우고 남은 사람만 미배치가 된다
@@ -226,8 +223,8 @@ describe("2026-09-09 운영 흐름", () => {
     expect(namesAt(withHelper, "early", "dough")).toEqual([...DAWN].sort());
     expect(stationOf(withHelper, "lunch1", "신규4")).not.toBe("dough");
     expect(stationOf(withHelper, "after", "신규4")).not.toBe("dough");
-    // 반죽 마감 복귀는 고정조만 한다
-    expect(namesAt(withHelper, "after", "cleanup")).toEqual([...DAWN].sort());
+    // 13시 반죽 복귀는 고정조만 한다
+    expect(namesAt(withHelper, "after", "dough")).toEqual([...DAWN].sort());
   });
 
   it("11~12는 가열 8자리, 12~13은 필수 7자리로 돌고 선택 자리는 비어도 성공이다", () => {
@@ -275,15 +272,15 @@ describe("2026-09-09 운영 흐름", () => {
     }
   });
 
-  it("3) 반죽 고정조는 오전 반죽 → 11~12 가열 → 12~13 식사 → 13시 반죽 마감 복귀", () => {
+  it("3) 반죽 고정조는 오전 반죽 → 11~12 가열 → 12~13 식사 → 13시 반죽 복귀", () => {
     for (const name of DAWN) {
       expect(stationOf(result, "early", name)).toBe("dough");
       expect(stationOf(result, "start", name)).toBe("dough");
       expect(stationOf(result, "lunch1", name)).toBe("heating");
       expect(stationOf(result, "lunch2", name)).toBe("lunch");
-      expect(stationOf(result, "after", name)).toBe("cleanup");
+      expect(stationOf(result, "after", name)).toBe("dough");
     }
-    expect(namesAt(result, "after", "cleanup")).toEqual([...DAWN].sort());
+    expect(namesAt(result, "after", "dough")).toEqual([...DAWN].sort());
   });
 
   it("4) 반죽팀 퇴근 이후 빈 반죽 자리는 오류가 아니다", () => {
@@ -293,9 +290,7 @@ describe("2026-09-09 운영 흐름", () => {
       expect(stationOf(result, "closing", name)).toBe("outside");
     }
     expect(namesAt(result, "late", "dough")).toHaveLength(0);
-    expect(namesAt(result, "late", "cleanup")).toHaveLength(0);
     expect(result.targets.late.positions.find((p) => p.process === "dough")?.min).toBe(0);
-    expect(result.targets.late.positions.find((p) => p.process === "cleanup")?.min).toBe(0);
     expect(result.checks.filter((c) => !c.ok && c.id.includes(":late:")).map((c) => c.label)).toEqual([]);
   });
 

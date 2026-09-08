@@ -1,4 +1,10 @@
-import { DEFAULT_CATALOG, withCloseProcessFallback, withFixedPhonoHeating, withRequiredProcesses } from "./catalog";
+import {
+  DEFAULT_CATALOG,
+  withCloseProcessFallback,
+  withFixedPhonoHeating,
+  withRequiredProcesses,
+  withoutRetiredProcesses,
+} from "./catalog";
 import { mergePersonConstraints, parsePersonConstraints } from "./personRules";
 import { productGroup } from "./seedRoster";
 import { normalizePositionStaffing, parsePeriodStaffJson, processStoresStaffing, withDefaultStaffing } from "./staffing";
@@ -168,6 +174,7 @@ export function catalogFromRows(
     );
   }
   for (const g of GROUPS) {
+    catalog[g] = withoutRetiredProcesses(catalog[g]);
     if (catalog[g].length === 0) catalog[g] = structuredClone(DEFAULT_CATALOG[g]);
     else catalog[g] = withRequiredProcesses(g, withFixedPhonoHeating(g, catalog[g]));
   }

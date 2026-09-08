@@ -627,7 +627,7 @@ function sectionForStation(station?: StationId, heating?: boolean): BoardRow["se
   if (heating || station === "heating") return "가열";
   if (station === "inner" || station === "outer") return "포장";
   if (station === "topping") return "토핑";
-  if (station === "dough" || station === "cleanup") return "반죽";
+  if (station === "dough") return "반죽";
   return "기타";
 }
 

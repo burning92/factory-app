@@ -247,7 +247,7 @@ function pickPreferredCapable(
   return [...pool].sort((a, b) => a.pr - b.pr || byName(a.p, b.p))[0]?.p;
 }
 
-const BACKUP_PROCESSES: ProcessId[] = ["topping", "inner", "outer", "cleanup"];
+const BACKUP_PROCESSES: ProcessId[] = ["topping", "inner", "outer"];
 
 function backupStationCount(
   person: Person,
@@ -369,7 +369,7 @@ function scoreRequired(
     if (slot.position.process === "heating" && person && backupStationCount(person, skills, catalog, group) > 0) {
       vec.flexOnHeat += 1;
     }
-    if (person && person.preferred !== slot.position.process && slot.position.process !== "cleanup") vec.prefLeave += 1;
+    if (person && person.preferred !== slot.position.process) vec.prefLeave += 1;
     const prevA = prev.get(a.personId);
     if (prevA && floorsDiffer(prevA.station, slot.position.process)) vec.floorMoves += 1;
     if (prevA && prevA.positionId && prevA.positionId !== a.positionId) vec.changed += 1;
@@ -403,7 +403,7 @@ function warnForPriority(personName: string, label: string, priority: Priority, 
   } else if (priority === 3) {
     out.push({ kind: "rank3", message: `${personName} → ${label} [중]` });
   }
-  if (preferred !== process && process !== "cleanup") {
+  if (preferred !== process) {
     out.push({ kind: "preferredLeave", message: `${personName} 주공정 ${processLabel(preferred)} → ${label}` });
   }
   return out;
@@ -1222,9 +1222,9 @@ function applyFixedDoughTargets(
 /** 점심 가열 백업: 13시 이후 반죽팀 복귀 자리 확보. 퇴근 전까지 이어진다 */
 const DOUGH_RETURN_PERIODS: PeriodId[] = ["after", "late", "evening"];
 
-/** 오후 복귀 자리는 반죽 마감. 그 자리가 없는 제품군이면 반죽 자리로 돌아간다 */
+/** 점심 백업이 끝나면 반죽 자리로 돌아간다 */
 function doughReturnPosition(catalog: PositionCatalog, group: ProductGroup): PositionDef | undefined {
-  return positionsForProcess(catalog, group, "cleanup")[0] ?? positionsForProcess(catalog, group, "dough")[0];
+  return positionsForProcess(catalog, group, "dough")[0];
 }
 
 function applyLunchBackupReturnTargets(
