@@ -342,62 +342,7 @@ export function mergeSkills(saved: SkillMatrix | undefined, roster: Person[], ca
       }
     }
   }
-  return withCloseProcessFallback(base, catalog);
-}
-
-function bestPriorityForProcess(
-  row: Record<string, Priority>,
-  positions: PositionDef[],
-  process: ProcessId
-): Priority {
-  let best: Priority = 0;
-  for (const pos of positions) {
-    if (pos.process !== process) continue;
-    const v = row[pos.id];
-    if (v === 1 || v === 2 || v === 3 || v === 4 || v === 5) {
-      if (best === 0 || v < best) best = v;
-    }
-  }
-  return best;
-}
-
-/** 마감 공정은 해당 생산공정 숙련을 물려받는다 */
-const CLOSE_PROCESS_SOURCE: Partial<Record<ProcessId, ProcessId>> = {
-  heatingClose: "heating",
-};
-
-/**
- * 가열 마감 숙련을 따로 넣지 않았으면 가열 숙련을 그대로 쓴다.
- * 설비를 돌릴 수 있으면 정리·세척도 가능하다고 보는 기본값이고, 설정에서 값을 넣으면 그 값이 우선한다.
- */
-export function withCloseProcessFallback(skills: SkillMatrix, catalog: PositionCatalog): SkillMatrix {
-  const next: SkillMatrix = { ...skills };
-  for (const [personId, byGroup] of Object.entries(skills)) {
-    const nextGroups = { ...byGroup };
-    let changed = false;
-    for (const group of Object.keys(catalog) as ProductGroup[]) {
-      const row = byGroup[group] ?? {};
-      const nextRow = { ...row };
-      let rowChanged = false;
-      for (const [closeProcess, sourceProcess] of Object.entries(CLOSE_PROCESS_SOURCE) as [ProcessId, ProcessId][]) {
-        const closePositions = catalog[group].filter((p) => p.process === closeProcess);
-        if (closePositions.length === 0) continue;
-        const best = bestPriorityForProcess(row, catalog[group], sourceProcess);
-        if (best === 0) continue;
-        for (const pos of closePositions) {
-          const cur = nextRow[pos.id];
-          if (cur === 1 || cur === 2 || cur === 3 || cur === 4 || cur === 5) continue;
-          nextRow[pos.id] = best;
-          rowChanged = true;
-        }
-      }
-      if (!rowChanged) continue;
-      nextGroups[group] = nextRow;
-      changed = true;
-    }
-    if (changed) next[personId] = nextGroups;
-  }
-  return next;
+  return base;
 }
 
 /** 해당 제품군 숙련을 전원 0(불가)으로 되돌린다. 다른 제품군은 그대로 둔다. */

@@ -3,7 +3,7 @@
  * 인원·근무조·가능 공정은 그날 수기표에서 뽑았고, 정원은 그날 실제 배치 인원에 맞춰 둔다.
  */
 import { describe, expect, it } from "vitest";
-import { DEFAULT_CATALOG, getPriority, withCloseProcessFallback } from "./catalog";
+import { DEFAULT_CATALOG, getPriority } from "./catalog";
 import { generateRotation } from "./rotationEngine";
 import { patchPositionStaffing, seatRequiredIn } from "./staffing";
 import {
@@ -93,7 +93,8 @@ const CAPABLE: Record<ProcessId, string[]> = {
     "이진화",
     "이병일",
   ],
-  heatingClose: [],
+  // 가열 마감 숙련은 따로 지정한다. 18~19에 남는 09~19 가열 인원이다
+  heatingClose: ["임정우", "윤상혁", "송문광", "김성미"],
   inner: ["김소영", "김성아", "심수덕", "이두승", "신미경", "최대열", "차유진", "신규2", "신규4", "고은주"],
   outer: ["곽민정", "한상수", "한상혁", "신규3", "심수덕"],
   topping: ["김순이", "김성아", "고은주", "장야핑", "홍수정", "심수덕"],
@@ -149,8 +150,7 @@ function buildSkills(roster: Person[], catalog: PositionCatalog): SkillMatrix {
       skills[person.id][GROUP]![pos.id] = rank;
     }
   }
-  // 가열 마감·반죽 마감 숙련은 저장본에 없으므로 불러올 때처럼 생산공정 숙련에서 물려받는다
-  return withCloseProcessFallback(skills, catalog);
+  return skills;
 }
 
 function run() {

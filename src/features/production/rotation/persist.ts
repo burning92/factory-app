@@ -1,6 +1,5 @@
 import {
   DEFAULT_CATALOG,
-  withCloseProcessFallback,
   withFixedPhonoHeating,
   withRequiredProcesses,
   withoutRetiredProcesses,
@@ -201,7 +200,7 @@ export function skillsFromRows(
     if (!skills[row.worker_id][g]) skills[row.worker_id][g] = {};
     skills[row.worker_id][g]![row.position_id] = p;
   }
-  return withCloseProcessFallback(skills, catalog);
+  return skills;
 }
 
 export function workersFromRows(
