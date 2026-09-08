@@ -4,16 +4,30 @@ import { defaultStaffingForProcess, withDefaultStaffing } from "./staffing";
 import type { Person, PositionCatalog, PositionDef, Priority, ProcessId, ProductGroup, SkillMatrix } from "./types";
 import { EMERGENCY_PRIORITY } from "./types";
 
-function heat(n: number, prefix: string): PositionDef[] {
-  return Array.from({ length: n }, (_, i) => ({
+/** 포노 가열 순서. 리코타는 리코타 배합이 하나 더 붙어 8자리 */
+const PHONO_HEAT_LABELS = [
+  "도우따기",
+  "도우 누르기",
+  "스트레쳐 전",
+  "내용물 충진",
+  "접기",
+  "화덕 투입 보조",
+  "받기",
+];
+
+const PHONO_RICOTTA_HEAT_LABELS = [...PHONO_HEAT_LABELS, "리코타 배합"];
+
+function heat(labels: string[], prefix: string): PositionDef[] {
+  return labels.map((label, i) => ({
     id: `${prefix}-heat-${i + 1}`,
-    label: `가열 ${i + 1}`,
+    label,
     process: "heating" as const,
   }));
 }
 
 function shared(prefix: string): PositionDef[] {
   return [
+    { id: `${prefix}-heat-close`, label: "가열 마감", process: "heatingClose" },
     { id: `${prefix}-inner`, label: "내포장", process: "inner" },
     { id: `${prefix}-outer`, label: "외포장", process: "outer" },
     { id: `${prefix}-topping`, label: "토핑", process: "topping" },
@@ -25,9 +39,11 @@ function shared(prefix: string): PositionDef[] {
 }
 
 export const DEFAULT_CATALOG: PositionCatalog = {
-  phono_signature: [...heat(7, "sig"), ...shared("sig")].map((p) => withDefaultStaffing(p)),
-  phono_basil_corn: [...heat(7, "basil"), ...shared("basil")].map((p) => withDefaultStaffing(p)),
-  phono_ricotta: [...heat(8, "ricotta"), ...shared("ricotta")].map((p) => withDefaultStaffing(p)),
+  phono_signature: [...heat(PHONO_HEAT_LABELS, "sig"), ...shared("sig")].map((p) => withDefaultStaffing(p)),
+  phono_basil_corn: [...heat(PHONO_HEAT_LABELS, "basil"), ...shared("basil")].map((p) => withDefaultStaffing(p)),
+  phono_ricotta: [...heat(PHONO_RICOTTA_HEAT_LABELS, "ricotta"), ...shared("ricotta")].map((p) =>
+    withDefaultStaffing(p)
+  ),
   parbake: [
     { id: "pb-pick", label: "도우따기", process: "heating" as const },
     { id: "pb-press", label: "누르기", process: "heating" as const },
@@ -39,6 +55,54 @@ export const DEFAULT_CATALOG: PositionCatalog = {
     ...shared("pb"),
   ].map((p) => withDefaultStaffing(p)),
 };
+
+const PHONO_GROUPS: ProductGroup[] = ["phono_signature", "phono_basil_corn", "phono_ricotta"];
+
+/**
+ * 포노 가열 자리 이름은 코드의 공정 순서를 따른다. 저장된 이름 대신 자리 순서대로 붙이고,
+ * 자리 수가 모자라면(리코타 배합 등) 기본 자리를 뒤에 채운다. 자리 ID와 정원은 그대로 둔다.
+ */
+export function withFixedPhonoHeating(group: ProductGroup, positions: PositionDef[]): PositionDef[] {
+  if (!PHONO_GROUPS.includes(group)) return positions;
+  const defaults = DEFAULT_CATALOG[group].filter((p) => p.process === "heating");
+  const out: PositionDef[] = [];
+  let seen = 0;
+  let lastHeatingAt = -1;
+  for (const pos of positions) {
+    if (pos.process !== "heating") {
+      out.push(pos);
+      continue;
+    }
+    const fixed = defaults[seen];
+    out.push(fixed ? { ...pos, label: fixed.label } : pos);
+    seen += 1;
+    lastHeatingAt = out.length - 1;
+  }
+  if (seen < defaults.length) {
+    const taken = new Set(out.map((p) => p.id));
+    const missing = defaults
+      .slice(seen)
+      .filter((p) => !taken.has(p.id))
+      .map((p) => withDefaultStaffing(structuredClone(p)));
+    out.splice(lastHeatingAt + 1, 0, ...missing);
+  }
+  return out;
+}
+
+/** 저장본에 없던 시스템 공정 자리를 기본값으로 채운다 (가열 마감 등 나중에 추가된 공정) */
+const REQUIRED_PROCESSES: ProcessId[] = ["heatingClose"];
+
+export function withRequiredProcesses(group: ProductGroup, positions: PositionDef[]): PositionDef[] {
+  const missing = REQUIRED_PROCESSES.filter((process) => !positions.some((p) => p.process === process));
+  if (missing.length === 0) return positions;
+  const taken = new Set(positions.map((p) => p.id));
+  const added = missing.flatMap((process) =>
+    structuredClone(DEFAULT_CATALOG[group])
+      .filter((p) => p.process === process && !taken.has(p.id))
+      .map((p) => withDefaultStaffing(p))
+  );
+  return [...positions, ...added];
+}
 
 export function newPositionId(process: ProcessId): string {
   return `${process}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -58,6 +122,16 @@ export function positionsForProcess(
 
 export function isNormalRank(v: Priority): boolean {
   return v === 1 || v === 2 || v === 3 || v === 4;
+}
+
+/** 상·중상·중 — 공정을 이끌 수 있는 숙련 */
+export function isExperiencedRank(v: Priority): boolean {
+  return v === 1 || v === 2 || v === 3;
+}
+
+/** 하·비상 — 초보/임시. 공정에 이 숙련만 있으면 안 됨 */
+export function isJuniorRank(v: Priority): boolean {
+  return v === 4 || v === 5;
 }
 
 export function getPriority(
@@ -220,16 +294,22 @@ export function mergeCatalog(saved: PositionCatalog | undefined): PositionCatalo
         : null;
     const source = fromGroup ?? fromOldStd;
     if (source && source.length > 0) {
-      next[group] = source
-        .filter((p) => p && typeof p.id === "string" && typeof p.label === "string")
-        .map((p) =>
-          withDefaultStaffing({
-            id: p.id,
-            label: p.label,
-            process: p.process,
-            staffing: p.staffing,
-          })
-        );
+      next[group] = withRequiredProcesses(
+        group,
+        withFixedPhonoHeating(
+          group,
+          source
+            .filter((p) => p && typeof p.id === "string" && typeof p.label === "string")
+            .map((p) =>
+              withDefaultStaffing({
+                id: p.id,
+                label: p.label,
+                process: p.process,
+                staffing: p.staffing,
+              })
+            )
+        )
+      );
     } else {
       next[group] = next[group].map((p) => withDefaultStaffing(p));
     }
@@ -256,7 +336,79 @@ export function mergeSkills(saved: SkillMatrix | undefined, roster: Person[], ca
       }
     }
   }
-  return base;
+  return withCloseProcessFallback(base, catalog);
+}
+
+function bestPriorityForProcess(
+  row: Record<string, Priority>,
+  positions: PositionDef[],
+  process: ProcessId
+): Priority {
+  let best: Priority = 0;
+  for (const pos of positions) {
+    if (pos.process !== process) continue;
+    const v = row[pos.id];
+    if (v === 1 || v === 2 || v === 3 || v === 4 || v === 5) {
+      if (best === 0 || v < best) best = v;
+    }
+  }
+  return best;
+}
+
+/** 마감 공정은 해당 생산공정 숙련을 물려받는다 */
+const CLOSE_PROCESS_SOURCE: Partial<Record<ProcessId, ProcessId>> = {
+  heatingClose: "heating",
+  cleanup: "dough",
+};
+
+/**
+ * 가열 마감·반죽 마감 숙련을 따로 넣지 않았으면 가열·반죽 숙련을 그대로 쓴다.
+ * 설비를 돌릴 수 있으면 정리·세척도 가능하다고 보는 기본값이고, 설정에서 값을 넣으면 그 값이 우선한다.
+ */
+export function withCloseProcessFallback(skills: SkillMatrix, catalog: PositionCatalog): SkillMatrix {
+  const next: SkillMatrix = { ...skills };
+  for (const [personId, byGroup] of Object.entries(skills)) {
+    const nextGroups = { ...byGroup };
+    let changed = false;
+    for (const group of Object.keys(catalog) as ProductGroup[]) {
+      const row = byGroup[group] ?? {};
+      const nextRow = { ...row };
+      let rowChanged = false;
+      for (const [closeProcess, sourceProcess] of Object.entries(CLOSE_PROCESS_SOURCE) as [ProcessId, ProcessId][]) {
+        const closePositions = catalog[group].filter((p) => p.process === closeProcess);
+        if (closePositions.length === 0) continue;
+        const best = bestPriorityForProcess(row, catalog[group], sourceProcess);
+        if (best === 0) continue;
+        for (const pos of closePositions) {
+          const cur = nextRow[pos.id];
+          if (cur === 1 || cur === 2 || cur === 3 || cur === 4 || cur === 5) continue;
+          nextRow[pos.id] = best;
+          rowChanged = true;
+        }
+      }
+      if (!rowChanged) continue;
+      nextGroups[group] = nextRow;
+      changed = true;
+    }
+    if (changed) next[personId] = nextGroups;
+  }
+  return next;
+}
+
+/** 해당 제품군 숙련을 전원 0(불가)으로 되돌린다. 다른 제품군은 그대로 둔다. */
+export function clearGroupSkills(
+  skills: SkillMatrix,
+  roster: Person[],
+  catalog: PositionCatalog,
+  group: ProductGroup
+): SkillMatrix {
+  const next: SkillMatrix = { ...skills };
+  for (const person of roster) {
+    const cleared: Record<string, Priority> = {};
+    for (const pos of catalog[group]) cleared[pos.id] = 0;
+    next[person.id] = { ...next[person.id], [group]: cleared };
+  }
+  return next;
 }
 
 export function copyProductGroup(

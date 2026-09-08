@@ -3,9 +3,11 @@ import { buildChecks, generateRotation, movePerson } from "./rotationEngine";
 import { hasQualification, mergePersonConstraints, parsePersonConstraints } from "./personRules";
 import { visibleRotationRoster } from "./catalog";
 import { applyWorkerConstraintsMap } from "./persist";
-import { withDefaultStaffing } from "./staffing";
+import { seatRequiredIn, withDefaultStaffing } from "./staffing";
+import { PERIODS } from "./types";
 import type {
   DoughSettings,
+  PeriodId,
   Person,
   PositionCatalog,
   PositionDef,
@@ -13,6 +15,7 @@ import type {
   ProcessId,
   ProductGroup,
   RotationModes,
+  SavedPositionStaffing,
   SkillMatrix,
 } from "./types";
 
@@ -117,7 +120,7 @@ function run(opts: {
   });
 }
 
-function namesOn(result: ReturnType<typeof generateRotation>, period: "start" | "lunch1" | "lunch2" | "after", station: string) {
+function namesOn(result: ReturnType<typeof generateRotation>, period: PeriodId, station: string) {
   return result.assignments[period]
     .filter((a) => a.station === station)
     .map((a) => a.personId);
@@ -127,9 +130,166 @@ function innerQual(group: ProductGroup = "phono_signature") {
   return { qualificationsByGroup: { [group]: { threeSidePacker: true } } };
 }
 
-function hasQualCheck(result: ReturnType<typeof generateRotation>, period: "start" | "lunch1" | "lunch2" | "after") {
+function hasQualCheck(result: ReturnType<typeof generateRotation>, period: PeriodId) {
   return result.checks.find((c) => c.id.startsWith(`qual:${period}:`) && c.id.includes("threeSidePacker"));
 }
+
+describe("가열 자리 필수·선택", () => {
+  const seatCatalog = (h2?: SavedPositionStaffing) =>
+    catalogWith([
+      { id: "h1", label: "가열 1", process: "heating" },
+      { id: "h2", label: "가열 2", process: "heating", staffing: h2 },
+      { id: "office", label: "사무", process: "office", staffing: zeros },
+    ]);
+  const optionalEverywhere: SavedPositionStaffing = {};
+  for (const period of PERIODS) optionalEverywhere[period.id] = { min: 0, max: 1 };
+  const soloRoster = () => [person("a", "heating")];
+  const soloSkills = (catalog: PositionCatalog) => skillsFor(soloRoster(), catalog, { a: { h1: 1, h2: 1 } });
+
+  it("설정이 없으면 모든 생산 구간이 필수다", () => {
+    const catalog = seatCatalog();
+    const seat = catalog.phono_signature.find((p) => p.id === "h2")!;
+    for (const period of PERIODS) {
+      expect({ period: period.id, required: seatRequiredIn(seat, period.id) }).toEqual({
+        period: period.id,
+        required: period.production !== false,
+      });
+    }
+  });
+
+  it("필수 자리가 비면 실패로 잡힌다", () => {
+    const catalog = seatCatalog();
+    const result = run({ roster: soloRoster(), catalog, skills: soloSkills(catalog) });
+    expect(namesOn(result, "start", "heating")).toEqual(["a"]);
+    expect(result.failed).toBe(true);
+    expect(result.checks.find((c) => c.id === "pos:start:heating")).toMatchObject({ ok: false, actual: "1/2자리" });
+  });
+
+  it("선택으로 둔 자리는 사람이 없어 비어도 실패가 아니고 필수 자리가 먼저 찬다", () => {
+    const catalog = seatCatalog(optionalEverywhere);
+    const result = run({ roster: soloRoster(), catalog, skills: soloSkills(catalog) });
+    const placed = result.assignments.start.filter((a) => a.station === "heating");
+    expect(placed.map((a) => a.positionId)).toEqual(["h1"]);
+    expect(result.failed).toBe(false);
+    expect(result.checks.find((c) => c.id === "pos:start:heating")).toMatchObject({ ok: true, actual: "1/1자리" });
+  });
+
+  it("사람이 남으면 선택 자리도 채운다", () => {
+    const catalog = seatCatalog(optionalEverywhere);
+    const roster = [person("a", "heating"), person("b", "heating")];
+    const skills = skillsFor(roster, catalog, { a: { h1: 1, h2: 1 }, b: { h1: 1, h2: 1 } });
+    const result = run({ roster, catalog, skills });
+    expect(namesOn(result, "start", "heating")).toHaveLength(2);
+    expect(result.failed).toBe(false);
+  });
+});
+
+describe("근무조와 시간대", () => {
+  const shiftCatalog = () =>
+    catalogWith([
+      { id: "h1", label: "가열 1", process: "heating" },
+      { id: "close", label: "가열 마감", process: "heatingClose", staffing: { closing: range(1) } },
+      {
+        id: "inner",
+        label: "내포장",
+        process: "inner",
+        staffing: {
+          early: range(1),
+          start: range(1),
+          lunch1: range(1),
+          lunch2: range(1),
+          after: range(1),
+          late: range(1),
+          closing: range(1),
+        },
+      },
+      { id: "office", label: "사무", process: "office", staffing: zeros },
+    ]);
+
+  function shiftRoster() {
+    return [
+      person("e1", "heating"),
+      person("e2", "inner", { constraints: innerQual() }),
+      person("n1", "heating", { shift: "0900-1900" }),
+      person("n2", "inner", { shift: "0900-1900", constraints: innerQual() }),
+    ];
+  }
+
+  function shiftSkills(catalog: PositionCatalog, roster: Person[]) {
+    return skillsFor(roster, catalog, {
+      e1: { h1: 1, inner: 2 },
+      e2: { inner: 1 },
+      n1: { h1: 1, inner: 2, close: 1 },
+      n2: { inner: 1, close: 1 },
+    });
+  }
+
+  it("09시 출근자는 08~09에 배치되지 않고 근무 외로 표시된다", () => {
+    const catalog = shiftCatalog();
+    const roster = shiftRoster();
+    const result = run({ roster, catalog, skills: shiftSkills(catalog, roster) });
+    const early = result.assignments.early;
+    expect(namesOn(result, "early", "outside").sort()).toEqual(["n1", "n2"]);
+    expect(early.filter((a) => a.station === "heating").map((a) => a.personId)).toEqual(["e1"]);
+    expect(namesOn(result, "start", "outside")).toHaveLength(0);
+  });
+
+  it("18~19는 08~18 근무자가 빠지고 가열 대신 가열 마감이 선다", () => {
+    const catalog = shiftCatalog();
+    const roster = shiftRoster();
+    const result = run({ roster, catalog, skills: shiftSkills(catalog, roster) });
+    expect(namesOn(result, "closing", "outside").sort()).toEqual(["e1", "e2"]);
+    expect(namesOn(result, "closing", "heating")).toHaveLength(0);
+    expect(namesOn(result, "closing", "heatingClose")).toHaveLength(1);
+    expect(namesOn(result, "closing", "inner")).toHaveLength(1);
+    expect(result.checks.some((c) => c.id === "pos:closing:heating")).toBe(false);
+    expect(result.failed).toBe(false);
+  });
+
+  it("06~15:30 근무조는 15:30 이후 구간에서 빠진다", () => {
+    const catalog = shiftCatalog();
+    const roster = [...shiftRoster(), person("dawn", "inner", { shift: "0600-1530", constraints: innerQual() })];
+    const skills = skillsFor(roster, catalog, {
+      e1: { h1: 1, inner: 2 },
+      e2: { inner: 1 },
+      n1: { h1: 1, inner: 2, close: 1 },
+      n2: { inner: 1, close: 1 },
+      dawn: { inner: 1 },
+    });
+    const result = run({ roster, catalog, skills });
+    expect(namesOn(result, "early", "outside")).not.toContain("dawn");
+    expect(namesOn(result, "after", "outside")).not.toContain("dawn");
+    expect(namesOn(result, "late", "outside")).toContain("dawn");
+    expect(namesOn(result, "closing", "outside")).toContain("dawn");
+  });
+
+  it("08~17 근무조는 15:30~17에는 남고 17~18에는 빠진다", () => {
+    const catalog = shiftCatalog();
+    const roster = [...shiftRoster(), person("five", "inner", { shift: "0800-1700", constraints: innerQual() })];
+    const skills = skillsFor(roster, catalog, {
+      e1: { h1: 1, inner: 2 },
+      e2: { inner: 1 },
+      n1: { h1: 1, inner: 2, close: 1 },
+      n2: { inner: 1, close: 1 },
+      five: { inner: 1 },
+    });
+    const result = run({ roster, catalog, skills });
+    expect(namesOn(result, "after", "outside")).not.toContain("five");
+    expect(namesOn(result, "late", "outside")).not.toContain("five");
+    expect(namesOn(result, "evening", "outside")).toContain("five");
+    expect(namesOn(result, "closing", "outside")).toContain("five");
+  });
+
+  it("근무 인원이 아무도 없는 시간대는 실패로 치지 않는다", () => {
+    const catalog = miniCatalog({ innerStart: 1 });
+    const roster = [person("heat-1", "heating"), person("pack-1", "inner", { constraints: innerQual() })];
+    const skills = skillsFor(roster, catalog, { "heat-1": { h1: 1 }, "pack-1": { inner: 1 } });
+    const result = run({ roster, catalog, skills });
+    expect(result.assignments.closing.every((a) => a.station === "outside" || a.station === "off")).toBe(true);
+    expect(result.checks.some((c) => c.id.includes(":closing:"))).toBe(false);
+    expect(result.failed).toBe(false);
+  });
+});
 
 describe("personRules qualifications", () => {
   it("기존 constraints만 있어도 파싱되고 자격은 없는 것으로 본다", () => {
@@ -175,6 +335,29 @@ describe("내포장 필수자격", () => {
     expect(inner).toHaveLength(3);
     expect(inner).toContain("qual-1");
     expect(hasQualCheck(result, "start")?.ok).toBe(true);
+  });
+
+  it("초보(하)만 3명 있는 공정에 중 이상 숙련자를 반드시 끼워 넣는다", () => {
+    const catalog = miniCatalog({ innerStart: 3 });
+    const roster = [
+      person("junior-a", "inner", { constraints: innerQual() }),
+      person("junior-b", "inner", { constraints: innerQual() }),
+      person("junior-c", "inner", { constraints: innerQual() }),
+      person("senior", "inner", { constraints: innerQual() }),
+      person("heat-1", "heating"),
+    ];
+    const skills = skillsFor(roster, catalog, {
+      "junior-a": { inner: 4 },
+      "junior-b": { inner: 4 },
+      "junior-c": { inner: 4 },
+      senior: { inner: 2 },
+      "heat-1": { h1: 1 },
+    });
+    const result = run({ roster, catalog, skills });
+    const inner = namesOn(result, "start", "inner");
+    expect(inner).toHaveLength(3);
+    expect(inner).toContain("senior");
+    expect(inner.filter((id) => id.startsWith("junior-")).length).toBe(2);
   });
 
   it("테스트 2: 자격자 4명도 이름 없이 Boolean만으로 고른다", () => {
@@ -373,7 +556,38 @@ describe("반죽팀 정책", () => {
     expect(namesOn(result, "lunch1", "lunch").some((id) => doughIds.includes(id))).toBe(false);
     expect(namesOn(result, "lunch2", "lunch").filter((id) => doughIds.includes(id)).sort()).toEqual(doughIds);
     expect(namesOn(result, "lunch2", "heating").some((id) => doughIds.includes(id))).toBe(false);
+    expect(namesOn(result, "early", "dough").sort()).toEqual(doughIds);
     expect(namesOn(result, "after", "dough").sort()).toEqual(doughIds);
+    expect(namesOn(result, "late", "dough").sort()).toEqual(doughIds);
+  });
+
+  it("반죽팀이 06~15:30 근무면 15:30 이후에는 반죽 자리를 세우지 않는다", () => {
+    const catalog = miniCatalog({ innerStart: 1, innerLunch: 1, doughStart: 3, heat: 2 });
+    const roster = [
+      ...doughRoster(3).map((p) => ({ ...p, shift: "0600-1530" })),
+      person("qual-1", "inner", { constraints: innerQual() }),
+      person("heat-1", "heating"),
+      person("heat-2", "heating"),
+    ];
+    const skills = skillsFor(roster, catalog, {
+      "dough-1": { dough: 1, h1: 2, h2: 2 },
+      "dough-2": { dough: 1, h1: 2, h2: 2 },
+      "dough-3": { dough: 1, h1: 2, h2: 2 },
+      "qual-1": { inner: 1 },
+      "heat-1": { h1: 1, h2: 1 },
+      "heat-2": { h1: 1, h2: 1 },
+    });
+    const result = run({
+      roster,
+      catalog,
+      skills,
+      modes: LUNCH_ON,
+      doughSettings: { minStaff: 3, rotationPolicy: "FIXED_DOUGH" },
+    });
+    expect(namesOn(result, "after", "dough")).toHaveLength(3);
+    expect(namesOn(result, "late", "dough")).toHaveLength(0);
+    expect(result.targets.late.positions.find((p) => p.process === "dough")?.min).toBe(0);
+    expect(namesOn(result, "late", "outside").sort()).toEqual(["dough-1", "dough-2", "dough-3"]);
   });
 
   it.each([2, 3, 4])("테스트 9: doughCore %s명이어도 3명 하드코딩으로 깨지지 않는다", (n) => {

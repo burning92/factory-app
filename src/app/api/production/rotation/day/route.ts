@@ -40,6 +40,33 @@ async function resolvePlanningMonths(
   return { ids: monthRows.map((m) => m.id), preferred };
 }
 
+type AttendanceRow = { worker_id: string; present: boolean; shift_override?: string | null };
+
+function missingShiftOverrideColumn(message: string): boolean {
+  return /shift_override|schema cache/i.test(message);
+}
+
+/** shift_override 컬럼은 나중에 추가됐다. 아직 없는 DB에서도 출근 정보는 읽히게 한다 */
+async function loadAttendanceRows(
+  admin: ReturnType<typeof createAdminClient>,
+  org: string,
+  date: string
+): Promise<{ data: AttendanceRow[] }> {
+  const withOverride = await admin
+    .from("rotation_day_attendance")
+    .select("worker_id,present,shift_override")
+    .eq("organization_code", org)
+    .eq("work_date", date);
+  if (!withOverride.error) return { data: (withOverride.data ?? []) as AttendanceRow[] };
+  if (!missingShiftOverrideColumn(withOverride.error.message)) return { data: [] };
+  const basic = await admin
+    .from("rotation_day_attendance")
+    .select("worker_id,present")
+    .eq("organization_code", org)
+    .eq("work_date", date);
+  return { data: (basic.data ?? []) as AttendanceRow[] };
+}
+
 async function loadMatchWorkers(admin: ReturnType<typeof createAdminClient>) {
   const [{ data: workerRows }, { data: org }] = await Promise.all([
     admin.from("rotation_workers").select("worker_id,name").eq("organization_code", ROTATION_FACTORY_ORG).eq("is_active", true),
@@ -169,13 +196,18 @@ export async function GET(req: NextRequest) {
   const admin = createAdminClient();
   const [{ data: meta }, { data: att }, { data: asg }, matchWorkers, months] = await Promise.all([
     admin.from("rotation_day_meta").select("product_line,lunch,break_rotation,split_shift").eq("organization_code", org).eq("work_date", date).maybeSingle(),
-    admin.from("rotation_day_attendance").select("worker_id,present").eq("organization_code", org).eq("work_date", date),
+    loadAttendanceRows(admin, org, date),
     admin.from("rotation_day_assignments").select("period_id,worker_id,station,position_id,priority,is_manual").eq("organization_code", org).eq("work_date", date),
     loadMatchWorkers(admin),
     resolvePlanningMonths(admin, date),
   ]);
   const attendance: Record<string, boolean> = {};
-  for (const row of att ?? []) attendance[row.worker_id] = row.present;
+  const shiftOverrides: Record<string, string> = {};
+  for (const row of att ?? []) {
+    attendance[row.worker_id] = row.present;
+    const override = typeof row.shift_override === "string" ? row.shift_override.trim() : "";
+    if (override) shiftOverrides[row.worker_id] = override;
+  }
   const manual = (asg ?? []).filter((r) => r.is_manual);
   const monthId = months.preferred;
   const [{ data: classRows }, { data: planEntries }, planned] = await Promise.all([
@@ -202,6 +234,7 @@ export async function GET(req: NextRequest) {
       splitShift: meta?.split_shift ?? false,
     },
     attendance,
+    shiftOverrides,
     assignments: assignmentsFromRows(manual),
     saved: Boolean(meta),
     planningLeaves: planned.leaves,
@@ -244,15 +277,26 @@ export async function PUT(req: NextRequest) {
   if (mErr) return NextResponse.json({ error: mErr.message }, { status: 500 });
 
   await admin.from("rotation_day_attendance").delete().eq("organization_code", org).eq("work_date", body.date);
-  const attRows = Object.entries(body.attendance ?? {}).map(([worker_id, present]) => ({
+  const overrides = body.shiftOverrides ?? {};
+  const workerIds = Array.from(new Set([...Object.keys(body.attendance ?? {}), ...Object.keys(overrides)]));
+  const attRows = workerIds.map((worker_id) => ({
     organization_code: org,
     work_date: body.date,
     worker_id,
-    present,
+    present: body.attendance?.[worker_id] ?? true,
+    shift_override: overrides[worker_id] ?? null,
   }));
   if (attRows.length > 0) {
     const { error } = await admin.from("rotation_day_attendance").insert(attRows);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error && !missingShiftOverrideColumn(error.message)) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    if (error) {
+      const { error: retry } = await admin
+        .from("rotation_day_attendance")
+        .insert(attRows.map(({ shift_override: _drop, ...rest }) => rest));
+      if (retry) return NextResponse.json({ error: retry.message }, { status: 500 });
+    }
   }
 
   await admin.from("rotation_day_assignments").delete().eq("organization_code", org).eq("work_date", body.date);

@@ -1,5 +1,6 @@
 import { isHalfDayLeaveType, parsePlanningLeaveType } from "@/features/production/planning/leaveTypes";
 import { SEED_ROSTER } from "./seedRoster";
+import { isAfternoonPeriod, isMorningPeriod, personWorksDuringPeriod } from "./workHours";
 import type { PeriodId, Person, ProcessId, ShiftId } from "./types";
 
 export type RotationLeaveKind = "none" | "annual" | "other" | "half" | "half_am" | "half_pm";
@@ -50,13 +51,26 @@ export function isFullDayLeave(kind: RotationLeaveKind | undefined): boolean {
   return kind === "annual" || kind === "other";
 }
 
+/** 근무조 밖(출근 전·퇴근 후)이라 이 구간에 자리를 줄 수 없는지 */
+export function isOutsideShift(person: Person, period: PeriodId): boolean {
+  return !personWorksDuringPeriod(person, period);
+}
+
+/** 배치 대상이 아닐 때 표에 어떤 상태로 보일지. 배치 가능하면 null */
+export function restStationFor(person: Person, period: PeriodId): "off" | "outside" | null {
+  if (isFullDayLeave(person.leaveKind) || !person.present) return "off";
+  if (isOutsideShift(person, period)) return "outside";
+  if (!isAvailableInPeriod(person, period)) return "off";
+  return null;
+}
+
 export function isAvailableInPeriod(person: Person, period: PeriodId): boolean {
   if (!person.present) return false;
   const k = person.leaveKind ?? "none";
-  if (k === "none") return true;
   if (k === "annual" || k === "other") return false;
-  if (k === "half_pm") return period === "lunch2" || period === "after";
-  return period === "start" || period === "lunch1";
+  if (!personWorksDuringPeriod(person, period)) return false;
+  if (k === "none") return true;
+  return k === "half_pm" ? isAfternoonPeriod(period) : isMorningPeriod(period);
 }
 
 function kindRank(kind: RotationLeaveKind): number {

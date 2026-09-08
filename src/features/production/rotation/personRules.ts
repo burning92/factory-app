@@ -26,7 +26,7 @@ function pickConstraintBool(
   rawIncoming: Record<string, unknown> | null,
   next: PersonConstraints,
   prev: PersonConstraints,
-  key: "lockPreferred" | "stayFloor" | "excluded" | "fieldBackup"
+  key: "lockPreferred" | "stayFloor" | "excluded" | "fieldBackup" | "nightShiftBackup"
 ): true | undefined {
   if (rawIncoming && Object.prototype.hasOwnProperty.call(rawIncoming, key)) {
     return isExcludedFlag(rawIncoming[key]) ? true : undefined;
@@ -76,6 +76,7 @@ export function parsePersonConstraints(raw: unknown): PersonConstraints | undefi
   if (isExcludedFlag(src.excluded)) next.excluded = true;
   if (src.excluded === false) next.excluded = false;
   if (src.fieldBackup === true) next.fieldBackup = true;
+  if (src.nightShiftBackup === true) next.nightShiftBackup = true;
   if (src.doughCore === true) next.doughCore = true;
   if (src.doughCore === false) next.doughCore = false;
   const qualificationsByGroup = parseQualificationsByGroup(src.qualificationsByGroup, src.qualifications);
@@ -96,10 +97,12 @@ export function mergePersonConstraints(existing: unknown, incoming: unknown): Pe
   const stayFloor = pickConstraintBool(raw, next, prev, "stayFloor");
   const excluded = pickConstraintBool(raw, next, prev, "excluded");
   const fieldBackup = pickConstraintBool(raw, next, prev, "fieldBackup");
+  const nightShiftBackup = pickConstraintBool(raw, next, prev, "nightShiftBackup");
   if (lockPreferred) out.lockPreferred = true;
   if (stayFloor) out.stayFloor = true;
   if (excluded) out.excluded = true;
   if (fieldBackup) out.fieldBackup = true;
+  if (nightShiftBackup) out.nightShiftBackup = true;
 
   if (raw && Object.prototype.hasOwnProperty.call(raw, "doughCore")) {
     if (raw.doughCore === true) out.doughCore = true;
@@ -133,6 +136,11 @@ export function isDoughCorePerson(person: Person): boolean {
 
 export function isFieldBackup(person: Person): boolean {
   return person.constraints?.fieldBackup === true;
+}
+
+/** 09~19조 결원이 나면 그날 하루 근무조를 바꿔 쓸 수 있는 사람 */
+export function isNightShiftBackup(person: Person): boolean {
+  return person.constraints?.nightShiftBackup === true;
 }
 
 export function canTakeProcess(person: Person, process: ProcessId, group: ProductGroup): boolean {

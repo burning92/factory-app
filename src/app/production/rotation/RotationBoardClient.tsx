@@ -13,9 +13,12 @@ import {
   isAvailableInPeriod,
   isFullDayLeave,
   leaveKindLabel,
+  restStationFor,
   type PlanningLeaveItem,
 } from "@/features/production/rotation/planningLeave";
 import { rotationLineLabel, type PlannedRotationProduct } from "@/features/production/rotation/mapPlanProducts";
+import { applyShiftOverrides } from "@/features/production/rotation/shiftSubstitute";
+import { NIGHT_SHIFT, hasShiftOverride } from "@/features/production/rotation/workHours";
 import {
   canAssign,
   generateRotation,
@@ -36,6 +39,7 @@ import {
   type ProductGroup,
   type ProductLine,
   type RotationModes,
+  type ShiftSubstitutePlan,
   type SkillMatrix,
   type StaffingTarget,
   type StationId,
@@ -83,6 +87,61 @@ function LeaveLine(props: { items: PlanningLeaveItem[]; unmatched: string[] }) {
   );
 }
 
+/** 09~19조 결원 추천. 근무시간이 실제로 바뀌므로 관리자가 고르기 전에는 아무것도 확정하지 않는다 */
+function ShiftSubstitutePanel(props: {
+  plan: ShiftSubstitutePlan;
+  roster: Person[];
+  onConfirm: (personId: string) => void;
+  onCancel: (personId: string) => void;
+}) {
+  const { plan } = props;
+  const confirmed = props.roster.filter((p) => hasShiftOverride(p));
+  const short = plan.gaps.length > 0;
+  return (
+    <section
+      className={`no-print mb-3 rounded-xl border px-4 py-3 ${
+        short ? "border-amber-700/50 bg-amber-950/30" : "border-slate-700/70 bg-slate-800/40"
+      }`}
+    >
+      <p className={`text-sm ${short ? "text-amber-100" : "text-slate-200"}`}>{plan.message}</p>
+      {plan.candidates.length > 0 && (
+        <ul className="mt-2 flex flex-wrap gap-2">
+          {plan.candidates.map((c) => (
+            <li key={c.personId}>
+              <button
+                type="button"
+                onClick={() => props.onConfirm(c.personId)}
+                className="rounded-lg border border-cyan-700/60 bg-cyan-950/40 px-3 py-1.5 text-left text-sm text-cyan-100 hover:bg-cyan-900/40"
+              >
+                <span className="font-medium">{c.name}</span>
+                <span className="ml-1.5 text-[11px] text-cyan-200/80">
+                  {c.covers.join("·")} · {c.reason}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {confirmed.length > 0 && (
+        <ul className="mt-2 flex flex-wrap gap-2">
+          {confirmed.map((person) => (
+            <li key={person.id} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-600 bg-slate-900/60 px-3 py-1.5 text-sm text-slate-200">
+              {person.name} <span className="text-[11px] text-cyan-300">09~19 대체</span>
+              <button
+                type="button"
+                onClick={() => props.onCancel(person.id)}
+                className="ml-1 text-[11px] text-slate-400 underline hover:text-rose-300"
+              >
+                해제
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export default function RotationBoardClient() {
   const { profile } = useAuth();
   const canEditSettings = profile?.role !== "worker";
@@ -104,6 +163,7 @@ export default function RotationBoardClient() {
   const [moveError, setMoveError] = useState<string | null>(null);
   const [moveWarning, setMoveWarning] = useState<string | null>(null);
   const [overrides, setOverrides] = useState<PeriodAssignments | null>(null);
+  const [shiftOverrides, setShiftOverrides] = useState<Record<string, string>>({});
   const skipDaySave = useRef(true);
   const leaveItemsRef = useRef<PlanningLeaveItem[]>([]);
   const attendanceRef = useRef<Record<string, boolean>>({});
@@ -155,9 +215,11 @@ export default function RotationBoardClient() {
           appliedRosterKeyRef.current = prev.map((p) => p.id).join(",");
           return applyPlanningLeaveItems(prev, leaveItemsRef.current, attendanceRef.current);
         });
+        setShiftOverrides(day.shiftOverrides ?? {});
         setOverrides(day.assignments);
       } catch {
         if (!cancelled) {
+          setShiftOverrides({});
           setOverrides(null);
           setPlanningLeaveItems([]);
           setUnmatchedLeaves([]);
@@ -181,9 +243,10 @@ export default function RotationBoardClient() {
   }, [hydrated, rosterIdKey]);
 
   const group = productGroup(line);
+  // 기본 근무조는 마스터에 그대로 두고, 그날 확정한 대체근무만 얹어서 배치를 돌린다
   const boardRoster = useMemo(
-    () => visibleRotationRoster(roster, date),
-    [roster, date]
+    () => applyShiftOverrides(visibleRotationRoster(roster, date), shiftOverrides),
+    [roster, date, shiftOverrides]
   );
   const result = useMemo(
     () => generateRotation({ roster: boardRoster, line, modes, catalog, skills, workDate: date, doughSettings }),
@@ -193,7 +256,22 @@ export default function RotationBoardClient() {
   useEffect(() => {
     if (skipDaySave.current) return;
     setOverrides(null);
-  }, [line, modes, catalog, skills]);
+  }, [line, modes, catalog, skills, shiftOverrides]);
+
+  const confirmSubstitute = useCallback((personId: string) => {
+    setShiftOverrides((prev) => ({ ...prev, [personId]: NIGHT_SHIFT }));
+    setOverrides(null);
+  }, []);
+
+  const cancelSubstitute = useCallback((personId: string) => {
+    setShiftOverrides((prev) => {
+      if (!(personId in prev)) return prev;
+      const next = { ...prev };
+      delete next[personId];
+      return next;
+    });
+    setOverrides(null);
+  }, []);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -207,6 +285,7 @@ export default function RotationBoardClient() {
         productLine: line,
         modes,
         attendance: Object.fromEntries(roster.map((p) => [p.id, p.present])),
+        shiftOverrides,
         assignments: overrides,
       }).then(
         () => setSaveNote("당일 저장됨"),
@@ -214,20 +293,23 @@ export default function RotationBoardClient() {
       );
     }, 700);
     return () => window.clearTimeout(t);
-  }, [date, line, modes, roster, overrides, hydrated]);
+  }, [date, line, modes, roster, overrides, shiftOverrides, hydrated]);
 
   const assignments = useMemo(() => {
     const base = overrides ?? result.assignments;
-    const next: PeriodAssignments = { start: [], lunch1: [], lunch2: [], after: [] };
+    const next = {} as PeriodAssignments;
+    for (const period of PERIODS) next[period.id] = [];
     for (const period of PERIODS) {
       const seen = new Set<string>();
       for (const row of base[period.id]) {
         const person = boardRoster.find((p) => p.id === row.personId);
         if (!person || isRotationExcluded(person) || seen.has(person.id)) continue;
         seen.add(person.id);
+        const rest = restStationFor(person, period.id);
         next[period.id].push(
-          isAvailableInPeriod(person, period.id)
-            ? row.station === "unassigned" && !row.unassignedReason
+          rest
+            ? { personId: person.id, station: rest }
+            : row.station === "unassigned" && !row.unassignedReason
               ? {
                   ...row,
                   unassignedReason: hasNoSkillConfig(skills, person, catalog, group)
@@ -235,14 +317,14 @@ export default function RotationBoardClient() {
                     : "NO_AVAILABLE_SLOT",
                 }
               : row
-            : { personId: person.id, station: "off" }
         );
       }
       for (const person of boardRoster) {
         if (seen.has(person.id)) continue;
         if (isRotationExcluded(person)) continue;
-        if (!isAvailableInPeriod(person, period.id)) {
-          next[period.id].push({ personId: person.id, station: "off" });
+        const rest = restStationFor(person, period.id);
+        if (rest) {
+          next[period.id].push({ personId: person.id, station: rest });
           continue;
         }
         const generated = result.assignments[period.id].find((r) => r.personId === person.id);
@@ -434,6 +516,15 @@ export default function RotationBoardClient() {
         </p>
       )}
 
+      {result.substitutePlan && (
+        <ShiftSubstitutePanel
+          plan={result.substitutePlan}
+          roster={boardRoster}
+          onConfirm={confirmSubstitute}
+          onCancel={cancelSubstitute}
+        />
+      )}
+
       {!heatReady && (
         <p className="no-print mb-3 rounded-xl border border-amber-700/50 bg-amber-950/30 px-4 py-3 text-sm text-amber-100">
           가열 자리 숙련도가 비어 있습니다.
@@ -598,6 +689,7 @@ function BoardTable(props: {
       ? [{ key: "office", title: "사무", match: { station: "office" as const }, section: "기타" as const }]
       : []),
     { key: "lunch", title: "식사", match: { station: "lunch" as const }, section: "기타" },
+    { key: "outside", title: "근무 외", match: { station: "outside" as const }, section: "기타" },
     { key: "off", title: "휴무", match: { station: "off" as const }, section: "기타" },
     { key: "unassigned", title: "미배치", match: { station: "unassigned" as const }, section: "기타" },
   ];
@@ -632,7 +724,7 @@ function BoardTable(props: {
 
   return (
     <div className="print-board overflow-auto rounded-2xl border border-slate-700/80 bg-slate-950/40 shadow-xl shadow-black/20">
-      <table className="w-full min-w-[56rem] border-collapse text-sm">
+      <table className="w-full min-w-[96rem] border-collapse text-sm">
         <thead>
           <tr className="row-head">
             <th className="sticky left-0 z-10 w-40 bg-slate-900 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-700">
@@ -694,7 +786,7 @@ function BoardTable(props: {
             }
             const row = item.row;
             const isLunch = row.key === "lunch";
-            const isOff = row.key === "off";
+            const isOff = row.key === "off" || row.key === "outside";
             return (
               <tr
                 key={row.key}
@@ -714,14 +806,16 @@ function BoardTable(props: {
                 </th>
                 {PERIODS.map((period) => {
                   const people = peopleOn(assignments[period.id], roster, row.match);
-                  const pos = row.staffed && row.match.positionId
+                  const pos = row.match.positionId
                     ? catalog[group].find((p) => p.id === row.match.positionId)
                     : undefined;
-                  const range = pos ? staffingForPosition(pos, period.id) : null;
+                  const seatRange = row.heating && pos ? staffingForPosition(pos, period.id) : null;
+                  const range = row.staffed && pos ? staffingForPosition(pos, period.id) : null;
                   const n = people.length;
                   const under = Boolean(range && range.min > 0 && n < range.min);
                   const over = Boolean(range && n > range.max);
-                  const emptyRequired = under || (row.heating && n === 0);
+                  // 선택으로 둔 가열 자리와 마감처럼 자리를 세우지 않는 구간은 비어도 정상이다
+                  const emptyRequired = under || Boolean(seatRange && seatRange.min > 0 && n === 0);
                   return (
                     <td
                       key={period.id}
@@ -736,7 +830,7 @@ function BoardTable(props: {
                       )}
                       {people.length === 0 ? (
                         <span className={`text-xs ${emptyRequired ? "font-medium text-rose-300" : isLunch ? "text-amber-800/70" : "text-slate-600"}`}>
-                          {emptyRequired ? "비어 있음" : "—"}
+                          {emptyRequired ? "비어 있음" : seatRange && seatRange.min === 0 && seatRange.max > 0 ? "선택" : "—"}
                         </span>
                       ) : (
                         <ul className={`flex flex-wrap ${row.heating ? "gap-0" : "gap-1.5"}`}>
@@ -812,6 +906,9 @@ function PersonChip(props: {
         } ${open ? "ring-2 ring-cyan-400" : ""}`}
       >
         {props.person.name}
+        {hasShiftOverride(props.person) ? (
+          <span className={`text-[10px] font-medium ${props.lunch ? "text-cyan-700" : "text-cyan-200"}`}>09~19 대체</span>
+        ) : null}
         {unassignedNote ? (
           <span className={`text-[10px] font-medium ${props.lunch ? "text-stone-600" : "text-amber-200"}`}>{unassignedNote}</span>
         ) : null}

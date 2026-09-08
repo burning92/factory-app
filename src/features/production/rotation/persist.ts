@@ -1,7 +1,7 @@
-import { DEFAULT_CATALOG } from "./catalog";
+import { DEFAULT_CATALOG, withCloseProcessFallback, withFixedPhonoHeating, withRequiredProcesses } from "./catalog";
 import { mergePersonConstraints, parsePersonConstraints } from "./personRules";
 import { productGroup } from "./seedRoster";
-import { normalizePositionStaffing, parsePeriodStaffJson, processNeedsStaffing, withDefaultStaffing } from "./staffing";
+import { normalizePositionStaffing, parsePeriodStaffJson, processStoresStaffing, withDefaultStaffing } from "./staffing";
 import type { PlanningLeaveItem, RotationLeaveKind } from "./planningLeave";
 import type { PlannedRotationProduct } from "./mapPlanProducts";
 import { normalizeDoughSettings } from "./doughPolicy";
@@ -107,6 +107,8 @@ export type RotationDayPayload = {
   productLine: ProductLine;
   modes: RotationModes;
   attendance: Record<string, boolean>;
+  /** 그날만 바꾼 근무조. 09~19 대체근무 확정분 */
+  shiftOverrides?: Record<string, string>;
   assignments: PeriodAssignments | null;
   saved?: boolean;
   planningLeaves?: Record<string, RotationLeaveKind>;
@@ -142,8 +144,8 @@ export function catalogFromRows(
     const process = row.process as ProcessId;
     const minMap = parsePeriodStaffJson(row.min_by_period);
     const maxMap = parsePeriodStaffJson(row.max_by_period);
-    let staffing = processNeedsStaffing(process) ? normalizePositionStaffing(process, undefined) : undefined;
-    if (processNeedsStaffing(process) && (minMap || maxMap)) {
+    let staffing = processStoresStaffing(process) ? normalizePositionStaffing(process, undefined) : undefined;
+    if (processStoresStaffing(process) && (minMap || maxMap)) {
       const merged = normalizePositionStaffing(process, undefined)!;
       for (const period of PERIODS) {
         merged[period.id] = {
@@ -167,6 +169,7 @@ export function catalogFromRows(
   }
   for (const g of GROUPS) {
     if (catalog[g].length === 0) catalog[g] = structuredClone(DEFAULT_CATALOG[g]);
+    else catalog[g] = withRequiredProcesses(g, withFixedPhonoHeating(g, catalog[g]));
   }
   return catalog;
 }
@@ -191,7 +194,7 @@ export function skillsFromRows(
     if (!skills[row.worker_id][g]) skills[row.worker_id][g] = {};
     skills[row.worker_id][g]![row.position_id] = p;
   }
-  return skills;
+  return withCloseProcessFallback(skills, catalog);
 }
 
 export function workersFromRows(
@@ -211,7 +214,7 @@ export function workersFromRows(
       id: r.worker_id,
       name: r.name,
       preferred: r.preferred as ProcessId,
-      shift: (r.shift === "0900-1900" ? "0900-1900" : "0800-1800") as ShiftId,
+      shift: (typeof r.shift === "string" && r.shift.trim() ? r.shift.trim() : "0800-1800") as ShiftId,
       group: r.worker_group === "office" ? "office" : "floor",
       present: true,
       constraints: parsePersonConstraints(r.constraints),
@@ -284,7 +287,7 @@ function staffingColumns(p: PositionDef): {
   min_by_period: Record<string, number>;
   max_by_period: Record<string, number>;
 } {
-  const staffing = processNeedsStaffing(p.process) ? normalizePositionStaffing(p.process, p.staffing) : undefined;
+  const staffing = processStoresStaffing(p.process) ? normalizePositionStaffing(p.process, p.staffing) : undefined;
   const min_by_period: Record<string, number> = {};
   const max_by_period: Record<string, number> = {};
   if (staffing) {
@@ -327,7 +330,8 @@ export function assignmentsFromRows(
   rows: { period_id: string; worker_id: string; station: string; position_id: string | null; priority: number | null }[]
 ): PeriodAssignments | null {
   if (rows.length === 0) return null;
-  const empty: PeriodAssignments = { start: [], lunch1: [], lunch2: [], after: [] };
+  const empty = {} as PeriodAssignments;
+  for (const period of PERIODS) empty[period.id] = [];
   for (const row of rows) {
     const period = row.period_id as PeriodId;
     if (!PERIODS.some((p) => p.id === period)) continue;

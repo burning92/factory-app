@@ -3,12 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Pencil, Save, SlidersHorizontal, X } from "lucide-react";
-import { DEFAULT_CATALOG, buildGroupReadiness, copyProductGroup, newPositionId, setPriority, type GroupReadiness } from "@/features/production/rotation/catalog";
+import { DEFAULT_CATALOG, buildGroupReadiness, clearGroupSkills, copyProductGroup, newPositionId, setPriority, type GroupReadiness } from "@/features/production/rotation/catalog";
 import { fetchRotationMaster, saveRotationMaster } from "@/features/production/rotation/clientApi";
 import { buildQualificationCoverage } from "@/features/production/rotation/qualifications";
 import { PRODUCT_GROUPS } from "@/features/production/rotation/seedRoster";
 import { processLabel } from "@/features/production/rotation/rotationEngine";
-import { patchPositionStaffing, processNeedsStaffing, withDefaultStaffing } from "@/features/production/rotation/staffing";
+import { patchPositionStaffing, processStoresStaffing, withDefaultStaffing } from "@/features/production/rotation/staffing";
 import type { DoughSettings, PeriodId, Person, PositionCatalog, PositionDef, ProcessId, ProductGroup, SkillMatrix } from "@/features/production/rotation/types";
 import { DoughSettingsEditor, PositionEditor, ReadinessPanel, SkillMatrixEditor } from "../rotationShared";
 
@@ -155,6 +155,13 @@ export default function RotationSettingsClient() {
     setSkillGroup(to);
   };
 
+  const resetGroupSkills = (g: ProductGroup) => {
+    if (!editing) return;
+    const label = PRODUCT_GROUPS.find((pg) => pg.id === g)?.label ?? g;
+    if (!window.confirm(`「${label}」의 숙련도를 전원 불가로 되돌립니다. 저장하면 되돌릴 수 없습니다.`)) return;
+    setSkills((s) => clearGroupSkills(s, roster, catalog, g));
+  };
+
   const addPosition = (g: ProductGroup, process: ProcessId) => {
     if (!editing) return;
     const pos: PositionDef = withDefaultStaffing({
@@ -175,7 +182,7 @@ export default function RotationSettingsClient() {
     setCatalog((c) => ({
       ...c,
       [g]: c[g].map((p) => {
-        if (p.id !== id || !processNeedsStaffing(p.process)) return p;
+        if (p.id !== id || !processStoresStaffing(p.process)) return p;
         return { ...p, staffing: patchPositionStaffing(p.process, p.staffing, period, field, value) };
       }),
     }));
@@ -314,6 +321,7 @@ export default function RotationSettingsClient() {
           skillGroup={skillGroup}
           setSkillGroup={setSkillGroup}
           onCopyFromSignature={copyFromSignature}
+          onResetGroupSkills={resetGroupSkills}
           onRankError={setRankError}
           locked={locked}
         />

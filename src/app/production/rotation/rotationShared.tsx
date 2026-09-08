@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Plus, Trash2 } from "lucide-react";
+import { Copy, Eraser, Plus, Trash2 } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 import {
   getPriority,
@@ -8,7 +8,12 @@ import {
   setPriority,
   type GroupReadiness,
 } from "@/features/production/rotation/catalog";
-import { processNeedsStaffing } from "@/features/production/rotation/staffing";
+import {
+  isSeatProcess,
+  processNeedsStaffing,
+  seatRequiredIn,
+  staffingForPosition,
+} from "@/features/production/rotation/staffing";
 import { PRODUCT_GROUPS } from "@/features/production/rotation/seedRoster";
 import { isDoughCorePerson, withSkillGroupConfigured } from "@/features/production/rotation/personRules";
 import { processLabel } from "@/features/production/rotation/rotationEngine";
@@ -19,6 +24,7 @@ import {
   type QualificationCoverage,
 } from "@/features/production/rotation/qualifications";
 import { normalizeDoughSettings } from "@/features/production/rotation/doughPolicy";
+import { SHIFT_OPTIONS, shiftLabel } from "@/features/production/rotation/workHours";
 import {
   PERIODS,
   PRIORITY_OPTIONS,
@@ -208,7 +214,7 @@ export function PositionEditor(props: {
       </div>
       <CopyFromSignatureBar onCopy={props.onCopyFromSignature} locked={locked} />
       <p className="text-sm text-slate-400 mb-4">
-        가열 필수 포지션 {heatN}개 (리코타는 8, 그 외 7이 기본). 내포장·외포장·토핑·반죽·반죽 마감·사무는 시간대별 최소·최대 인원을 둡니다. 가열은 자리당 1명이라 인원수를 두지 않고, R&D는 제외합니다.
+        가열 필수 포지션 {heatN}개 (리코타는 8, 그 외 7이 기본). 가열 마감·내포장·외포장·토핑·반죽·반죽 마감·사무는 시간대별 최소·최대 인원을 둡니다. 가열은 자리당 1명이라 인원수를 두지 않고, R&D는 제외합니다.
         {heatN !== expect ? ` 현재 가열 ${heatN}개라 기본 ${expect}개와 다릅니다.` : ""}
       </p>
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
@@ -230,10 +236,15 @@ export function PositionEditor(props: {
               )}
             </div>
             {process.id === "heating" && (
-              <p className="mb-2 text-xs text-slate-500">자리당 1명이라 인원수 설정이 없습니다.</p>
+              <p className="mb-2 text-xs text-slate-500">
+                자리당 1명이라 인원수 대신 시간대별 필수·선택을 고릅니다. 선택으로 두면 사람이 남을 때만 채우고 비어도 실패가 아닙니다.
+              </p>
             )}
             {process.id === "rnd" && (
               <p className="mb-2 text-xs text-slate-500">R&D는 인원수 설정에서 제외합니다.</p>
+            )}
+            {process.id === "heatingClose" && (
+              <p className="mb-2 text-xs text-slate-500">18~19시 가열실 정리·세척 자리입니다. 생산 가열과 따로 셉니다.</p>
             )}
             <ul className="space-y-3">
               {list.map((pos) => (
@@ -258,6 +269,15 @@ export function PositionEditor(props: {
                       onChange={(period, field, value) => props.onStaffingChange(g, pos.id, period, field, value)}
                     />
                   )}
+                  {isSeatProcess(process.id) && (
+                    <SeatRequiredFields
+                      position={pos}
+                      locked={locked}
+                      onChange={(period, required) =>
+                        props.onStaffingChange(g, pos.id, period, "min", required ? 1 : 0)
+                      }
+                    />
+                  )}
                 </li>
               ))}
               {list.length === 0 && <li className="text-sm text-slate-500">없음</li>}
@@ -267,6 +287,51 @@ export function PositionEditor(props: {
       })}
       </div>
     </section>
+  );
+}
+
+/** 가열 자리는 인원수 대신 시간대별 필수·선택만 고른다 */
+function SeatRequiredFields(props: {
+  position: PositionDef;
+  locked: boolean;
+  onChange: (period: PeriodId, required: boolean) => void;
+}) {
+  return (
+    <div className="mt-2 space-y-1">
+      {PERIODS.filter((period) => staffingForPosition(props.position, period.id).max > 0).map((period) => {
+        const required = seatRequiredIn(props.position, period.id);
+        return (
+          <div key={period.id} className="flex items-center justify-between gap-2 text-xs">
+            <span className="text-slate-400 whitespace-nowrap">
+              {period.short}
+              <span className="ml-1 text-[10px] text-slate-600">{period.label}</span>
+            </span>
+            <div className="flex overflow-hidden rounded border border-slate-600">
+              {[
+                { value: true, label: "필수" },
+                { value: false, label: "선택" },
+              ].map((option) => (
+                <button
+                  key={option.label}
+                  type="button"
+                  disabled={props.locked}
+                  onClick={() => props.onChange(period.id, option.value)}
+                  className={`px-2 py-1 ${
+                    required === option.value
+                      ? option.value
+                        ? "bg-cyan-950/60 text-cyan-100"
+                        : "bg-slate-700/60 text-slate-200"
+                      : "text-slate-500"
+                  } disabled:cursor-not-allowed`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -388,6 +453,7 @@ export function SkillMatrixEditor(props: {
   skillGroup: ProductGroup;
   setSkillGroup: (g: ProductGroup) => void;
   onCopyFromSignature: (to: ProductGroup) => void;
+  onResetGroupSkills: (g: ProductGroup) => void;
   onRankError: (message: string | null) => void;
   locked?: boolean;
 }) {
@@ -417,6 +483,18 @@ export function SkillMatrixEditor(props: {
       </div>
       <div className="shrink-0 px-3 py-1">
         <CopyFromSignatureBar onCopy={props.onCopyFromSignature} locked={locked} />
+        {!locked && (
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <p className="text-xs text-slate-400">이 제품군 숙련</p>
+            <button
+              type="button"
+              onClick={() => props.onResetGroupSkills(g)}
+              className="inline-flex items-center gap-1 rounded-lg border border-rose-800 bg-slate-900 px-2.5 py-1.5 text-xs text-rose-200 hover:bg-rose-950/40"
+            >
+              <Eraser className="w-3.5 h-3.5" /> 전원 초기화
+            </button>
+          </div>
+        )}
       </div>
       <details className="shrink-0 px-3 pb-2">
         <summary className="cursor-pointer text-xs text-slate-500">숙련·조건 안내</summary>
@@ -494,8 +572,14 @@ export function SkillMatrixEditor(props: {
                     }
                     className="w-full rounded-md border border-slate-600 bg-slate-900 px-2 py-2 text-sm text-slate-200 disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    <option value="0800-1800">08–18</option>
-                    <option value="0900-1900">09–19</option>
+                    {SHIFT_OPTIONS.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                    {SHIFT_OPTIONS.every((o) => o.id !== person.shift) && (
+                      <option value={person.shift}>{shiftLabel(person.shift)}</option>
+                    )}
                   </select>
                 </td>
                 <td className="px-2 py-1.5 border-t border-slate-800">
@@ -559,6 +643,18 @@ export function SkillMatrixEditor(props: {
                         className="accent-cyan-500"
                       />
                       현장백업
+                    </label>
+                    <label className="inline-flex items-center gap-1 text-[11px] text-slate-300" title="09~19조에 결원이 나면 그날 하루만 09~19로 바꿔 쓸 수 있는 사람">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(person.constraints?.nightShiftBackup)}
+                        disabled={locked}
+                        onChange={(e) =>
+                          props.setRoster((rows) => patchPersonRule(rows, person.id, "nightShiftBackup", e.target.checked))
+                        }
+                        className="accent-cyan-500"
+                      />
+                      09~19 대체
                     </label>
                   </div>
                 </td>

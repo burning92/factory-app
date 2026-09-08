@@ -1,14 +1,22 @@
-import { getPriority, hasAssignableSkill, hasNoSkillConfig, heatingPositions, isAssignedOfficePerson, isNormalRank, positionsForProcess, visibleRotationRoster } from "./catalog";
+import { getPriority, hasAssignableSkill, hasNoSkillConfig, heatingPositions, isAssignedOfficePerson, isExperiencedRank, isJuniorRank, isNormalRank, positionsForProcess, visibleRotationRoster } from "./catalog";
 import { normalizeDoughSettings } from "./doughPolicy";
 import { HOURLY_QTY, productGroup } from "./seedRoster";
-import { isAvailableInPeriod, isDoughCorePerson, isFullDayLeave } from "./planningLeave";
+import {
+  isAvailableInPeriod,
+  isDoughCorePerson,
+  isFullDayLeave,
+  isOutsideShift,
+  restStationFor,
+} from "./planningLeave";
+import { NIGHT_SHIFT, effectiveShift, periodProduces, shiftLabel } from "./workHours";
 import { canTakeProcess, hardStayFloor, isFieldBackup, isRotationExcluded } from "./personRules";
 import {
   personMeetsProcessQualifications,
   qualificationLabel,
   requiredQualificationsForProcess,
 } from "./qualifications";
-import { processNeedsStaffing, staffingForPosition } from "./staffing";
+import { planNightShiftSubstitutes } from "./shiftSubstitute";
+import { processNeedsStaffing, seatRequiredIn, staffingForPosition } from "./staffing";
 import {
   PERIODS,
   PRIORITY_OPTIONS,
@@ -54,10 +62,15 @@ export function processLabel(process: ProcessId | StationId): string {
   return STATIONS.find((s) => s.id === process)?.label ?? process;
 }
 
-/** 외포장만 1층. 식사·휴무·미배치·사무는 층 이동에 넣지 않음. */
+/** 작업 자리가 아닌 상태. 층 이동·이전 자리 계산에서 뺀다 */
+export function isNonWorkStation(station: ProcessId | StationId | undefined): boolean {
+  return station === "lunch" || station === "off" || station === "outside" || station === "unassigned";
+}
+
+/** 외포장만 1층. 식사·휴무·근무 외·미배치·사무는 층 이동에 넣지 않음. */
 export function processFloor(station: ProcessId | StationId): 0 | 1 | 2 {
   if (station === "outer") return 1;
-  if (station === "lunch" || station === "off" || station === "unassigned" || station === "office") return 0;
+  if (isNonWorkStation(station) || station === "office") return 0;
   return 2;
 }
 
@@ -116,15 +129,26 @@ export function heatingTarget(catalog: PositionCatalog, group: ProductGroup): nu
   return heatingPositions(catalog, group).length;
 }
 
+/** 그 시간대에 반드시 채워야 하는 가열 자리. 선택으로 둔 자리는 빠진다 */
+export function requiredHeatingPositions(
+  catalog: PositionCatalog,
+  group: ProductGroup,
+  period: PeriodId
+): PositionDef[] {
+  if (!periodProduces(period)) return [];
+  return heatingPositions(catalog, group).filter((position) => seatRequiredIn(position, period));
+}
+
 export function periodTargets(
   catalog: PositionCatalog,
   group: ProductGroup,
   _doughCount: number,
   _doughCanRotate: boolean
 ): Record<PeriodId, StaffingTarget> {
-  const h = heatingTarget(catalog, group);
   const make = (period: PeriodId): StaffingTarget => ({
-    heating: h,
+    // 마감 구간은 정상 생산이 아니라 가열 자리를 세우지 않는다.
+    // 점심 교대처럼 일부 자리를 선택으로 둔 구간은 필수 자리만 센다
+    heating: requiredHeatingPositions(catalog, group, period).length,
     positions: catalog[group].filter((p) => processNeedsStaffing(p.process)).map((p) => {
       const range = staffingForPosition(p, period);
       return {
@@ -136,12 +160,9 @@ export function periodTargets(
       };
     }),
   });
-  return {
-    start: make("start"),
-    lunch1: make("lunch1"),
-    lunch2: make("lunch2"),
-    after: make("after"),
-  };
+  const out = {} as Record<PeriodId, StaffingTarget>;
+  for (const period of PERIODS) out[period.id] = make(period.id);
+  return out;
 }
 
 export function canAssign(
@@ -151,7 +172,7 @@ export function canAssign(
   positionId: string | undefined,
   station: StationId
 ): boolean {
-  if (station === "lunch" || station === "off" || station === "unassigned") return true;
+  if (isNonWorkStation(station)) return true;
   if (!positionId) return false;
   return getPriority(skills, personId, group, positionId) > 0;
 }
@@ -179,11 +200,12 @@ export function buildSlots(
   period: PeriodId,
   targets: StaffingTarget
 ): Slot[] {
-  const heat = heatingPositions(catalog, group).map((position, i) => ({
-    key: `heating:${position.id}:${i}`,
-    position,
-    required: true,
-  }));
+  const heat = (periodProduces(period) ? heatingPositions(catalog, group) : []).flatMap((position, i) => {
+    const range = staffingForPosition(position, period);
+    if (range.max <= 0) return [];
+    // 선택 자리는 사람이 남을 때만 채우고 비어도 실패로 보지 않는다
+    return [{ key: `heating:${position.id}:${i}`, position, required: range.min > 0 }];
+  });
   const staffed = (targets.positions.length > 0 ? targets.positions : catalog[group].filter((p) => processNeedsStaffing(p.process)).map((p) => {
     const range = staffingForPosition(p, period);
     return { positionId: p.id, process: p.process, label: p.label, min: range.min, max: range.max };
@@ -265,6 +287,7 @@ function scoreCandidate(
 type ScoreVec = {
   unfilledHeat: number;
   missingQual: number;
+  juniorOnly: number;
   unfilled: number;
   emergency: number;
   floorMoves: number;
@@ -280,6 +303,7 @@ function cmpScore(a: ScoreVec, b: ScoreVec): number {
   const keys: (keyof ScoreVec)[] = [
     "unfilledHeat",
     "missingQual",
+    "juniorOnly",
     "unfilled",
     "emergency",
     "floorMoves",
@@ -296,6 +320,10 @@ function cmpScore(a: ScoreVec, b: ScoreVec): number {
   return 0;
 }
 
+function processNeedsExperiencedAnchor(process: ProcessId): boolean {
+  return process === "heating" || process === "inner" || process === "outer" || process === "topping" || process === "dough";
+}
+
 function scoreRequired(
   filled: Map<string, Assignment>,
   slots: Slot[],
@@ -309,6 +337,7 @@ function scoreRequired(
   const vec: ScoreVec = {
     unfilledHeat: 0,
     missingQual: 0,
+    juniorOnly: 0,
     unfilled: 0,
     emergency: 0,
     floorMoves: 0,
@@ -347,13 +376,20 @@ function scoreRequired(
   }
   for (const [process, procSlots] of Array.from(requiredByProcess.entries())) {
     const keys = requiredQualificationsForProcess(process, group);
-    if (keys.length === 0 || procSlots.length === 0) continue;
+    if (keys.length > 0 && procSlots.length > 0) {
+      const holders = procSlots
+        .map((s) => filled.get(s.key))
+        .filter((a): a is Assignment => Boolean(a))
+        .map((a) => byId.get(a.personId))
+        .filter((p): p is Person => Boolean(p));
+      if (!holders.some((p) => personMeetsProcessQualifications(p, process, group))) vec.missingQual += 1;
+    }
+    if (!processNeedsExperiencedAnchor(process)) continue;
     const holders = procSlots
       .map((s) => filled.get(s.key))
-      .filter((a): a is Assignment => Boolean(a))
-      .map((a) => byId.get(a.personId))
-      .filter((p): p is Person => Boolean(p));
-    if (!holders.some((p) => personMeetsProcessQualifications(p, process, group))) vec.missingQual += 1;
+      .filter((a): a is Assignment => Boolean(a));
+    if (holders.length === 0) continue;
+    if (!holders.some((a) => isExperiencedRank(a.priority ?? 0))) vec.juniorOnly += 1;
   }
   return vec;
 }
@@ -406,13 +442,15 @@ function pickForSlot(
   prev: Map<string, Assignment>,
   catalog: PositionCatalog,
   opts: AssignOptions = {},
-  requireQual = false
+  requireQual = false,
+  requireExperienced = false
 ): Person | undefined {
   const all = capableOf(people, skills, group, slot.position.id, taken).filter((p) =>
     isUsablePriority(getPriority(skills, p.id, group, slot.position.id), slot.required) &&
     canTakeProcess(p, slot.position.process, group) &&
     eligibleForDoughPolicy(p, slot.position.process, opts) &&
-    (!requireQual || personMeetsProcessQualifications(p, slot.position.process, group))
+    (!requireQual || personMeetsProcessQualifications(p, slot.position.process, group)) &&
+    (!requireExperienced || isExperiencedRank(getPriority(skills, p.id, group, slot.position.id)))
   );
   const normal = all.filter((p) => isNormalRank(getPriority(skills, p.id, group, slot.position.id)));
   const base = normal.length > 0 ? normal : all;
@@ -443,6 +481,65 @@ function processHasQualifiedHolder(
     const person = byId.get(a.personId);
     return Boolean(person && personMeetsProcessQualifications(person, process, group));
   });
+}
+
+function processHasExperiencedHolder(filled: Map<string, Assignment>, slots: Slot[], process: ProcessId): boolean {
+  return slots.some((slot) => {
+    if (slot.position.process !== process) return false;
+    const a = filled.get(slot.key);
+    return Boolean(a && isExperiencedRank(a.priority ?? 0));
+  });
+}
+
+function fillRequiredExperienced(
+  people: Person[],
+  backups: Person[],
+  slots: Slot[],
+  filled: Map<string, Assignment>,
+  taken: Set<string>,
+  skills: SkillMatrix,
+  group: ProductGroup,
+  prev: Map<string, Assignment>,
+  catalog: PositionCatalog,
+  opts: AssignOptions,
+  byId: Map<string, Person>
+) {
+  const required = slots.filter((s) => s.required);
+  const processes = Array.from(new Set(required.map((s) => s.position.process)));
+  for (const process of processes) {
+    if (!processNeedsExperiencedAnchor(process)) continue;
+    const procSlots = required.filter((s) => s.position.process === process);
+    if (procSlots.length === 0) continue;
+    if (processHasExperiencedHolder(filled, procSlots, process)) continue;
+
+    const floorPick = pickForSlot(people, procSlots[0], skills, group, taken, prev, catalog, opts, false, true);
+    const backupPick = floorPick
+      ? undefined
+      : pickForSlot(backups, procSlots[0], skills, group, taken, prev, catalog, { ...opts, strictFloor: false }, false, true);
+    const pick = floorPick ?? backupPick;
+    if (!pick) continue;
+
+    let slot = procSlots.find((s) => !filled.has(s.key));
+    if (!slot) {
+      const displace = procSlots
+        .map((s) => ({ s, a: filled.get(s.key) }))
+        .filter((row): row is { s: Slot; a: Assignment } => Boolean(row.a))
+        .filter((row) => isJuniorRank(row.a.priority ?? 0))
+        .sort((a, b) => (b.a.priority ?? 0) - (a.a.priority ?? 0))[0];
+      if (!displace) continue;
+      taken.delete(displace.a.personId);
+      filled.delete(displace.s.key);
+      slot = displace.s;
+    }
+    const priority = getPriority(skills, pick.id, group, slot.position.id);
+    taken.add(pick.id);
+    filled.set(slot.key, {
+      personId: pick.id,
+      station: slot.position.process,
+      positionId: slot.position.id,
+      priority,
+    });
+  }
 }
 
 function fillRequiredQualifications(
@@ -581,6 +678,7 @@ function assignSlots(
   }
 
   fillRequiredQualifications(people, backups, slots, filled, taken, skills, group, prev, catalog, opts, byId);
+  fillRequiredExperienced(people, backups, slots, filled, taken, skills, group, prev, catalog, opts, byId);
 
   const leftoverSlots = remaining.filter((s) => !filled.has(s.key));
   while (leftoverSlots.length > 0) {
@@ -597,9 +695,14 @@ function assignSlots(
       slot.required &&
       requiredQualificationsForProcess(slot.position.process, group).length > 0 &&
       !processHasQualifiedHolder(filled, remaining.filter((s) => s.position.process === slot.position.process), slot.position.process, byId, group);
+    const needExperienced =
+      slot.required &&
+      processNeedsExperiencedAnchor(slot.position.process) &&
+      !processHasExperiencedHolder(filled, remaining.filter((s) => s.position.process === slot.position.process), slot.position.process);
     const pick =
-      (needQual ? pickForSlot(people, slot, skills, group, taken, prev, catalog, opts, true) : undefined) ??
-      pickForSlot(people, slot, skills, group, taken, prev, catalog, opts, false);
+      (needQual ? pickForSlot(people, slot, skills, group, taken, prev, catalog, opts, true, false) : undefined) ??
+      (needExperienced ? pickForSlot(people, slot, skills, group, taken, prev, catalog, opts, false, true) : undefined) ??
+      pickForSlot(people, slot, skills, group, taken, prev, catalog, opts, false, false);
     if (!pick) continue;
     const priority = getPriority(skills, pick.id, group, slot.position.id);
     taken.add(pick.id);
@@ -612,6 +715,7 @@ function assignSlots(
   }
 
   fillRequiredQualifications(people, backups, slots, filled, taken, skills, group, prev, catalog, opts, byId);
+  fillRequiredExperienced(people, backups, slots, filled, taken, skills, group, prev, catalog, opts, byId);
   optimizeFilled(allKnown, slots, filled, skills, group, prev, catalog);
   taken.clear();
   Array.from(filled.values()).forEach((a) => taken.add(a.personId));
@@ -628,6 +732,18 @@ function assignSlots(
     assignments.push(a);
     const person = byId.get(a.personId);
     if (person) warnings.push(...warnForPriority(person.name, slot.position.label, a.priority ?? 0, person.preferred, slot.position.process));
+  }
+  for (const process of Array.from(new Set(required.map((s) => s.position.process)))) {
+    if (!processNeedsExperiencedAnchor(process)) continue;
+    const procSlots = required.filter((s) => s.position.process === process);
+    const holders = procSlots.map((s) => filled.get(s.key)).filter((a): a is Assignment => Boolean(a));
+    if (holders.length === 0) continue;
+    if (holders.some((a) => isExperiencedRank(a.priority ?? 0))) continue;
+    const label = procSlots[0]?.position.label ?? processLabel(process);
+    warnings.push({
+      kind: "other",
+      message: `${label}에 하·비상만 배치되었습니다. 중 이상 숙련자가 필요합니다.`,
+    });
   }
   for (const person of people) {
     if (taken.has(person.id)) continue;
@@ -994,7 +1110,7 @@ function partitionLunch(
   if (best > 0) {
     warnings.push({
       kind: "lunchCoverage",
-      message: `점심조를 나눠도 필수포지션 ${best}자리가 비는 배분이 됩니다. 숙련도를 보강하거나 휴무를 조정하세요.`,
+      message: "점심조를 어떻게 나눠도 필수 자리를 다 채우지 못합니다. 숙련도를 보강하거나 휴무를 조정하세요.",
     });
   }
   return { waveA: bestA, waveB: bestB, warnings };
@@ -1004,7 +1120,7 @@ function toPrevWorkMap(...waves: Assignment[][]): Map<string, Assignment> {
   const map = new Map<string, Assignment>();
   for (const rows of waves) {
     for (const row of rows) {
-      if (row.station === "lunch" || row.station === "off" || row.station === "unassigned") continue;
+      if (isNonWorkStation(row.station)) continue;
       map.set(row.personId, row);
     }
   }
@@ -1028,9 +1144,10 @@ function officeRows(
 }
 
 function offRows(roster: Person[], period: PeriodId): Assignment[] {
-  return roster
-    .filter((p) => isFullDayLeave(p.leaveKind) || !p.present || (p.present && !isAvailableInPeriod(p, period)))
-    .map((p) => ({ personId: p.id, station: "off" as const }));
+  return roster.flatMap((p) => {
+    const station = restStationFor(p, period);
+    return station ? [{ personId: p.id, station }] : [];
+  });
 }
 
 function onDuty(
@@ -1063,55 +1180,67 @@ function fieldBackupPool(
   );
 }
 
+function setPositionTarget(
+  targets: Record<PeriodId, StaffingTarget>,
+  period: PeriodId,
+  position: PositionDef,
+  min: number,
+  max: number
+) {
+  const existing = targets[period].positions.find((p) => p.positionId === position.id);
+  if (existing) {
+    existing.min = min;
+    existing.max = max;
+    return;
+  }
+  targets[period].positions.push({
+    positionId: position.id,
+    process: position.process,
+    label: position.label,
+    min,
+    max,
+  });
+}
+
+/** 전일 반죽고정. 반죽팀이 퇴근한 구간은 정원을 출근 인원에 맞춰 줄인다 */
 function applyFixedDoughTargets(
   targets: Record<PeriodId, StaffingTarget>,
   catalog: PositionCatalog,
   group: ProductGroup,
   minStaff: number,
-  doughCoreCount: number
+  doughCountByPeriod: Record<PeriodId, number>
 ) {
   const doughPos = positionsForProcess(catalog, group, "dough")[0];
   if (!doughPos) return;
-  const max = Math.max(minStaff, doughCoreCount);
   for (const period of PERIODS) {
-    const existing = targets[period.id].positions.find((p) => p.process === "dough" && p.positionId === doughPos.id);
-    if (existing) {
-      existing.min = minStaff;
-      existing.max = max;
-    } else {
-      targets[period.id].positions.push({
-        positionId: doughPos.id,
-        process: "dough",
-        label: doughPos.label,
-        min: minStaff,
-        max,
-      });
-    }
+    const count = doughCountByPeriod[period.id] ?? 0;
+    const min = Math.min(minStaff, count);
+    setPositionTarget(targets, period.id, doughPos, min, Math.max(min, count));
   }
 }
 
-/** 점심 가열 백업: 13시 이후 반죽 복귀 자리 확보 */
-function applyLunchBackupAfterDoughTargets(
+/** 점심 가열 백업: 13시 이후 반죽팀 복귀 자리 확보. 퇴근 전까지 이어진다 */
+const DOUGH_RETURN_PERIODS: PeriodId[] = ["after", "late", "evening"];
+
+/** 오후 복귀 자리는 반죽 마감. 그 자리가 없는 제품군이면 반죽 자리로 돌아간다 */
+function doughReturnPosition(catalog: PositionCatalog, group: ProductGroup): PositionDef | undefined {
+  return positionsForProcess(catalog, group, "cleanup")[0] ?? positionsForProcess(catalog, group, "dough")[0];
+}
+
+function applyLunchBackupReturnTargets(
   targets: Record<PeriodId, StaffingTarget>,
   catalog: PositionCatalog,
   group: ProductGroup,
-  doughCoreCount: number
+  doughCountByPeriod: Record<PeriodId, number>
 ) {
-  const doughPos = positionsForProcess(catalog, group, "dough")[0];
-  if (!doughPos || doughCoreCount <= 0) return;
-  const max = doughCoreCount;
-  const existing = targets.after.positions.find((p) => p.process === "dough" && p.positionId === doughPos.id);
-  if (existing) {
-    existing.min = Math.max(existing.min, max);
-    existing.max = Math.max(existing.max, max);
-  } else {
-    targets.after.positions.push({
-      positionId: doughPos.id,
-      process: "dough",
-      label: doughPos.label,
-      min: max,
-      max,
-    });
+  const returnPos = doughReturnPosition(catalog, group);
+  if (!returnPos) return;
+  for (const period of DOUGH_RETURN_PERIODS) {
+    const count = doughCountByPeriod[period] ?? 0;
+    if (count <= 0) continue;
+    const existing = targets[period].positions.find((p) => p.positionId === returnPos.id);
+    const min = Math.max(existing?.min ?? 0, count);
+    setPositionTarget(targets, period, returnPos, min, Math.max(existing?.max ?? 0, count));
   }
 }
 
@@ -1151,9 +1280,10 @@ function forceDoughHeatingBackup(
   return { taken, forced };
 }
 
+/** 반죽 고정조를 지정한 자리(오전 반죽 · 오후 반죽 마감)에 먼저 앉힌다 */
 function forceDoughPeople(
   people: Person[],
-  doughPos: PositionDef | undefined,
+  seat: PositionDef | undefined,
   cap: number,
   skills: SkillMatrix,
   group: ProductGroup,
@@ -1161,15 +1291,15 @@ function forceDoughPeople(
 ): { taken: Set<string>; forced: Assignment[] } {
   const taken = new Set<string>();
   const forced: Assignment[] = [];
-  if (!doughPos || cap <= 0) return { taken, forced };
+  if (!seat || cap <= 0) return { taken, forced };
   for (const person of people.slice(0, cap)) {
-    const pr = getPriority(skills, person.id, group, doughPos.id);
+    const pr = getPriority(skills, person.id, group, seat.id);
     if (pr === 0) {
-      warnings.push({ kind: "unfilled", message: `${person.name}은(는) 반죽 포지션이 불가입니다.` });
+      warnings.push({ kind: "unfilled", message: `${person.name}은(는) ${seat.label} 포지션이 불가입니다.` });
       continue;
     }
     taken.add(person.id);
-    forced.push({ personId: person.id, station: "dough", positionId: doughPos.id, priority: pr });
+    forced.push({ personId: person.id, station: seat.process, positionId: seat.id, priority: pr });
   }
   return { taken, forced };
 }
@@ -1190,6 +1320,16 @@ function appendOfficeAndOff(
   ];
 }
 
+function emptyPeriodAssignments(): PeriodAssignments {
+  const out = {} as PeriodAssignments;
+  for (const period of PERIODS) out[period.id] = [];
+  return out;
+}
+
+function periodLabelOf(period: PeriodId): string {
+  return PERIODS.find((p) => p.id === period)?.short ?? period;
+}
+
 export function generateRotation(input: GenerateInput): GenerateResult {
   const { line, modes, catalog, skills } = input;
   const group = productGroup(line);
@@ -1199,11 +1339,22 @@ export function generateRotation(input: GenerateInput): GenerateResult {
   const warnings: RotationWarning[] = [];
   const present = roster.filter((p) => p.present);
   const floor = present.filter((p) => !isAssignedOfficePerson(p, skills, catalog, group));
-  const startFloor = onDuty(roster, "start", "floor", skills, catalog, group);
-  const lunch1Floor = onDuty(roster, "lunch1", "floor", skills, catalog, group);
-  const lunch2Floor = onDuty(roster, "lunch2", "floor", skills, catalog, group);
-  const afterFloor = onDuty(roster, "after", "floor", skills, catalog, group);
+  const floorIn = (period: PeriodId) => onDuty(roster, period, "floor", skills, catalog, group);
+  const earlyFloor = floorIn("early");
+  const startFloor = floorIn("start");
+  const lunch1Floor = floorIn("lunch1");
+  const lunch2Floor = floorIn("lunch2");
+  const afterFloor = floorIn("after");
+  const lateFloor = floorIn("late");
+  const eveningFloor = floorIn("evening");
+  const closingFloor = floorIn("closing");
   const doughCore = startFloor.filter((p) => isDoughCorePerson(p));
+  const doughCoreAll = floor.filter((p) => isDoughCorePerson(p));
+  /** 반죽팀도 근무조를 따른다. 퇴근한 구간에는 반죽 자리를 세우지 않는다 */
+  const doughCountByPeriod = {} as Record<PeriodId, number>;
+  for (const period of PERIODS) {
+    doughCountByPeriod[period.id] = doughCoreAll.filter((p) => isAvailableInPeriod(p, period.id)).length;
+  }
   const doughSettings = normalizeDoughSettings(input.doughSettings, catalog, group);
   const doughPolicy = doughSettings.rotationPolicy;
   const doughMin = doughSettings.minStaff;
@@ -1212,22 +1363,22 @@ export function generateRotation(input: GenerateInput): GenerateResult {
   const useLunchBackupSchedule = doughPolicy === "CURRENT_LUNCH_BACKUP" && doughCanRotate;
   const targets = periodTargets(catalog, group, doughCore.length, doughCanRotate);
   if (doughPolicy === "FIXED_DOUGH") {
-    applyFixedDoughTargets(targets, catalog, group, doughMin, doughCore.length);
+    applyFixedDoughTargets(targets, catalog, group, doughMin, doughCountByPeriod);
   } else if (useLunchBackupSchedule) {
-    applyLunchBackupAfterDoughTargets(targets, catalog, group, doughCore.length);
+    applyLunchBackupReturnTargets(targets, catalog, group, doughCountByPeriod);
   }
   const assignOpts: AssignOptions = {
     doughPolicy,
     doughCoreIds: new Set(doughCore.map((p) => p.id)),
   };
   const heatN = heatingTarget(catalog, group);
-  const empty: PeriodAssignments = { start: [], lunch1: [], lunch2: [], after: [] };
+  const empty = emptyPeriodAssignments();
 
   if (heatN === 0) {
     warnings.push({ kind: "unfilled", message: "이 제품군에 가열 포지션이 없습니다. 포지션을 추가하세요." });
     return finish(empty, visible, targets, warnings, impact, modes, catalog, group, skills, true);
   }
-  if (startFloor.length === 0) {
+  if (startFloor.length === 0 && earlyFloor.length === 0) {
     warnings.push({ kind: "unfilled", message: "출근 인원이 없습니다." });
     return finish(empty, visible, targets, warnings, impact, modes, catalog, group, skills, true);
   }
@@ -1239,34 +1390,104 @@ export function generateRotation(input: GenerateInput): GenerateResult {
   }
 
   const doughPos = positionsForProcess(catalog, group, "dough")[0];
-  const startSlots = buildSlots(catalog, group, "start", targets.start);
-  const startPrev = new Map<string, Assignment>();
-  const startDoughCap = targets.start.positions.find((p) => p.process === "dough")?.max ?? 0;
-  const startForced = forceDoughPeople(doughCore, doughPos, startDoughCap, skills, group, warnings);
-  const startPool = startFloor.filter((p) => !startForced.taken.has(p.id));
-  const startRemainSlots = startSlots.filter((s) => s.position.process !== "dough");
-  const startOut = assignSlots(startPool, startRemainSlots, skills, group, startPrev, catalog, {
-    ...assignOpts,
-    backups: fieldBackupPool(roster, skills, catalog, group, "start"),
+  const returnPos = doughReturnPosition(catalog, group);
+
+  /** 근무조·정원만 바꿔 같은 배치 파이프라인을 돌린다 */
+  const runProductionPeriod = (args: {
+    period: PeriodId;
+    pool: Person[];
+    prevWaves: Assignment[][];
+    /** 반죽 고정조를 먼저 앉힐 자리. 없으면 일반 배치만 한다 */
+    doughSeat: PositionDef | undefined;
+  }): { placed: Assignment[]; unfilled: Slot[] } => {
+    const prev = toPrevWorkMap(...args.prevWaves);
+    if (args.pool.length === 0) return { placed: [], unfilled: [] };
+    const seat = args.doughSeat;
+    const forced = seat
+      ? forceDoughPeople(
+          doughCoreAll.filter((p) => args.pool.some((x) => x.id === p.id)),
+          seat,
+          targets[args.period].positions.find((p) => p.positionId === seat.id)?.max ?? 0,
+          skills,
+          group,
+          warnings
+        )
+      : { taken: new Set<string>(), forced: [] as Assignment[] };
+    // 강제로 앉힌 만큼만 자리를 뺀다. 정원이 고정조보다 크면 남은 자리는 일반 후보가 채운다
+    let seatTaken = forced.forced.length;
+    const slots = buildSlots(catalog, group, args.period, targets[args.period]).filter((s) => {
+      if (!seat || s.position.id !== seat.id) return true;
+      if (seatTaken <= 0) return true;
+      seatTaken -= 1;
+      return false;
+    });
+    const out = assignSlots(
+      args.pool.filter((p) => !forced.taken.has(p.id)),
+      slots,
+      skills,
+      group,
+      prev,
+      catalog,
+      { ...assignOpts, backups: fieldBackupPool(roster, skills, catalog, group, args.period) }
+    );
+    warnings.push(...out.warnings, ...unfilledWarnings(out.unfilled, periodLabelOf(args.period)));
+    const placed = placeLeftovers(
+      [...forced.forced, ...out.assignments],
+      roster,
+      skills,
+      catalog,
+      group,
+      prev,
+      args.period,
+      assignOpts
+    );
+    return { placed, unfilled: out.unfilled };
+  };
+
+  /** 오전은 반죽 자리, 13시 이후 복귀는 반죽 마감 자리 */
+  const doughSeatFor = (period: PeriodId): PositionDef | undefined => {
+    if (doughPolicy === "FIXED_DOUGH") return doughPos;
+    if (period === "early" || period === "start") return doughPos;
+    if (useLunchBackupSchedule && DOUGH_RETURN_PERIODS.includes(period)) return returnPos;
+    return undefined;
+  };
+
+  // 08~09: 08시 출근자만. 09시 출근자는 근무창 밖이라 풀에 없다
+  const earlyRun = runProductionPeriod({
+    period: "early",
+    pool: earlyFloor,
+    prevWaves: [],
+    doughSeat: doughSeatFor("early"),
   });
-  warnings.push(...startOut.warnings);
-  let start = placeLeftovers(
-    [...startForced.forced, ...startOut.assignments],
-    roster,
-    skills,
-    catalog,
-    group,
-    startPrev,
-    "start",
-    assignOpts
-  );
-  start = appendOfficeAndOff(start, roster, "start", catalog, group, skills);
-  warnings.push(...unfilledWarnings(startOut.unfilled, "시작"));
+  const early = appendOfficeAndOff(earlyRun.placed, roster, "early", catalog, group, skills);
+
+  // 09~11: 9시 출근자 합류
+  const startRun = runProductionPeriod({
+    period: "start",
+    pool: startFloor,
+    prevWaves: [earlyRun.placed],
+    doughSeat: doughSeatFor("start"),
+  });
+  const start = appendOfficeAndOff(startRun.placed, roster, "start", catalog, group, skills);
 
   if (!modes.lunch) {
-    const copy = (rows: Assignment[]) => rows.map((r) => ({ ...r }));
-    const assignments: PeriodAssignments = { start, lunch1: copy(start), lunch2: copy(start), after: copy(start) };
-    return finish(assignments, visible, targets, warnings, impact, modes, catalog, group, skills, startOut.unfilled.length > 0);
+    const noLunch = emptyPeriodAssignments();
+    noLunch.early = early;
+    noLunch.start = start;
+    const waves = [earlyRun.placed, startRun.placed];
+    let unfilled = earlyRun.unfilled.length + startRun.unfilled.length;
+    for (const period of ["lunch1", "lunch2", "after", "late", "evening", "closing"] as const) {
+      const run = runProductionPeriod({
+        period,
+        pool: floorIn(period),
+        prevWaves: [...waves],
+        doughSeat: doughSeatFor(period),
+      });
+      waves.push(run.placed);
+      unfilled += run.unfilled.length;
+      noLunch[period] = appendOfficeAndOff(run.placed, roster, period, catalog, group, skills);
+    }
+    return finish(noLunch, visible, targets, warnings, impact, modes, catalog, group, skills, unfilled > 0);
   }
 
   const lunchSlots = buildSlots(catalog, group, "lunch1", targets.lunch1);
@@ -1381,43 +1602,53 @@ export function generateRotation(input: GenerateInput): GenerateResult {
   ];
   const lunch2 = appendOfficeAndOff(lunch2Placed, roster, "lunch2", catalog, group, skills);
 
-  const afterSlots = buildSlots(catalog, group, "after", targets.after);
-  const afterDoughForce =
-    doughPolicy === "FIXED_DOUGH" || useLunchBackupSchedule
-      ? forceDoughPeople(
-          doughCore.filter((p) => afterFloor.some((x) => x.id === p.id)),
-          doughPos,
-          targets.after.positions.find((p) => p.process === "dough")?.max ?? 0,
-          skills,
-          group,
-          warnings
-        )
-      : { taken: new Set<string>(), forced: [] as Assignment[] };
-  const afterPool = afterFloor.filter((p) => !afterDoughForce.taken.has(p.id));
-  const afterRemain =
-    doughPolicy === "FIXED_DOUGH" || useLunchBackupSchedule
-      ? afterSlots.filter((s) => s.position.process !== "dough")
-      : afterSlots;
-  const afterOut = assignSlots(afterPool, afterRemain, skills, group, toPrevWorkMap(start, lunch1Placed, lunch2Placed), catalog, {
-    ...assignOpts,
-    backups: fieldBackupPool(roster, skills, catalog, group, "after"),
+  // 13:00~15:30 오후 정상운영. 반죽팀은 여기서 반죽 마감으로 복귀한다
+  const afterRun = runProductionPeriod({
+    period: "after",
+    pool: afterFloor,
+    prevWaves: [start, lunch1Placed, lunch2Placed],
+    doughSeat: doughSeatFor("after"),
   });
-  warnings.push(...afterOut.warnings, ...unfilledWarnings(afterOut.unfilled, "13시 이후"));
-  const afterPlaced = placeLeftovers(
-    [...afterDoughForce.forced, ...afterOut.assignments],
-    roster,
-    skills,
-    catalog,
-    group,
-    toPrevWorkMap(start, lunch1Placed, lunch2Placed),
-    "after",
-    assignOpts
-  );
-  const after = appendOfficeAndOff(afterPlaced, roster, "after", catalog, group, skills);
+  const after = appendOfficeAndOff(afterRun.placed, roster, "after", catalog, group, skills);
+
+  // 15:30~17:00 조기퇴근자가 빠진 뒤
+  const lateRun = runProductionPeriod({
+    period: "late",
+    pool: lateFloor,
+    prevWaves: [start, lunch1Placed, lunch2Placed, afterRun.placed],
+    doughSeat: doughSeatFor("late"),
+  });
+  const late = appendOfficeAndOff(lateRun.placed, roster, "late", catalog, group, skills);
+
+  // 17:00~18:00 17시 퇴근자가 빠진 뒤
+  const eveningRun = runProductionPeriod({
+    period: "evening",
+    pool: eveningFloor,
+    prevWaves: [start, lunch1Placed, lunch2Placed, afterRun.placed, lateRun.placed],
+    doughSeat: doughSeatFor("evening"),
+  });
+  const evening = appendOfficeAndOff(eveningRun.placed, roster, "evening", catalog, group, skills);
+
+  // 18:00~19:00 마감. 가열 자리는 세우지 않고 가열 마감·포장만 남는다
+  const closingRun = runProductionPeriod({
+    period: "closing",
+    pool: closingFloor,
+    prevWaves: [start, lunch1Placed, lunch2Placed, afterRun.placed, lateRun.placed, eveningRun.placed],
+    doughSeat: undefined,
+  });
+  const closing = appendOfficeAndOff(closingRun.placed, roster, "closing", catalog, group, skills);
 
   const failed =
-    startOut.unfilled.length + lunch1Out.unfilled.length + lunch2Out.unfilled.length + afterOut.unfilled.length > 0;
-  const assignments: PeriodAssignments = { start, lunch1, lunch2, after };
+    earlyRun.unfilled.length +
+      startRun.unfilled.length +
+      lunch1Out.unfilled.length +
+      lunch2Out.unfilled.length +
+      afterRun.unfilled.length +
+      lateRun.unfilled.length +
+      eveningRun.unfilled.length +
+      closingRun.unfilled.length >
+    0;
+  const assignments: PeriodAssignments = { early, start, lunch1, lunch2, after, late, evening, closing };
   return finish(assignments, visible, targets, warnings, impact, modes, catalog, group, skills, failed);
 }
 
@@ -1440,20 +1671,16 @@ function finish(
   skills: SkillMatrix,
   failed: boolean
 ): GenerateResult {
-  const withOff: PeriodAssignments = {
-    start: assignments.start,
-    lunch1: assignments.lunch1,
-    lunch2: assignments.lunch2,
-    after: assignments.after,
-  };
+  const withOff: PeriodAssignments = { ...assignments };
   for (const period of PERIODS) {
     const rows = [...withOff[period.id]];
     const assigned = new Set(rows.map((row) => row.personId));
     for (const person of roster) {
       if (assigned.has(person.id)) continue;
       if (isRotationExcluded(person)) continue;
-      if (isFullDayLeave(person.leaveKind) || !person.present || !isAvailableInPeriod(person, period.id)) {
-        rows.push({ personId: person.id, station: "off" });
+      const rest = restStationFor(person, period.id);
+      if (rest) {
+        rows.push({ personId: person.id, station: rest });
         assigned.add(person.id);
         continue;
       }
@@ -1480,7 +1707,9 @@ function finish(
   const checks = buildChecks(withOff, targets, roster, modes, catalog, group, skills);
   warnings.push(...qualificationGapWarnings(withOff, targets, roster, group));
   if (modes.splitShift) {
-    const lateCapable = roster.filter((p) => p.present && p.shift === "0900-1900" && hasAnyHeating(p.id, catalog, group, skills));
+    const lateCapable = roster.filter(
+      (p) => p.present && effectiveShift(p) === NIGHT_SHIFT && hasAnyHeating(p.id, catalog, group, skills)
+    );
     const need = heatingTarget(catalog, group);
     if (lateCapable.length < need) {
       warnings.push({
@@ -1502,6 +1731,18 @@ function finish(
       message: `1층↔2층 이동 ${floorMoves.length}건 (${floorMoves.slice(0, 4).join(", ")}${floorMoves.length > 4 ? " 외" : ""}). 외포장만 1층입니다.`,
     });
   }
+  // 18~19는 09~19조만 남는다. 그 인원으로 필수자리를 못 채우면 하루짜리 근무조 대체를 추천한다
+  const substitutePlan = planNightShiftSubstitutes({
+    roster,
+    assignments: withOff,
+    targets,
+    catalog,
+    group,
+    skills,
+  });
+  if (substitutePlan && substitutePlan.gaps.length > 0) {
+    warnings.push({ kind: "other", message: substitutePlan.message });
+  }
   const deduped = dedupeWarnings(warnings);
   return {
     assignments: withOff,
@@ -1510,6 +1751,7 @@ function finish(
     warnings: deduped,
     impact,
     failed: failed || checks.some((c) => !c.ok && (c.id.startsWith("pos:") || c.id.startsWith("qual:"))),
+    substitutePlan,
   };
 }
 
@@ -1523,6 +1765,7 @@ function qualificationGapWarnings(
   const out: RotationWarning[] = [];
   for (const period of PERIODS) {
     const rows = assignments[period.id];
+    if (!roster.some((p) => isAvailableInPeriod(p, period.id))) continue;
     for (const need of targets[period.id].positions) {
       const keys = requiredQualificationsForProcess(need.process, group);
       if (need.min <= 0 || keys.length === 0) continue;
@@ -1556,7 +1799,7 @@ function findFloorMoves(assignments: PeriodAssignments, byId: Map<string, Person
   const work = new Map<string, Assignment[]>();
   for (const period of PERIODS) {
     for (const row of assignments[period.id]) {
-      if (row.station === "lunch" || row.station === "off" || row.station === "unassigned") continue;
+      if (isNonWorkStation(row.station)) continue;
       const list = work.get(row.personId) ?? [];
       list.push(row);
       work.set(row.personId, list);
@@ -1598,16 +1841,21 @@ export function buildChecks(
   for (const period of PERIODS) {
     const rows = assignments[period.id];
     const t = targets[period.id];
-    const heatFilled = heatingPositions(catalog, group).filter((pos) =>
+    // 근무조가 아무도 없는 구간(예: 09~19 인원이 없는 18~19)은 검증 대상이 아니다
+    if (!roster.some((p) => isAvailableInPeriod(p, period.id))) continue;
+    const heatFilled = requiredHeatingPositions(catalog, group, period.id).filter((pos) =>
       rows.some((r) => r.positionId === pos.id && r.station === "heating")
     ).length;
-    checks.push({
-      id: `pos:${period.id}:heating`,
-      label: `${period.short} 가열 포지션`,
-      ok: heatFilled === t.heating && t.heating > 0,
-      actual: `${heatFilled}/${t.heating}자리`,
-      expected: `필수 ${t.heating}자리 전부`,
-    });
+    // 마감처럼 가열을 돌리지 않는 구간은 가열 검증 자체를 하지 않는다
+    if (t.heating > 0) {
+      checks.push({
+        id: `pos:${period.id}:heating`,
+        label: `${period.short} 가열 포지션`,
+        ok: heatFilled === t.heating,
+        actual: `${heatFilled}/${t.heating}자리`,
+        expected: `필수 ${t.heating}자리 전부`,
+      });
+    }
     for (const need of t.positions) {
       if (need.min <= 0 && need.max <= 0) continue;
       const n = rows.filter((r) => r.positionId === need.positionId || (r.station === need.process && !r.positionId)).length;
@@ -1709,9 +1957,15 @@ export function movePerson(
   if (isRotationExcluded(person)) {
     return { assignments, error: `${person.name}은(는) 로테이션 제외 대상입니다.` };
   }
-  const workStation = station !== "lunch" && station !== "off" && station !== "unassigned";
+  const workStation = !isNonWorkStation(station);
   if (workStation && (!person.present || isFullDayLeave(person.leaveKind))) {
     return { assignments, error: `${person.name}은(는) 휴무·미출근이라 작업 자리에 넣을 수 없습니다.` };
+  }
+  if (workStation && isOutsideShift(person, period)) {
+    return {
+      assignments,
+      error: `${person.name}은(는) 근무조(${shiftLabel(effectiveShift(person))}) 밖이라 이 시간대에 넣을 수 없습니다.`,
+    };
   }
   if (workStation && !isAvailableInPeriod(person, period)) {
     return { assignments, error: `${person.name}은(는) 이 시간대에 근무할 수 없습니다.` };
