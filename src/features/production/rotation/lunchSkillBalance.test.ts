@@ -4,8 +4,8 @@ import { generateRotation } from "./rotationEngine";
 import type { Person, PositionCatalog, Priority, ProcessId, ProductGroup, SkillMatrix } from "./types";
 
 /**
- * 실제 리코타 숙련표로 점심 교대를 나눠본다.
- * 11~12와 12~13 중 한쪽에 상·중상이 몰리면 그 시간대만 품질이 떨어지므로 두 교대가 비슷해야 한다.
+ * 실제 리코타 숙련표(2026-09-09)로 하루를 짜보고, 현장에서 수기로 짠 최선안과 어긋나던 지점을 지킨다.
+ * 점심 두 교대의 숙련 쏠림, 자리를 잘하는 사람을 놀리는 배치, 맞바꾸면 둘 다 나아지는 배치가 대상이다.
  */
 const GROUP: ProductGroup = "phono_ricotta";
 
@@ -102,6 +102,10 @@ const NIGHT = ["김소영", "박은화", "송문광", "양경민", "윤상혁", 
 const DAWN = ["이병일", "이진화", "조선영"];
 const OFFICE = ["신미경", "최민권"];
 const INNER_QUAL = ["김소영", "심수덕", "최대열"];
+/** 사무·R&D 기본이지만 점심에 현장 자리가 비면 들어간다 */
+const FIELD_BACKUP = ["김동호", "이두승"];
+/** 2026-09-09 휴무 */
+const OFF = ["한진"];
 
 function shiftOf(name: string) {
   if (DAWN.includes(name)) return "0600-1530";
@@ -116,12 +120,12 @@ function buildRoster(): Person[] {
     preferred: PREFERRED[name],
     shift: shiftOf(name),
     group: OFFICE.includes(name) ? ("office" as const) : ("floor" as const),
-    present: true,
+    present: !OFF.includes(name),
     constraints: {
       skillConfiguredGroups: [GROUP],
       ...(INNER_QUAL.includes(name) ? { qualificationsByGroup: { [GROUP]: { threeSidePacker: true } } } : {}),
       ...(DAWN.includes(name) ? { doughCore: true as const } : {}),
-      ...(name === "김동호" ? { fieldBackup: true as const } : {}),
+      ...(FIELD_BACKUP.includes(name) ? { fieldBackup: true as const } : {}),
     },
   }));
 }
@@ -176,5 +180,32 @@ describe("점심 교대 숙련 분산", () => {
     expect(topCount("lunch1")).toBeGreaterThan(0);
     expect(topCount("lunch2")).toBeGreaterThan(0);
     expect(Math.abs(topCount("lunch1") - topCount("lunch2"))).toBeLessThanOrEqual(1);
+  });
+
+  // 11~12에는 반죽팀이 가열 백업으로 더 붙는다. 양쪽을 반씩 나누면 12~13에 사람이 모자라 자리가 빈다
+  it("12~13에도 내포장 자리가 비지 않는다", () => {
+    expect(result.assignments.lunch2.filter((a) => a.station === "inner").length).toBeGreaterThanOrEqual(3);
+    expect(result.checks.find((c) => c.id === "count:lunch2:ricotta-inner")).toMatchObject({ ok: true });
+    expect(result.checks.filter((c) => !c.ok && c.id.startsWith("count:")).map((c) => c.label)).toEqual([]);
+  });
+});
+
+describe("숙련이 어긋난 배치 바로잡기", () => {
+  const result = run();
+  const stationOf = (period: "start" | "after", name: string) =>
+    result.assignments[period].find((a) => a.personId === name)?.station;
+
+  // 8시에는 토핑 인원이 없어 토핑 사람들이 가열로 간다. 9시에 가열이 교대되면 제 공정으로 돌아와야 한다
+  it("토핑 상 숙련자를 놀리고 하 숙련자를 토핑에 앉히지 않는다", () => {
+    expect(stationOf("start", "홍수정")).toBe("topping");
+    expect(stationOf("start", "박은화")).toBe("inner");
+    const topping = result.assignments.start.filter((a) => a.station === "topping");
+    expect(topping.filter((a) => a.priority === 4)).toEqual([]);
+  });
+
+  // 윤상혁은 가열 주공정에 토핑 하, 홍수정은 토핑 상이다. 맞바꾸면 둘 다 잘하는 자리로 간다
+  it("맞바꾸면 둘 다 숙련이 오르는 두 사람은 자리를 바꾼다", () => {
+    expect(stationOf("after", "윤상혁")).toBe("heating");
+    expect(stationOf("after", "홍수정")).toBe("topping");
   });
 });

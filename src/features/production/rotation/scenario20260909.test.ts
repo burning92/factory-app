@@ -227,11 +227,12 @@ describe("2026-09-09 운영 흐름", () => {
     expect(namesAt(withHelper, "after", "dough")).toEqual([...DAWN].sort());
   });
 
-  it("11~12는 가열 8자리, 12~13은 필수 7자리로 돌고 선택 자리는 비어도 성공이다", () => {
+  // 12~13의 리코타 배합은 선택 자리다. 비어도 실패가 아니지만, 돌릴 사람이 있으면 채운다
+  it("11~12는 가열 8자리, 12~13은 필수 7자리에 선택 자리까지 채운다", () => {
     expect(catalog[GROUP].find((p) => p.id === OPTIONAL_SEAT)?.label).toBe("리코타 배합");
     expect(namesAt(result, "lunch1", "heating")).toHaveLength(8);
-    expect(namesAt(result, "lunch2", "heating")).toHaveLength(7);
-    expect(result.assignments.lunch2.some((a) => a.positionId === OPTIONAL_SEAT)).toBe(false);
+    expect(namesAt(result, "lunch2", "heating")).toHaveLength(8);
+    expect(result.assignments.lunch2.some((a) => a.positionId === OPTIONAL_SEAT)).toBe(true);
 
     const heatCheck = (period: PeriodId) => result.checks.find((c) => c.id === `pos:${period}:heating`);
     expect(heatCheck("lunch1")).toMatchObject({ ok: true, actual: "8/8자리" });

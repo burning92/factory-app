@@ -905,7 +905,166 @@ function placeLeftovers(
     counts.set(best.d.id, (counts.get(best.d.id) ?? 0) + 1);
     extra.push({ personId: person.id, station: best.process, positionId: best.d.id, priority: best.pr });
   }
-  return [...kept, ...extra];
+  return improveSkillFit([...kept, ...extra], roster, skills, catalog, group, prev, period, opts);
+}
+
+/** 숙련이 낮은 배치를 앞에 두고 비교한다. 하 인원 수 → 중 인원 수 → 숙련 합 → 주공정 이탈 순 */
+function fitProfile(
+  rows: Assignment[],
+  byId: Map<string, Person>,
+  defById: Map<string, PositionDef>
+): number[] {
+  let rank4 = 0;
+  let rank3 = 0;
+  let rankSum = 0;
+  let prefLeave = 0;
+  for (const row of rows) {
+    if (!row.positionId) continue;
+    const pr = row.priority ?? 0;
+    if (pr === 4) rank4 += 1;
+    if (pr === 3) rank3 += 1;
+    rankSum += pr;
+    const person = byId.get(row.personId);
+    const def = defById.get(row.positionId);
+    if (person && def && person.preferred !== def.process) prefLeave += 1;
+  }
+  return [rank4, rank3, rankSum, prefLeave];
+}
+
+function cmpFit(a: number[], b: number[]): number {
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return a[i] - b[i];
+  }
+  return 0;
+}
+
+/**
+ * 배치를 마친 뒤 숙련이 어긋난 곳을 바로잡는다.
+ * 하나는 그 자리를 더 잘하는 사람이 미배치로 남은 경우고, 다른 하나는 두 사람이 자리를 맞바꾸면 둘 다 숙련이 오르는 경우다.
+ * 사람만 바꿔 앉히므로 자리 수는 그대로고 정원은 건드리지 않는다.
+ */
+function improveSkillFit(
+  rows: Assignment[],
+  roster: Person[],
+  skills: SkillMatrix,
+  catalog: PositionCatalog,
+  group: ProductGroup,
+  prev: Map<string, Assignment>,
+  period: PeriodId,
+  opts: AssignOptions
+): Assignment[] {
+  const byId = new Map(roster.map((p) => [p.id, p]));
+  const defById = new Map(catalog[group].map((d) => [d.id, d]));
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    if (row.positionId) counts.set(row.positionId, (counts.get(row.positionId) ?? 0) + 1);
+  }
+
+  /** 이 사람을 이 자리에 앉힐 수 있으면 숙련을, 못 앉히면 0을 준다 */
+  const rankFor = (personId: string, def: PositionDef): Priority => {
+    const person = byId.get(personId);
+    if (!person) return 0;
+    const pr = getPriority(skills, personId, group, def.id);
+    if (pr === 0) return 0;
+    if (!canTakeProcess(person, def.process, group)) return 0;
+    if (!eligibleForDoughPolicy(person, def.process, opts)) return 0;
+    // 자리를 새로 늘리는 게 아니라 사람만 바꾸므로 이 자리가 최소 인원에 드는지만 본다
+    const range = staffingForPosition(def, period);
+    if (!isUsableCandidate(person, pr, (counts.get(def.id) ?? 0) <= range.min)) return 0;
+    const prevStation = prev.get(personId)?.station;
+    if (prevStation && floorsDiffer(prevStation, def.process)) return 0;
+    return pr;
+  };
+
+  /** 그 공정에 필수자격자와 숙련 앵커가 남아 있는지 */
+  const health = (list: Assignment[], process: ProcessId) => {
+    const holders = list.filter((r) => r.positionId && r.station === process);
+    return {
+      qual: holders.some((r) => {
+        const person = byId.get(r.personId);
+        return Boolean(person) && personMeetsProcessQualifications(person!, process, group);
+      }),
+      anchor: holders.some((r) => meetsAnchorRank(process, r.priority ?? 0)),
+    };
+  };
+
+  /** 필수자격·숙련 앵커가 있던 공정에서 그게 사라지면 안 된다 */
+  const keepsHealth = (before: Assignment[], after: Assignment[], processes: ProcessId[]) =>
+    processes.every((process) => {
+      const was = health(before, process);
+      const now = health(after, process);
+      if (requiredQualificationsForProcess(process, group).length > 0 && was.qual && !now.qual) return false;
+      if (processNeedsExperiencedAnchor(process) && was.anchor && !now.anchor) return false;
+      return true;
+    });
+
+  let current = rows;
+  let bestFit = fitProfile(current, byId, defById);
+  for (let round = 0; round < 20; round++) {
+    let improved = false;
+    const seats = current.filter((r) => r.positionId && defById.get(r.positionId)?.process !== "dough");
+    /** 반죽 고정조는 정책으로 그 공정에 앉힌 인원이라 공정 밖으로 빼지 않는다 */
+    const isPinned = (personId: string) => {
+      const holder = byId.get(personId);
+      return Boolean(holder) && isDoughCorePerson(holder!);
+    };
+    // 그 자리를 더 잘하는 사람이 놀고 있으면 바꿔 넣는다
+    for (const idle of current.filter((r) => r.station === "unassigned")) {
+      const newcomer = byId.get(idle.personId);
+      for (const seat of seats) {
+        if (isPinned(seat.personId)) continue;
+        const def = defById.get(seat.positionId!)!;
+        const pr = rankFor(idle.personId, def);
+        if (pr === 0 || pr >= (seat.priority ?? 0)) continue;
+        // 현장백업은 이미 자리를 잡은 일반 인원을 밀어내지 않는다
+        const holder = byId.get(seat.personId);
+        if (newcomer && isFieldBackup(newcomer) && holder && !isFieldBackup(holder)) continue;
+        const next = current.map((row) => {
+          if (row.personId === seat.personId) return { personId: row.personId, station: "unassigned" as const, unassignedReason: "NO_AVAILABLE_SLOT" as const };
+          if (row.personId === idle.personId) return { personId: row.personId, station: def.process, positionId: def.id, priority: pr };
+          return row;
+        });
+        const fit = fitProfile(next, byId, defById);
+        if (cmpFit(fit, bestFit) >= 0) continue;
+        if (!keepsHealth(current, next, [def.process])) continue;
+        current = next;
+        bestFit = fit;
+        improved = true;
+        break;
+      }
+      if (improved) break;
+    }
+    if (improved) continue;
+    // 두 사람이 자리를 맞바꿔 둘 다 숙련이 오르면 바꾼다
+    for (let i = 0; i < seats.length && !improved; i++) {
+      for (let j = i + 1; j < seats.length; j++) {
+        const one = seats[i];
+        const two = seats[j];
+        if (one.positionId === two.positionId) continue;
+        const defOne = defById.get(one.positionId!)!;
+        const defTwo = defById.get(two.positionId!)!;
+        // 반죽 고정조는 같은 공정 안에서 자리만 바꿀 수 있다
+        if (defOne.process !== defTwo.process && (isPinned(one.personId) || isPinned(two.personId))) continue;
+        const prOne = rankFor(two.personId, defOne);
+        const prTwo = rankFor(one.personId, defTwo);
+        if (prOne === 0 || prTwo === 0) continue;
+        const next = current.map((row) => {
+          if (row.personId === one.personId) return { personId: row.personId, station: defTwo.process, positionId: defTwo.id, priority: prTwo };
+          if (row.personId === two.personId) return { personId: row.personId, station: defOne.process, positionId: defOne.id, priority: prOne };
+          return row;
+        });
+        const fit = fitProfile(next, byId, defById);
+        if (cmpFit(fit, bestFit) >= 0) continue;
+        if (!keepsHealth(current, next, [defOne.process, defTwo.process])) continue;
+        current = next;
+        bestFit = fit;
+        improved = true;
+        break;
+      }
+    }
+    if (!improved) break;
+  }
+  return current;
 }
 
 /** 상 3점 · 중상 2점 · 중 1점 · 하 0점 */
@@ -959,7 +1118,12 @@ function partitionLunch(
 ): { waveA: Person[]; waveB: Person[]; warnings: RotationWarning[] } {
   const warnings: RotationWarning[] = [];
   const workCount = slots.filter((s) => s.required).length;
-  const sizeB = Math.min(eaters.length, Math.max(workCount, Math.ceil(eaters.length / 2)));
+  // 11~12에는 반죽팀 가열 백업이 더 붙는다. 그만큼 1차 교대에 적게 남기고 나머지를 2차 교대로 보내야
+  // 12~13에 자리를 채울 사람이 모자라지 않는다
+  const sizeB = Math.min(
+    eaters.length,
+    Math.max(workCount - lunch1Extra.length, Math.floor((eaters.length - lunch1Extra.length) / 2))
+  );
   const A: Person[] = [];
   const B: Person[] = [];
   const placed = new Set<string>();
@@ -1000,9 +1164,17 @@ function partitionLunch(
     }
     return best;
   };
-  const heatStrength = (side: Person[]) => side.reduce((sum, p) => sum + rankWeight(bestHeatRank(p)), 0);
-  // 11~12에는 반죽팀 가열 백업이 붙으므로 그만큼 1차 교대가 앞서 있다고 보고 시작한다
-  const backupStrength = heatStrength(lunch1Extra);
+  /**
+   * 가열 자리 수만큼 잘하는 순으로 앉혔을 때의 숙련 합.
+   * 교대 인원 전체를 더하면 자리에 앉지도 못할 사람까지 세어져 실제 배치와 어긋난다.
+   */
+  const heatStrength = (side: Person[], extra: Person[] = []) =>
+    [...side, ...extra]
+      .map((p) => bestHeatRank(p))
+      .filter((rank) => rank > 0)
+      .sort((a, b) => a - b)
+      .slice(0, heatingSlots.length)
+      .reduce<number>((sum, rank) => sum + rankWeight(rank), 0);
 
   for (const slot of heatingSlots) {
     const capAll = capableOf(eaters, skills, group, slot.position.id, new Set());
@@ -1013,7 +1185,8 @@ function partitionLunch(
       });
     }
     // 지금까지 가열 숙련이 약한 교대가 먼저 고른다. 그래야 고수가 한쪽 교대에 몰리지 않는다
-    const sides = heatStrength(B) + backupStrength <= heatStrength(A) ? [B, A] : [A, B];
+    // 11~12에는 반죽팀 가열 백업이 붙으므로 그 인원까지 얹어서 견준다
+    const sides = heatStrength(B, lunch1Extra) <= heatStrength(A) ? [B, A] : [A, B];
     for (const side of sides) {
       if (side.some((p) => getPriority(skills, p.id, group, slot.position.id) > 0)) continue;
       const pick = pickFor(eaters, slot, side === B ? doughIds : new Set());
