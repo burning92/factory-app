@@ -135,6 +135,56 @@ describe("09~19 대체근무", () => {
     expect(result.warnings.some((w) => w.message.includes("09~19 대체 가능자"))).toBe(true);
   });
 
+  it("가열 마감 '상'이 남아 있으면 숙련이 낮아도 백업으로 채운다", () => {
+    // n-close1(상)은 남고 n-close2(상)만 빠진다. 인원 1명만 모자란 상태다
+    const roster = [
+      ...baseRoster().map((p) => (p.id === "n-close2" ? { ...p, leaveKind: "annual" as const } : p)),
+      person("day-close-low", "heating", { constraints: { nightShiftBackup: true } }),
+    ];
+    const catalog = testCatalog();
+    const skills = skillsOf(roster, catalog);
+    for (const g of GROUPS) skills["day-close-low"][g] = { close: 4 };
+    const plan = generateRotation({
+      roster,
+      line: "phono_signature",
+      modes: { lunch: false, breakRotation: false, splitShift: false },
+      catalog,
+      skills,
+    }).substitutePlan!;
+    expect(plan.gaps).toEqual([{ positionId: "close", process: "heatingClose", label: "가열 마감", missing: 1 }]);
+    expect(plan.candidates.map((c) => c.personId)).toEqual(["day-close-low"]);
+  });
+
+  it("가열 마감 '상'이 휴가면 '상' 숙련자만 대체 후보가 된다", () => {
+    // 남는 사람은 하 숙련뿐이라 마감을 이끌 '상'이 없다
+    const roster = [
+      ...baseRoster().map((p) => (p.id === "n-close1" ? { ...p, leaveKind: "annual" as const } : p)),
+      person("day-close-top", "heating", { constraints: { nightShiftBackup: true } }),
+      person("day-close-low", "heating", { constraints: { nightShiftBackup: true } }),
+    ];
+    const catalog = testCatalog();
+    const skills = skillsOf(roster, catalog);
+    for (const g of GROUPS) {
+      skills["n-close2"][g] = { close: 4 };
+      skills["day-close-top"][g] = { close: 1 };
+      skills["day-close-low"][g] = { close: 4 };
+    }
+    const result = generateRotation({
+      roster,
+      line: "phono_signature",
+      modes: { lunch: false, breakRotation: false, splitShift: false },
+      catalog,
+      skills,
+    });
+    const plan = result.substitutePlan!;
+    expect(plan.gaps).toEqual([
+      { positionId: "close", process: "heatingClose", label: "가열 마감", missing: 1, anchorRank: "상" },
+    ]);
+    expect(plan.message).toContain("가열 마감 상 숙련자 1명");
+    expect(plan.candidates.map((c) => c.personId)).toEqual(["day-close-top"]);
+    expect(result.warnings.some((w) => w.message.includes("상 숙련자가 필요합니다"))).toBe(true);
+  });
+
   it("인원은 차도 삼면포장기 자격이 없으면 자격 결원으로 잡는다", () => {
     const roster = baseRoster()
       .filter((p) => p.id !== "n-inner2")

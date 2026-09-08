@@ -2,7 +2,7 @@
  * 09~19조에 결원이 나 18~19 필수자리를 못 채울 때, 하루만 09~19로 바꿔 쓸 후보를 고른다.
  * 근무시간이 실제로 바뀌는 일이라 여기서는 추천만 하고 확정은 관리자가 한다.
  */
-import { getPriority } from "./catalog";
+import { anchorRankLabel, getPriority, meetsAnchorRank } from "./catalog";
 import { isFullDayLeave } from "./planningLeave";
 import { canTakeProcess, isNightShiftBackup, isRotationExcluded } from "./personRules";
 import { hasQualification, qualificationLabel, requiredQualificationsForProcess } from "./qualifications";
@@ -12,6 +12,7 @@ import type {
   PeriodId,
   Person,
   PositionCatalog,
+  ProcessId,
   ProductGroup,
   ShiftGap,
   ShiftSubstitutePlan,
@@ -23,10 +24,10 @@ import type {
 /** 대체근무가 필요한지 보는 구간. 09~19조만 남는 시간대다 */
 const TARGET_PERIOD: PeriodId = "closing";
 
-function assignedTo(assignments: PeriodAssignments, positionId: string, process: string): string[] {
-  return assignments[TARGET_PERIOD]
-    .filter((row) => (row.positionId ? row.positionId === positionId : row.station === process))
-    .map((row) => row.personId);
+function rowsAt(assignments: PeriodAssignments, positionId: string, process: string) {
+  return assignments[TARGET_PERIOD].filter((row) =>
+    row.positionId ? row.positionId === positionId : row.station === process
+  );
 }
 
 /** 실제 배치 결과에서 18~19 필수정원·필수자격이 모자란 자리를 뽑는다 */
@@ -40,11 +41,30 @@ export function closingGaps(
   const gaps: ShiftGap[] = [];
   for (const need of targets[TARGET_PERIOD].positions) {
     if (need.min <= 0) continue;
-    const holders = assignedTo(assignments, need.positionId, need.process);
+    const rows = rowsAt(assignments, need.positionId, need.process);
+    const holders = rows.map((row) => row.personId);
+    // 가열 마감은 '상' 한 명이 상주해야 한다. 그 사람이 있으면 나머지는 낮은 숙련이 백업으로 들어와도 된다
+    const needsAnchor =
+      needsTopRankAnchor(need.process) && !rows.some((row) => meetsAnchorRank(need.process, row.priority ?? 0));
     const missing = need.min - holders.length;
     if (missing > 0) {
-      gaps.push({ positionId: need.positionId, process: need.process, label: need.label, missing });
+      gaps.push({
+        positionId: need.positionId,
+        process: need.process,
+        label: need.label,
+        missing,
+        ...(needsAnchor ? { anchorRank: anchorRankLabel(need.process) } : {}),
+      });
       continue;
+    }
+    if (needsAnchor) {
+      gaps.push({
+        positionId: need.positionId,
+        process: need.process,
+        label: need.label,
+        missing: 1,
+        anchorRank: anchorRankLabel(need.process),
+      });
     }
     for (const key of requiredQualificationsForProcess(need.process, group)) {
       const covered = holders.some((id) => {
@@ -64,13 +84,21 @@ export function closingGaps(
   return gaps;
 }
 
+/** 가열 마감처럼 '상' 한 명이 반드시 있어야 하는 공정 */
+function needsTopRankAnchor(process: ProcessId): boolean {
+  return process === "heatingClose";
+}
+
 function coversGap(
   person: Person,
   gap: ShiftGap,
   skills: SkillMatrix,
   group: ProductGroup
 ): boolean {
-  if (getPriority(skills, person.id, group, gap.positionId) <= 0) return false;
+  const rank = getPriority(skills, person.id, group, gap.positionId);
+  if (rank <= 0) return false;
+  // 비어 있는 자리가 '상' 자리면 '상' 보유자만 메울 수 있다
+  if (gap.anchorRank && !meetsAnchorRank(gap.process, rank)) return false;
   if (!canTakeProcess(person, gap.process, group)) return false;
   return requiredQualificationsForProcess(gap.process, group).every((key) =>
     hasQualification(person, key, group)
@@ -96,9 +124,11 @@ function bestRank(person: Person, gaps: ShiftGap[], skills: SkillMatrix, group: 
 
 function gapText(gaps: ShiftGap[]): string {
   return gaps
-    .map((gap) =>
-      gap.qualification ? `${gap.label} ${gap.qualification} 보유자 ${gap.missing}명` : `${gap.label} ${gap.missing}명`
-    )
+    .map((gap) => {
+      if (gap.qualification) return `${gap.label} ${gap.qualification} 보유자 ${gap.missing}명`;
+      if (gap.anchorRank) return `${gap.label} ${gap.anchorRank} 숙련자 ${gap.missing}명`;
+      return `${gap.label} ${gap.missing}명`;
+    })
     .join(", ");
 }
 
@@ -156,7 +186,9 @@ export function planNightShiftSubstitutes(input: {
     .map(({ person, covered }) => {
       const rank = bestRank(person, covered, skills, group);
       const qual = covered.find((gap) => gap.qualification)?.qualification;
+      const anchor = covered.find((gap) => gap.anchorRank)?.anchorRank;
       const parts = [`숙련 ${rank}순위`];
+      if (anchor) parts.push(`${anchor} 숙련`);
       if (qual) parts.push(`${qual} 보유`);
       if (covered.some((gap) => gap.process === person.preferred)) parts.push("주공정");
       if (disruption(person, assignments) > 0) parts.push("08~09 자리 비게 됨");

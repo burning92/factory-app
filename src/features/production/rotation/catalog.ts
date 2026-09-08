@@ -140,6 +140,18 @@ export function isJuniorRank(v: Priority): boolean {
   return v === 4 || v === 5;
 }
 
+/**
+ * 공정을 이끌 사람이 갖춰야 하는 숙련.
+ * 가열 마감은 설비 정리·세척이라 '상' 한 명이 반드시 상주해야 하고, 그 사람이 있으면 나머지는 낮은 숙련도 백업으로 들어올 수 있다.
+ */
+export function meetsAnchorRank(process: ProcessId, v: Priority): boolean {
+  return process === "heatingClose" ? v === 1 : isExperiencedRank(v);
+}
+
+export function anchorRankLabel(process: ProcessId): string {
+  return process === "heatingClose" ? "상" : "중 이상";
+}
+
 export function getPriority(
   skills: SkillMatrix,
   personId: string,

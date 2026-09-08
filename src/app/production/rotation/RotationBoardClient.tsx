@@ -624,7 +624,8 @@ function splitSeatLabel(label: string): { title: string; hint?: string } {
 }
 
 function sectionForStation(station?: StationId, heating?: boolean): BoardRow["section"] {
-  if (heating || station === "heating") return "가열";
+  // 가열 마감은 18~19 가열실 정리라 가열 자리 바로 밑에 붙인다
+  if (heating || station === "heating" || station === "heatingClose") return "가열";
   if (station === "inner" || station === "outer") return "포장";
   if (station === "topping") return "토핑";
   if (station === "dough") return "반죽";
@@ -712,15 +713,22 @@ function BoardTable(props: {
     | { type: "heat-print" }
   > = [];
   let last = "";
+  let seenHeat = false;
+  let heatPrinted = false;
   for (const row of rows) {
+    // 인쇄본은 가열 자리를 한 줄로 합친다. 가열 마감은 따로 남기므로 그 앞에 넣는다
+    if (seenHeat && !heatPrinted && !row.heating) {
+      rendered.push({ type: "heat-print" });
+      heatPrinted = true;
+    }
     if (row.section !== last) {
-      if (last === "가열") rendered.push({ type: "heat-print" });
       last = row.section;
       rendered.push({ type: "section", label: row.section });
     }
+    if (row.heating) seenHeat = true;
     rendered.push({ type: "row", row });
   }
-  if (last === "가열") rendered.push({ type: "heat-print" });
+  if (seenHeat && !heatPrinted) rendered.push({ type: "heat-print" });
 
   return (
     <div className="print-board overflow-auto rounded-2xl border border-slate-700/80 bg-slate-950/40 shadow-xl shadow-black/20">

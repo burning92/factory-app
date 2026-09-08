@@ -1,4 +1,4 @@
-import { getPriority, hasAssignableSkill, hasNoSkillConfig, heatingPositions, isAssignedOfficePerson, isExperiencedRank, isJuniorRank, isNormalRank, positionsForProcess, visibleRotationRoster } from "./catalog";
+import { anchorRankLabel, getPriority, hasAssignableSkill, hasNoSkillConfig, heatingPositions, isAssignedOfficePerson, isJuniorRank, isNormalRank, meetsAnchorRank, positionsForProcess, visibleRotationRoster } from "./catalog";
 import { normalizeDoughSettings } from "./doughPolicy";
 import { HOURLY_QTY, productGroup } from "./seedRoster";
 import {
@@ -321,7 +321,14 @@ function cmpScore(a: ScoreVec, b: ScoreVec): number {
 }
 
 function processNeedsExperiencedAnchor(process: ProcessId): boolean {
-  return process === "heating" || process === "inner" || process === "outer" || process === "topping" || process === "dough";
+  return (
+    process === "heating" ||
+    process === "heatingClose" ||
+    process === "inner" ||
+    process === "outer" ||
+    process === "topping" ||
+    process === "dough"
+  );
 }
 
 function scoreRequired(
@@ -389,7 +396,7 @@ function scoreRequired(
       .map((s) => filled.get(s.key))
       .filter((a): a is Assignment => Boolean(a));
     if (holders.length === 0) continue;
-    if (!holders.some((a) => isExperiencedRank(a.priority ?? 0))) vec.juniorOnly += 1;
+    if (!holders.some((a) => meetsAnchorRank(process, a.priority ?? 0))) vec.juniorOnly += 1;
   }
   return vec;
 }
@@ -450,7 +457,7 @@ function pickForSlot(
     canTakeProcess(p, slot.position.process, group) &&
     eligibleForDoughPolicy(p, slot.position.process, opts) &&
     (!requireQual || personMeetsProcessQualifications(p, slot.position.process, group)) &&
-    (!requireExperienced || isExperiencedRank(getPriority(skills, p.id, group, slot.position.id)))
+    (!requireExperienced || meetsAnchorRank(slot.position.process, getPriority(skills, p.id, group, slot.position.id)))
   );
   const normal = all.filter((p) => isNormalRank(getPriority(skills, p.id, group, slot.position.id)));
   const base = normal.length > 0 ? normal : all;
@@ -487,7 +494,7 @@ function processHasExperiencedHolder(filled: Map<string, Assignment>, slots: Slo
   return slots.some((slot) => {
     if (slot.position.process !== process) return false;
     const a = filled.get(slot.key);
-    return Boolean(a && isExperiencedRank(a.priority ?? 0));
+    return Boolean(a && meetsAnchorRank(process, a.priority ?? 0));
   });
 }
 
@@ -738,11 +745,11 @@ function assignSlots(
     const procSlots = required.filter((s) => s.position.process === process);
     const holders = procSlots.map((s) => filled.get(s.key)).filter((a): a is Assignment => Boolean(a));
     if (holders.length === 0) continue;
-    if (holders.some((a) => isExperiencedRank(a.priority ?? 0))) continue;
+    if (holders.some((a) => meetsAnchorRank(process, a.priority ?? 0))) continue;
     const label = procSlots[0]?.position.label ?? processLabel(process);
     warnings.push({
       kind: "other",
-      message: `${label}에 하·비상만 배치되었습니다. 중 이상 숙련자가 필요합니다.`,
+      message: `${label}에 숙련이 낮은 인원만 배치되었습니다. ${anchorRankLabel(process)} 숙련자가 필요합니다.`,
     });
   }
   for (const person of people) {

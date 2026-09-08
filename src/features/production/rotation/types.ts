@@ -221,6 +221,8 @@ export type ShiftGap = {
   missing: number;
   /** 이 자리에 필요한 자격 이름. 자격 때문에 빈 자리면 채운다 */
   qualification?: string;
+  /** 이 자리를 이끌 숙련(가열 마감은 '상'). 그 숙련이 비어 있을 때만 채운다 */
+  anchorRank?: string;
 };
 
 export type SubstituteCandidate = {
