@@ -908,6 +908,11 @@ function placeLeftovers(
   return [...kept, ...extra];
 }
 
+/** 상 3점 · 중상 2점 · 중 1점 · 하 0점 */
+function rankWeight(priority: Priority): number {
+  return priority === 1 ? 3 : priority === 2 ? 2 : priority === 3 ? 1 : 0;
+}
+
 function dryLunchScore(
   people: Person[],
   slots: Slot[],
@@ -948,7 +953,9 @@ function partitionLunch(
   doughCore: Person[],
   doughCanRotate: boolean,
   catalog: PositionCatalog,
-  startMap: Map<string, Assignment>
+  startMap: Map<string, Assignment>,
+  /** 11~12에 반죽팀이 가열 백업으로 붙는 인원. 가열 숙련을 견줄 때 1차 교대 쪽에 얹는다 */
+  lunch1Extra: Person[] = []
 ): { waveA: Person[]; waveB: Person[]; warnings: RotationWarning[] } {
   const warnings: RotationWarning[] = [];
   const workCount = slots.filter((s) => s.required).length;
@@ -983,6 +990,20 @@ function partitionLunch(
 
   const doughIds = new Set(doughCanRotate ? doughCore.map((p) => p.id) : []);
 
+  const heatPosIds = heatingSlots.map((s) => s.position.id);
+  const bestHeatRank = (person: Person): Priority => {
+    let best: Priority = 0;
+    for (const posId of heatPosIds) {
+      const pr = getPriority(skills, person.id, group, posId);
+      if (pr === 0) continue;
+      if (best === 0 || pr < best) best = pr;
+    }
+    return best;
+  };
+  const heatStrength = (side: Person[]) => side.reduce((sum, p) => sum + rankWeight(bestHeatRank(p)), 0);
+  // 11~12에는 반죽팀 가열 백업이 붙으므로 그만큼 1차 교대가 앞서 있다고 보고 시작한다
+  const backupStrength = heatStrength(lunch1Extra);
+
   for (const slot of heatingSlots) {
     const capAll = capableOf(eaters, skills, group, slot.position.id, new Set());
     if (capAll.length < 2) {
@@ -991,21 +1012,14 @@ function partitionLunch(
         message: `${slot.position.label} 가능자가 ${capAll.length}명뿐이라 11시·12시 양쪽을 채울 수 없습니다.`,
       });
     }
-    const bHas = B.some((p) => getPriority(skills, p.id, group, slot.position.id) > 0);
-    const aHas = A.some((p) => getPriority(skills, p.id, group, slot.position.id) > 0);
-    if (!bHas) {
-      const pick = pickFor(eaters, slot, doughIds);
-      if (pick) {
-        B.push(pick);
-        placed.add(pick.id);
-      }
-    }
-    if (!aHas) {
-      const pick = pickFor(eaters, slot, new Set());
-      if (pick) {
-        A.push(pick);
-        placed.add(pick.id);
-      }
+    // 지금까지 가열 숙련이 약한 교대가 먼저 고른다. 그래야 고수가 한쪽 교대에 몰리지 않는다
+    const sides = heatStrength(B) + backupStrength <= heatStrength(A) ? [B, A] : [A, B];
+    for (const side of sides) {
+      if (side.some((p) => getPriority(skills, p.id, group, slot.position.id) > 0)) continue;
+      const pick = pickFor(eaters, slot, side === B ? doughIds : new Set());
+      if (!pick) continue;
+      side.push(pick);
+      placed.add(pick.id);
     }
   }
 
@@ -1486,8 +1500,6 @@ export function generateRotation(input: GenerateInput): GenerateResult {
   const halfPm = floor.filter((p) => p.leaveKind === "half_pm");
   // 반죽팀은 일반 점심 교대 분배에 넣지 않는다 (FIXED·점심백업·차단 모두)
   const eaters = allDayFloor.filter((p) => !isDoughCorePerson(p));
-  const part = partitionLunch(eaters, lunchSlots, skills, group, doughCore, false, catalog, toPrevWorkMap(start));
-  warnings.push(...part.warnings);
   const doughHeld =
     doughPolicy === "FIXED_DOUGH" || useLunchBackupSchedule
       ? []
@@ -1495,6 +1507,18 @@ export function generateRotation(input: GenerateInput): GenerateResult {
   const doughLunchBackup = useLunchBackupSchedule
     ? doughCore.filter((p) => lunch1Floor.some((x) => x.id === p.id))
     : [];
+  const part = partitionLunch(
+    eaters,
+    lunchSlots,
+    skills,
+    group,
+    doughCore,
+    false,
+    catalog,
+    toPrevWorkMap(start),
+    doughLunchBackup
+  );
+  warnings.push(...part.warnings);
   const lunchHeatForce = useLunchBackupSchedule
     ? forceDoughHeatingBackup(doughLunchBackup, catalog, group, skills, warnings)
     : { taken: new Set<string>(), forced: [] as Assignment[] };
