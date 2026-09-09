@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CATALOG } from "./catalog";
 import { generateRotation } from "./rotationEngine";
+import { PERIODS } from "./types";
 import type { Person, PositionCatalog, Priority, ProcessId, ProductGroup, SkillMatrix } from "./types";
 
 /**
@@ -57,7 +58,7 @@ const SKILL_TABLE: Record<string, string> = {
   차유진: "중 중 불가 불가 중상 중상 하 불가 불가 불가 하 불가 불가 불가 중상",
   최대열: "중 하 불가 하 중 중상 중상 불가 상 불가 하 불가 불가 불가 불가",
   최민권: "불가 불가 불가 불가 불가 불가 불가 불가 불가 불가 불가 불가 불가 불가 불가",
-  최현호: "불가 불가 불가 불가 하 불가 불가 불가 중 불가 하 불가 불가 불가 불가",
+  최현호: "불가 불가 불가 불가 하 불가 불가 불가 중 불가 하 중 불가 불가 불가",
   한상수: "불가 하 불가 불가 불가 불가 불가 불가 불가 상 불가 불가 불가 불가 불가",
   한상혁: "불가 불가 불가 불가 불가 불가 불가 불가 불가 상 불가 불가 불가 불가 불가",
   한진: "하 중 불가 불가 불가 중 불가 불가 중상 중상 상 불가 불가 불가 불가",
@@ -196,16 +197,36 @@ describe("숙련이 어긋난 배치 바로잡기", () => {
     result.assignments[period].find((a) => a.personId === name)?.station;
 
   // 8시에는 토핑 인원이 없어 토핑 사람들이 가열로 간다. 9시에 가열이 교대되면 제 공정으로 돌아와야 한다
-  it("토핑 상 숙련자를 놀리고 하 숙련자를 토핑에 앉히지 않는다", () => {
-    expect(stationOf("start", "홍수정")).toBe("topping");
-    expect(stationOf("start", "박은화")).toBe("inner");
-    const topping = result.assignments.start.filter((a) => a.station === "topping");
-    expect(topping.filter((a) => a.priority === 4)).toEqual([]);
+  it("09~11 배치가 수기 최선안과 같다", () => {
+    const namesAt = (station: string) =>
+      result.assignments.start
+        .filter((a) => a.station === station)
+        .map((a) => a.personId)
+        .sort();
+    expect(namesAt("heating")).toEqual(
+      ["김다슬", "손학모", "윤상혁", "임정우", "송문광", "조형래", "차유진", "김옥"].sort()
+    );
+    expect(namesAt("topping")).toEqual(["김순이", "김성아", "고은주", "장야핑", "홍수정", "김성미"].sort());
+    expect(namesAt("inner")).toEqual(["최대열", "김소영", "심수덕", "박은화"].sort());
+    expect(namesAt("dough")).toEqual(["조선영", "이진화", "이병일", "최현호"].sort());
   });
 
   // 윤상혁은 가열 주공정에 토핑 하, 홍수정은 토핑 상이다. 맞바꾸면 둘 다 잘하는 자리로 간다
   it("맞바꾸면 둘 다 숙련이 오르는 두 사람은 자리를 바꾼다", () => {
     expect(stationOf("after", "윤상혁")).toBe("heating");
     expect(stationOf("after", "홍수정")).toBe("topping");
+  });
+
+  // 포노 계열 내포장은 삼면포장기 관리 자격자가 한 명은 붙어 있어야 한다
+  it("모든 시간대 내포장에 삼면포장기 자격자가 붙어 있다", () => {
+    for (const period of PERIODS) {
+      const inner = result.assignments[period.id].filter((a) => a.station === "inner").map((a) => a.personId);
+      if (inner.length === 0) continue;
+      expect({ period: period.id, hasQual: inner.some((name) => INNER_QUAL.includes(name)) }).toEqual({
+        period: period.id,
+        hasQual: true,
+      });
+    }
+    expect(result.checks.filter((c) => !c.ok && c.id.includes("threeSidePacker"))).toEqual([]);
   });
 });

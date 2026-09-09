@@ -914,21 +914,24 @@ function fitProfile(
   byId: Map<string, Person>,
   defById: Map<string, PositionDef>
 ): number[] {
+  let rankSum = 0;
   let rank4 = 0;
   let rank3 = 0;
-  let rankSum = 0;
   let prefLeave = 0;
   for (const row of rows) {
     if (!row.positionId) continue;
     const pr = row.priority ?? 0;
     if (pr === 4) rank4 += 1;
     if (pr === 3) rank3 += 1;
-    rankSum += pr;
     const person = byId.get(row.personId);
     const def = defById.get(row.positionId);
+    // 가열은 제품 품질이 가장 많이 걸린 공정이라 한 등급을 두 배로 친다.
+    // 그래야 가열 숙련자를 빼서 다른 공정의 '하'를 메꾸는 맞바꿈이 일어나지 않는다
+    const weight = def && (def.process === "heating" || def.process === "heatingClose") ? 2 : 1;
+    rankSum += pr * weight;
     if (person && def && person.preferred !== def.process) prefLeave += 1;
   }
-  return [rank4, rank3, rankSum, prefLeave];
+  return [rankSum, rank4, rank3, prefLeave];
 }
 
 function cmpFit(a: number[], b: number[]): number {
