@@ -146,6 +146,8 @@ export function isNightShiftBackup(person: Person): boolean {
 export function canTakeProcess(person: Person, process: ProcessId, group: ProductGroup): boolean {
   if (!person.constraints?.lockPreferred) return true;
   if (person.preferred === process) return true;
+  // 가열 마감은 가열실 설비 정리·세척이라 가열의 마무리에 해당한다. 주공정이 가열이면 주공정만을 켜도 마감에 남을 수 있다
+  if (person.preferred === "heating" && process === "heatingClose") return true;
   if (isDoughCorePerson(person) && process === "heating") return true;
   if (
     isFieldBackup(person) &&
