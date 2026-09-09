@@ -663,7 +663,10 @@ function BoardTable(props: {
 }) {
   const { catalog, group, roster, assignments, targets, skills } = props;
   const heat = heatingPositions(catalog, group);
-  const staffed = catalog[group].filter((p) => processNeedsStaffing(p.process) && p.process !== "office");
+  const staffed = catalog[group]
+    .filter((p) => processNeedsStaffing(p.process) && p.process !== "office")
+    // 가열 마감은 가열 자리 바로 밑에 붙인다. 저장 순서가 뒤여도 가열 묶음 안에 들어가야 표가 갈리지 않는다
+    .sort((a, b) => Number(b.process === "heatingClose") - Number(a.process === "heatingClose"));
   const rndShown = catalog[group].some((p) => p.process === "rnd");
   const officeShown = roster.some((p) => isAssignedOfficePerson(p, skills, catalog, group));
   const allRows: BoardRow[] = [
