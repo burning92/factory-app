@@ -63,7 +63,7 @@ export function processLabel(process: ProcessId | StationId): string {
 
 /** 작업 자리가 아닌 상태. 층 이동·이전 자리 계산에서 뺀다 */
 export function isNonWorkStation(station: ProcessId | StationId | undefined): boolean {
-  return station === "lunch" || station === "off" || station === "outside" || station === "unassigned";
+  return station === "lunch" || station === "off" || station === "outside" || station === "arriving" || station === "unassigned";
 }
 
 /** 외포장만 1층. 식사·휴무·근무 외·미배치·사무는 층 이동에 넣지 않음. */

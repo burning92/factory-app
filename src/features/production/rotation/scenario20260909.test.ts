@@ -261,9 +261,10 @@ describe("2026-09-09 운영 흐름", () => {
 
   it("1) 09~19 근무자는 08~09에 배치되지 않는다", () => {
     for (const name of NIGHT) {
-      expect(stationOf(result, "early", name)).toBe("outside");
+      expect(stationOf(result, "early", name)).toBe("arriving");
     }
-    expect(namesAt(result, "early", "outside")).toEqual([...NIGHT].sort());
+    expect(namesAt(result, "early", "arriving")).toEqual([...NIGHT].sort());
+    expect(namesAt(result, "early", "outside")).toEqual([]);
   });
 
   it("2) 08~18 근무자는 18~19에 배치되지 않는다", () => {
@@ -330,13 +331,14 @@ describe("2026-09-09 운영 흐름", () => {
     if (lunchCheck) expect(lunchCheck.ok).toBe(true);
   });
 
-  it("9) 근무 외·식사·휴무·미배치가 서로 다른 상태로 나온다", () => {
+  it("9) 근무 외·9시 출근·식사·휴무가 서로 다른 상태로 나온다", () => {
     expect(stationOf(result, "start", "한진")).toBe("off");
-    expect(stationOf(result, "early", "임정우")).toBe("outside");
+    expect(stationOf(result, "early", "임정우")).toBe("arriving");
     expect(stationOf(result, "closing", "김다슬")).toBe("outside");
     expect(namesAt(result, "lunch1", "lunch").length).toBeGreaterThan(0);
     const stations = new Set(PERIODS.flatMap((p) => result.assignments[p.id].map((a) => a.station)));
     expect(stations.has("off")).toBe(true);
+    expect(stations.has("arriving")).toBe(true);
     expect(stations.has("outside")).toBe(true);
     expect(stations.has("lunch")).toBe(true);
   });

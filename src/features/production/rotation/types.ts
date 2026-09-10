@@ -35,7 +35,9 @@ export const STATIONS = [
   ...PROCESSES,
   { id: "lunch", label: "식사" },
   { id: "off", label: "휴무" },
-  /** 이 시간대는 근무조 밖이라 출근 전이거나 이미 퇴근 */
+  /** 아직 출근 전. 지금은 09~19조가 08시에 여기로 온다 */
+  { id: "arriving", label: "9시 출근" },
+  /** 이미 퇴근했거나 근무조가 끝난 뒤 */
   { id: "outside", label: "근무 외" },
   { id: "unassigned", label: "미배치" },
 ] as const;

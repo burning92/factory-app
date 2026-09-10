@@ -227,7 +227,7 @@ describe("09~19 대체근무", () => {
     const confirmed = applyShiftOverrides(roster, { "day-ready": NIGHT_SHIFT });
     const result = run(confirmed);
 
-    expect(stationOf(result, "early", "day-ready")).toBe("outside");
+    expect(stationOf(result, "early", "day-ready")).toBe("arriving");
     expect(stationOf(result, "start", "day-ready")).toBe("inner");
     expect(stationOf(result, "closing", "day-ready")).toBe("inner");
     expect(result.substitutePlan?.gaps).toEqual([]);
@@ -243,6 +243,7 @@ describe("09~19 대체근무", () => {
     expect(nextDay.find((p) => p.id === "day-ready")?.shiftOverride ?? null).toBeNull();
     const result = run(nextDay);
     expect(stationOf(result, "early", "day-ready")).not.toBe("outside");
+    expect(stationOf(result, "early", "day-ready")).not.toBe("arriving");
     expect(stationOf(result, "closing", "day-ready")).toBe("outside");
   });
 });
@@ -312,8 +313,8 @@ describe("대체 확정 시 전체 재계산", () => {
     expect(before.checks.find((c) => c.id === "count:closing:inner")?.ok).toBe(false);
   });
 
-  it("08~09 배치에서 즉시 빠지고 근무 외가 된다", () => {
-    expect(stationOf(after, "early", "day-ready")).toBe("outside");
+  it("08~09 배치에서 즉시 빠지고 9시 출근으로 표시된다", () => {
+    expect(stationOf(after, "early", "day-ready")).toBe("arriving");
   });
 
   it("08~09에 생긴 빈자리를 다른 근무 가능자가 채운다", () => {
@@ -323,6 +324,7 @@ describe("대체 확정 시 전체 재계산", () => {
   it("09~11부터는 일반 09~19 인원과 똑같이 배치 후보가 된다", () => {
     for (const period of ["start", "lunch1", "lunch2", "after", "late", "evening"] as const) {
       expect(stationOf(after, period, "day-ready")).not.toBe("outside");
+      expect(stationOf(after, period, "day-ready")).not.toBe("arriving");
     }
   });
 

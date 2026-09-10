@@ -73,10 +73,10 @@ describe("근무조와 연차·반차", () => {
     expect(isAvailableInPeriod(halfPm, "closing")).toBe(false);
   });
 
-  it("연차는 휴무, 근무조 밖은 근무 외로 나눈다", () => {
+  it("연차는 휴무, 출근 전은 9시 출근, 퇴근 후는 근무 외로 나눈다", () => {
     expect(restStationFor(person("0800-1800", { leaveKind: "annual" }), "start")).toBe("off");
     expect(restStationFor(person("0800-1800"), "closing")).toBe("outside");
-    expect(restStationFor(person("0900-1900"), "early")).toBe("outside");
+    expect(restStationFor(person("0900-1900"), "early")).toBe("arriving");
     expect(restStationFor(person("0900-1900"), "closing")).toBeNull();
   });
 });

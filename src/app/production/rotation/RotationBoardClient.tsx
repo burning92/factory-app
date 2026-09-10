@@ -695,6 +695,7 @@ function BoardTable(props: {
       ? [{ key: "office", title: "사무", match: { station: "office" as const }, section: "기타" as const }]
       : []),
     { key: "lunch", title: "식사", match: { station: "lunch" as const }, section: "기타" },
+    { key: "arriving", title: "9시 출근", match: { station: "arriving" as const }, section: "기타" },
     { key: "outside", title: "근무 외", match: { station: "outside" as const }, section: "기타" },
     { key: "off", title: "휴무", match: { station: "off" as const }, section: "기타" },
     { key: "unassigned", title: "미배치", match: { station: "unassigned" as const }, section: "기타" },
@@ -799,7 +800,7 @@ function BoardTable(props: {
             }
             const row = item.row;
             const isLunch = row.key === "lunch";
-            const isOff = row.key === "off" || row.key === "outside";
+            const isOff = row.key === "off" || row.key === "outside" || row.key === "arriving";
             return (
               <tr
                 key={row.key}

@@ -224,14 +224,16 @@ describe("근무조와 시간대", () => {
     });
   }
 
-  it("09시 출근자는 08~09에 배치되지 않고 근무 외로 표시된다", () => {
+  it("09시 출근자는 08~09에 배치되지 않고 9시 출근으로 표시된다", () => {
     const catalog = shiftCatalog();
     const roster = shiftRoster();
     const result = run({ roster, catalog, skills: shiftSkills(catalog, roster) });
     const early = result.assignments.early;
-    expect(namesOn(result, "early", "outside").sort()).toEqual(["n1", "n2"]);
+    expect(namesOn(result, "early", "arriving").sort()).toEqual(["n1", "n2"]);
+    expect(namesOn(result, "early", "outside")).toHaveLength(0);
     expect(early.filter((a) => a.station === "heating").map((a) => a.personId)).toEqual(["e1"]);
     expect(namesOn(result, "start", "outside")).toHaveLength(0);
+    expect(namesOn(result, "start", "arriving")).toHaveLength(0);
   });
 
   it("18~19는 08~18 근무자가 빠지고 가열 대신 가열 마감이 선다", () => {
