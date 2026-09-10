@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildChecks, generateRotation, movePerson } from "./rotationEngine";
-import { hasQualification, mergePersonConstraints, parsePersonConstraints } from "./personRules";
+import { hasQualification, mergePersonConstraints, parsePersonConstraints, preferredProcess, canTakeProcess } from "./personRules";
 import { visibleRotationRoster } from "./catalog";
 import { applyWorkerConstraintsMap } from "./persist";
 import { seatRequiredIn, withDefaultStaffing } from "./staffing";
@@ -310,6 +310,28 @@ describe("personRules qualifications", () => {
     expect(parsed?.qualificationsByGroup?.phono_signature?.threeSidePacker).toBe(true);
     expect(parsed?.qualificationsByGroup?.phono_basil_corn?.threeSidePacker).toBe(true);
     expect(parsed?.qualificationsByGroup?.parbake?.threeSidePacker).toBeUndefined();
+  });
+
+  it("제품군별 주공정이 없으면 기본 preferred를 쓰고, 있으면 탭 값을 쓴다", () => {
+    const p = person("최대열", "inner", {
+      constraints: { preferredByGroup: { parbake: "heating", phono_ricotta: "inner" } },
+    });
+    expect(preferredProcess(p, "parbake")).toBe("heating");
+    expect(preferredProcess(p, "phono_ricotta")).toBe("inner");
+    expect(preferredProcess(p, "phono_signature")).toBe("inner");
+  });
+
+  it("주공정만을 켠 사람은 제품군별 주공정만 허용한다", () => {
+    const p = person("최대열", "inner", {
+      constraints: {
+        lockPreferred: true,
+        preferredByGroup: { parbake: "heating", phono_ricotta: "inner" },
+      },
+    });
+    expect(canTakeProcess(p, "heating", "parbake")).toBe(true);
+    expect(canTakeProcess(p, "inner", "parbake")).toBe(false);
+    expect(canTakeProcess(p, "inner", "phono_ricotta")).toBe(true);
+    expect(canTakeProcess(p, "heating", "phono_ricotta")).toBe(false);
   });
 });
 

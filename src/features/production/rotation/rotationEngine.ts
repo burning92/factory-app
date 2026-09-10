@@ -9,7 +9,7 @@ import {
   restStationFor,
 } from "./planningLeave";
 import { NIGHT_SHIFT, effectiveShift, periodProduces, shiftLabel } from "./workHours";
-import { canTakeProcess, hardStayFloor, isFieldBackup, isRotationExcluded } from "./personRules";
+import { canTakeProcess, hardStayFloor, isFieldBackup, isRotationExcluded, preferredProcess } from "./personRules";
 import {
   personMeetsProcessQualifications,
   qualificationLabel,
@@ -276,7 +276,7 @@ function scoreCandidate(
   const prevA = prev.get(person.id);
   let s = 0;
   s += (6 - priority) * 100;
-  if (person.preferred === slot.position.process) s += 30;
+  if (preferredProcess(person, group) === slot.position.process) s += 30;
   if (prevA?.positionId === slot.position.id) s += 20;
   if (prevA?.station === slot.position.process) s += 6;
   if (prevA && floorsDiffer(prevA.station, slot.position.process)) s -= 220;
@@ -380,7 +380,7 @@ function scoreRequired(
     if (slot.position.process === "heating" && person && backupStationCount(person, skills, catalog, group) > 0) {
       vec.flexOnHeat += 1;
     }
-    if (person && person.preferred !== slot.position.process) vec.prefLeave += 1;
+    if (person && preferredProcess(person, group) !== slot.position.process) vec.prefLeave += 1;
     const prevA = prev.get(a.personId);
     if (prevA && floorsDiffer(prevA.station, slot.position.process)) vec.floorMoves += 1;
     if (prevA && prevA.positionId && prevA.positionId !== a.positionId) vec.changed += 1;
@@ -405,7 +405,13 @@ function scoreRequired(
   return vec;
 }
 
-function warnForPriority(person: Person, label: string, priority: Priority, process: ProcessId): RotationWarning[] {
+function warnForPriority(
+  person: Person,
+  label: string,
+  priority: Priority,
+  process: ProcessId,
+  group: ProductGroup
+): RotationWarning[] {
   const out: RotationWarning[] = [];
   if (isFieldBackup(person)) {
     out.push({ kind: "fieldBackup", message: `${person.name} → ${label} [현장백업 투입]` });
@@ -415,8 +421,9 @@ function warnForPriority(person: Person, label: string, priority: Priority, proc
   } else if (priority === 3) {
     out.push({ kind: "rank3", message: `${person.name} → ${label} [중]` });
   }
-  if (person.preferred !== process) {
-    out.push({ kind: "preferredLeave", message: `${person.name} 주공정 ${processLabel(person.preferred)} → ${label}` });
+  const preferred = preferredProcess(person, group);
+  if (preferred !== process) {
+    out.push({ kind: "preferredLeave", message: `${person.name} 주공정 ${processLabel(preferred)} → ${label}` });
   }
   return out;
 }
@@ -745,7 +752,7 @@ function assignSlots(
     }
     assignments.push(a);
     const person = byId.get(a.personId);
-    if (person) warnings.push(...warnForPriority(person, slot.position.label, a.priority ?? 0, slot.position.process));
+    if (person) warnings.push(...warnForPriority(person, slot.position.label, a.priority ?? 0, slot.position.process, group));
   }
   for (const process of Array.from(new Set(required.map((s) => s.position.process)))) {
     if (!processNeedsExperiencedAnchor(process)) continue;
@@ -888,7 +895,7 @@ function placeLeftovers(
           if (cur >= range.max) return [];
           if (!isUsableCandidate(person, pr, cur < range.min)) return [];
           let sc = (6 - pr) * 10;
-          if (person.preferred === process) sc += 8;
+          if (preferredProcess(person, group) === process) sc += 8;
           if (prev.get(person.id)?.positionId === d.id) sc += 12;
           if (prev.get(person.id)?.station === process) sc += 6;
           const prevSt = prev.get(person.id)?.station;
@@ -912,7 +919,8 @@ function placeLeftovers(
 function fitProfile(
   rows: Assignment[],
   byId: Map<string, Person>,
-  defById: Map<string, PositionDef>
+  defById: Map<string, PositionDef>,
+  group: ProductGroup
 ): number[] {
   let rankSum = 0;
   let rank4 = 0;
@@ -929,7 +937,7 @@ function fitProfile(
     // 그래야 가열 숙련자를 빼서 다른 공정의 '하'를 메꾸는 맞바꿈이 일어나지 않는다
     const weight = def && (def.process === "heating" || def.process === "heatingClose") ? 2 : 1;
     rankSum += pr * weight;
-    if (person && def && person.preferred !== def.process) prefLeave += 1;
+    if (person && def && preferredProcess(person, group) !== def.process) prefLeave += 1;
   }
   return [rankSum, rank4, rank3, prefLeave];
 }
@@ -1002,7 +1010,7 @@ function improveSkillFit(
     });
 
   let current = rows;
-  let bestFit = fitProfile(current, byId, defById);
+  let bestFit = fitProfile(current, byId, defById, group);
   for (let round = 0; round < 20; round++) {
     let improved = false;
     const seats = current.filter((r) => r.positionId && defById.get(r.positionId)?.process !== "dough");
@@ -1027,7 +1035,7 @@ function improveSkillFit(
           if (row.personId === idle.personId) return { personId: row.personId, station: def.process, positionId: def.id, priority: pr };
           return row;
         });
-        const fit = fitProfile(next, byId, defById);
+        const fit = fitProfile(next, byId, defById, group);
         if (cmpFit(fit, bestFit) >= 0) continue;
         if (!keepsHealth(current, next, [def.process])) continue;
         current = next;
@@ -1056,7 +1064,7 @@ function improveSkillFit(
           if (row.personId === two.personId) return { personId: row.personId, station: defOne.process, positionId: defOne.id, priority: prOne };
           return row;
         });
-        const fit = fitProfile(next, byId, defById);
+        const fit = fitProfile(next, byId, defById, group);
         if (cmpFit(fit, bestFit) >= 0) continue;
         if (!keepsHealth(current, next, [defOne.process, defTwo.process])) continue;
         current = next;

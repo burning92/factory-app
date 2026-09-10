@@ -4,9 +4,48 @@ import {
   parseQualificationsByGroup,
   requiredQualificationsForProcess,
 } from "./qualifications";
-import type { Person, PersonConstraints, ProcessId, ProductGroup, QualificationsByGroup } from "./types";
+import type {
+  Person,
+  PersonConstraints,
+  PreferredByGroup,
+  ProcessId,
+  ProductGroup,
+  QualificationsByGroup,
+} from "./types";
+import { PROCESSES } from "./types";
 
 const PRODUCT_GROUPS: ProductGroup[] = ["phono_signature", "phono_basil_corn", "phono_ricotta", "parbake"];
+const PROCESS_IDS = new Set<string>(PROCESSES.map((p) => p.id));
+
+function parsePreferredByGroup(raw: unknown): PreferredByGroup | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const out: PreferredByGroup = {};
+  for (const group of PRODUCT_GROUPS) {
+    const value = (raw as Record<string, unknown>)[group];
+    if (typeof value === "string" && PROCESS_IDS.has(value)) {
+      out[group] = value as ProcessId;
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function mergePreferredByGroup(
+  prev: PreferredByGroup | undefined,
+  next: PreferredByGroup | undefined
+): PreferredByGroup | undefined {
+  const out: PreferredByGroup = { ...(prev ?? {}) };
+  if (!next) return Object.keys(out).length > 0 ? out : undefined;
+  for (const group of PRODUCT_GROUPS) {
+    const value = next[group];
+    if (value && PROCESS_IDS.has(value)) out[group] = value;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/** 해당 제품군의 주공정. 탭별 값이 없으면 기본 preferred를 쓴다 */
+export function preferredProcess(person: Person, group: ProductGroup): ProcessId {
+  return person.constraints?.preferredByGroup?.[group] ?? person.preferred;
+}
 
 function personNameKey(name: string): string {
   return name.normalize("NFC").trim().replace(/\s+/g, "");
@@ -81,6 +120,8 @@ export function parsePersonConstraints(raw: unknown): PersonConstraints | undefi
   if (src.doughCore === false) next.doughCore = false;
   const qualificationsByGroup = parseQualificationsByGroup(src.qualificationsByGroup, src.qualifications);
   if (qualificationsByGroup) next.qualificationsByGroup = qualificationsByGroup;
+  const preferredByGroup = parsePreferredByGroup(src.preferredByGroup);
+  if (preferredByGroup) next.preferredByGroup = preferredByGroup;
   const skillConfiguredGroups = parseConfiguredGroups(src.skillConfiguredGroups);
   if (skillConfiguredGroups) next.skillConfiguredGroups = skillConfiguredGroups;
   return Object.keys(next).length > 0 ? next : undefined;
@@ -116,6 +157,9 @@ export function mergePersonConstraints(existing: unknown, incoming: unknown): Pe
   const qualificationsByGroup = mergeQualificationsByGroup(prev.qualificationsByGroup, next.qualificationsByGroup);
   if (qualificationsByGroup) out.qualificationsByGroup = qualificationsByGroup;
 
+  const preferredByGroup = mergePreferredByGroup(prev.preferredByGroup, next.preferredByGroup);
+  if (preferredByGroup) out.preferredByGroup = preferredByGroup;
+
   const skillConfiguredGroups = Array.from(
     new Set([...(prev.skillConfiguredGroups ?? []), ...(next.skillConfiguredGroups ?? [])])
   ) as ProductGroup[];
@@ -145,9 +189,10 @@ export function isNightShiftBackup(person: Person): boolean {
 
 export function canTakeProcess(person: Person, process: ProcessId, group: ProductGroup): boolean {
   if (!person.constraints?.lockPreferred) return true;
-  if (person.preferred === process) return true;
+  const preferred = preferredProcess(person, group);
+  if (preferred === process) return true;
   // 가열 마감은 가열실 설비 정리·세척이라 가열의 마무리에 해당한다. 주공정이 가열이면 주공정만을 켜도 마감에 남을 수 있다
-  if (person.preferred === "heating" && process === "heatingClose") return true;
+  if (preferred === "heating" && process === "heatingClose") return true;
   if (isDoughCorePerson(person) && process === "heating") return true;
   if (
     isFieldBackup(person) &&

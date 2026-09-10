@@ -15,7 +15,7 @@ import {
   staffingForPosition,
 } from "@/features/production/rotation/staffing";
 import { PRODUCT_GROUPS } from "@/features/production/rotation/seedRoster";
-import { isDoughCorePerson, withSkillGroupConfigured } from "@/features/production/rotation/personRules";
+import { isDoughCorePerson, preferredProcess, withSkillGroupConfigured } from "@/features/production/rotation/personRules";
 import { processLabel } from "@/features/production/rotation/rotationEngine";
 import {
   ROTATION_QUALIFICATIONS,
@@ -61,6 +61,14 @@ function patchPersonRule(
     const constraints: PersonConstraints = { ...row.constraints };
     (constraints as Record<string, unknown>)[key] = value;
     return { ...row, constraints };
+  });
+}
+
+function patchPreferredByGroup(rows: Person[], personId: string, group: ProductGroup, process: ProcessId): Person[] {
+  return rows.map((row) => {
+    if (row.id !== personId) return row;
+    const byGroup = { ...row.constraints?.preferredByGroup, [group]: process };
+    return { ...row, constraints: { ...row.constraints, preferredByGroup: byGroup } };
   });
 }
 
@@ -501,7 +509,8 @@ export function SkillMatrixEditor(props: {
           상부터 배치하고 불가는 자동배치하지 않습니다. 같은 숙련은 여러 명이 가능합니다.
           현장백업으로 체크한 사람은 최소 인원을 다른 사람으로 못 채울 때만 투입하고, 들어갈 때는 본인 숙련 기준으로 자리를 잡습니다.
           숙련을 아직 넣지 않은 출근자는 당일 표의 미배치에 남습니다. 제외를 켜면 숙련표에는 남고 당일 표에서는 빠집니다.
-          사람마다 조건과 자격을 따로 둡니다. 조건은 전 제품군 공통이고, 자격(삼면포장기 관리 등)은 현재 탭 제품군에만 적용됩니다.
+          사람마다 조건과 자격을 따로 둡니다. 조·조건(주공정만·반죽고정 등)은 전 제품군 공통이고,
+          주공정과 자격(삼면포장기 관리 등)은 현재 탭 제품군에만 적용됩니다.
         </p>
       </details>
       <div className="min-h-0 flex-1 overflow-auto">
@@ -547,14 +556,15 @@ export function SkillMatrixEditor(props: {
                 </td>
                 <td className="px-2 py-2 border-t border-slate-800">
                   <select
-                    value={person.preferred}
+                    value={preferredProcess(person, g)}
                     disabled={locked}
                     onChange={(e) =>
                       props.setRoster((rows) =>
-                        rows.map((r) => (r.id === person.id ? { ...r, preferred: e.target.value as Person["preferred"] } : r))
+                        patchPreferredByGroup(rows, person.id, g, e.target.value as ProcessId)
                       )
                     }
                     className="w-full rounded-md border border-slate-600 bg-slate-900 px-2 py-2 text-sm text-slate-200 disabled:cursor-not-allowed disabled:opacity-70"
+                    title="현재 탭 제품군의 주공정"
                   >
                     {PROCESSES.map((process) => (
                       <option key={process.id} value={process.id}>{process.label}</option>

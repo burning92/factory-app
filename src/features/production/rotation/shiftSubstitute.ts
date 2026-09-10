@@ -4,7 +4,7 @@
  */
 import { anchorRankLabel, getPriority, meetsAnchorRank } from "./catalog";
 import { isFullDayLeave } from "./planningLeave";
-import { canTakeProcess, isNightShiftBackup, isRotationExcluded } from "./personRules";
+import { canTakeProcess, isNightShiftBackup, isRotationExcluded, preferredProcess } from "./personRules";
 import { hasQualification, qualificationLabel, requiredQualificationsForProcess } from "./qualifications";
 import { hasShiftOverride, personWorksDuringPeriod } from "./workHours";
 import type {
@@ -175,8 +175,8 @@ export function planNightShiftSubstitutes(input: {
       const rankA = bestRank(a.person, a.covered, skills, group);
       const rankB = bestRank(b.person, b.covered, skills, group);
       if (rankA !== rankB) return rankA - rankB;
-      const prefA = a.covered.some((gap) => gap.process === a.person.preferred) ? 0 : 1;
-      const prefB = b.covered.some((gap) => gap.process === b.person.preferred) ? 0 : 1;
+      const prefA = a.covered.some((gap) => gap.process === preferredProcess(a.person, group)) ? 0 : 1;
+      const prefB = b.covered.some((gap) => gap.process === preferredProcess(b.person, group)) ? 0 : 1;
       if (prefA !== prefB) return prefA - prefB;
       const disA = disruption(a.person, assignments);
       const disB = disruption(b.person, assignments);
@@ -190,7 +190,7 @@ export function planNightShiftSubstitutes(input: {
       const parts = [`숙련 ${rank}순위`];
       if (anchor) parts.push(`${anchor} 숙련`);
       if (qual) parts.push(`${qual} 보유`);
-      if (covered.some((gap) => gap.process === person.preferred)) parts.push("주공정");
+      if (covered.some((gap) => gap.process === preferredProcess(person, group))) parts.push("주공정");
       if (disruption(person, assignments) > 0) parts.push("08~09 자리 비게 됨");
       return {
         personId: person.id,

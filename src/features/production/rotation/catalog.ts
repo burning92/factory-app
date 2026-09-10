@@ -1,5 +1,5 @@
 import { LEGACY_EXTRA_PROCESSES, SEED_ROSTER } from "./seedRoster";
-import { isRotationExcluded } from "./personRules";
+import { isRotationExcluded, preferredProcess } from "./personRules";
 import { defaultStaffingForProcess, withDefaultStaffing } from "./staffing";
 import type { Person, PositionCatalog, PositionDef, Priority, ProcessId, ProductGroup, SkillMatrix } from "./types";
 import { LEGACY_EMERGENCY_PRIORITY } from "./types";
@@ -215,8 +215,11 @@ export function hasOfficeSkill(
   return positionsForProcess(catalog, group, "office").some((pos) => getPriority(skills, personId, group, pos.id) > 0);
 }
 
-export function isOfficePerson(person: Person): boolean {
-  return person.group === "office" || person.preferred === "office";
+export function isOfficePerson(person: Person, group?: ProductGroup): boolean {
+  if (person.group === "office") return true;
+  if (group) return preferredProcess(person, group) === "office";
+  if (person.preferred === "office") return true;
+  return Object.values(person.constraints?.preferredByGroup ?? {}).some((p) => p === "office");
 }
 
 export function isAssignedOfficePerson(
@@ -225,7 +228,7 @@ export function isAssignedOfficePerson(
   catalog: PositionCatalog,
   group: ProductGroup
 ): boolean {
-  return isOfficePerson(person) && hasOfficeSkill(skills, person.id, catalog, group);
+  return isOfficePerson(person, group) && hasOfficeSkill(skills, person.id, catalog, group);
 }
 
 /** 제외·입사 전이 아니면 당일 표에 남긴다. 숙련 없음은 여기서 빼지 않는다 */

@@ -76,6 +76,9 @@ export type RotationQualifications = Partial<Record<RotationQualificationKey, bo
 
 export type QualificationsByGroup = Partial<Record<ProductGroup, RotationQualifications>>;
 
+/** 제품군별 주공정. 없으면 Person.preferred를 쓴다 */
+export type PreferredByGroup = Partial<Record<ProductGroup, ProcessId>>;
+
 export type DoughRotationPolicy = "CURRENT_LUNCH_BACKUP" | "FIXED_DOUGH";
 
 export type DoughSettings = {
@@ -102,6 +105,8 @@ export type PersonConstraints = {
   nightShiftBackup?: boolean;
   /** 제품군별 기계·공정 자격. 포노와 파베이크를 따로 둔다 */
   qualificationsByGroup?: QualificationsByGroup;
+  /** 제품군별 주공정. 최대열처럼 포노는 내포장·파베이크는 가열인 경우를 위해 둔다 */
+  preferredByGroup?: PreferredByGroup;
   /** 해당 제품군 숙련을 한 번이라도 저장함. 1~4 행이 없어도 명시적 불가와 미설정을 가른다 */
   skillConfiguredGroups?: ProductGroup[];
 };
@@ -109,8 +114,10 @@ export type PersonConstraints = {
 export type Person = {
   id: string;
   name: string;
-  /** 주공정. 자동배치는 포지션 숙련도를 본다 */
-
+  /**
+   * 기본 주공정. 제품군별 값이 없으면 이걸 쓴다.
+   * 자동배치는 포지션 숙련도를 보고, preferredProcess(person, group)로 제품군 주공정을 읽는다.
+   */
   preferred: ProcessId;
   /** 프로필 기본 근무조. 대체근무를 확정해도 이 값은 바뀌지 않는다 */
   shift: ShiftId;

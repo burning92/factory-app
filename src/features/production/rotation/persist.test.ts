@@ -115,6 +115,23 @@ describe("constraints 저장→조회 round-trip", () => {
     expect(got.qualificationsByGroup?.phono_signature?.extraMachine).toBe(true);
   });
 
+  it("제품군별 주공정은 저장·조회 후에도 남고 다른 제품군과 섞이지 않는다", () => {
+    const incoming: PersonConstraints = {
+      preferredByGroup: { parbake: "heating", phono_ricotta: "inner" },
+    };
+    const saved = constraintsForPut(incoming, {}, {});
+    expect(saved.preferredByGroup?.parbake).toBe("heating");
+    expect(saved.preferredByGroup?.phono_ricotta).toBe("inner");
+    const afterOther = constraintsForPut(
+      { preferredByGroup: { phono_signature: "outer" } },
+      saved,
+      {}
+    );
+    expect(afterOther.preferredByGroup?.parbake).toBe("heating");
+    expect(afterOther.preferredByGroup?.phono_ricotta).toBe("inner");
+    expect(afterOther.preferredByGroup?.phono_signature).toBe("outer");
+  });
+
   it("PUT incoming이 부분 객체여도 live excluded를 덮어쓰지 않는다", () => {
     const saved = constraintsForPut({ skillConfiguredGroups: ["phono_signature"] }, { excluded: true, doughCore: false }, {});
     expect(saved.excluded).toBe(true);
