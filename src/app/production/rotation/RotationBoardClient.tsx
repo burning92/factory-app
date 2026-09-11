@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Printer, RefreshCw, Settings2, Users } from "lucide-react";
 import { DEFAULT_CATALOG, getPriority, hasNoSkillConfig, heatingPositions, isAssignedOfficePerson, visibleRotationRoster } from "@/features/production/rotation/catalog";
-import { isFieldBackup, isRotationExcluded } from "@/features/production/rotation/personRules";
+import { isFieldBackup, isRotationExcluded, preferredProcess } from "@/features/production/rotation/personRules";
 import { processNeedsStaffing, staffingForPosition, staffingRangeLabel } from "@/features/production/rotation/staffing";
 import { fetchRotationDay, fetchRotationMaster, saveRotationDay } from "@/features/production/rotation/clientApi";
 import { HOURLY_QTY, PRODUCT_LINES, productGroup } from "@/features/production/rotation/seedRoster";
@@ -45,6 +45,7 @@ import {
   type StationId,
 } from "@/features/production/rotation/types";
 import { useAuth } from "@/contexts/AuthContext";
+import { PREFERRED_CHIP, PREFERRED_LEGEND } from "./rotationShared";
 
 function todayStr() {
   const d = new Date();
@@ -384,8 +385,14 @@ export default function RotationBoardClient() {
           .print-board .row-head th { background: #f8fafc !important; }
           .print-board .row-section th { background: #e2e8f0 !important; color: #334155 !important; }
           .print-board .row-lunch th, .print-board .row-lunch td { background: #fde68a !important; }
-          .print-chip { background: #f1f5f9 !important; color: #0f172a !important; box-shadow: none !important; }
-          .print-chip-warn { background: #ffedd5 !important; }
+          .print-chip { color: #0f172a !important; box-shadow: none !important; }
+          .print-chip-heating { background: #ffedd5 !important; }
+          .print-chip-inner { background: #e0f2fe !important; }
+          .print-chip-outer { background: #bae6fd !important; }
+          .print-chip-topping { background: #ede9fe !important; }
+          .print-chip-dough { background: #d1fae5 !important; }
+          .print-chip-other { background: #f1f5f9 !important; }
+          .print-chip-warn { background: #ffedd5 !important; outline: 2px solid #f97316 !important; }
           .print-chip-em { background: #fecaca !important; }
         }
         .print-only { display: none; }
@@ -876,8 +883,16 @@ function BoardTable(props: {
         </tbody>
       </table>
       <div className="no-print flex flex-wrap gap-3 border-t border-slate-800 px-3 py-2 text-[11px] text-slate-500">
-        <span>이름 눌러 자리 이동</span>
+        <span>이름 눌러 자리 이동 · 색은 주공정</span>
+        {PREFERRED_LEGEND.map((item) => (
+          <span key={item.id} className="inline-flex items-center gap-1">
+            <span className={`inline-block h-2.5 w-2.5 rounded-sm ${item.swatch}`} />
+            {item.label}
+          </span>
+        ))}
         <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-amber-300" />식사</span>
+        <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-rose-500" />현장백업 투입</span>
+        <span className="inline-flex items-center gap-1 ring-1 ring-amber-400 rounded px-1">하 숙련</span>
       </div>
     </div>
   );
@@ -901,13 +916,28 @@ function PersonChip(props: {
   const pr = props.assignment.priority;
   const warn = pr === 4;
   const backupUsed = isFieldBackup(props.person) && Boolean(props.assignment.positionId);
+  const preferred = preferredProcess(props.person, props.group);
+  const preferredClass = PREFERRED_CHIP[preferred] ?? PREFERRED_CHIP.office;
+  const printPreferred =
+    preferred === "heating" || preferred === "heatingClose"
+      ? "print-chip-heating"
+      : preferred === "inner"
+        ? "print-chip-inner"
+        : preferred === "outer"
+          ? "print-chip-outer"
+          : preferred === "topping"
+            ? "print-chip-topping"
+            : preferred === "dough"
+              ? "print-chip-dough"
+              : "print-chip-other";
   const unassignedNote = props.assignment.station === "unassigned" ? unassignedReasonLabel(props.assignment.unassignedReason) : undefined;
   return (
     <>
       <button
         type="button"
         onClick={() => props.setEditing(open ? null : { period: props.period, personId: props.person.id })}
-        className={`print-chip inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-left font-semibold leading-tight transition ${
+        title={`주공정 ${processLabel(preferred)}`}
+        className={`print-chip ${printPreferred} inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-left font-semibold leading-tight transition ${
           props.heating ? "min-w-[4.5rem] text-[15px]" : "text-sm"
         } ${
           props.lunch
@@ -915,8 +945,8 @@ function PersonChip(props: {
             : backupUsed
               ? "print-chip-em bg-rose-500 text-white hover:bg-rose-400"
               : warn
-                ? "print-chip-warn bg-orange-500/90 text-white hover:bg-orange-400"
-                : "bg-white/10 text-slate-50 ring-1 ring-white/10 hover:bg-white/20"
+                ? `${preferredClass} print-chip-warn ring-2 ring-amber-300`
+                : preferredClass
         } ${open ? "ring-2 ring-cyan-400" : ""}`}
       >
         {props.person.name}
