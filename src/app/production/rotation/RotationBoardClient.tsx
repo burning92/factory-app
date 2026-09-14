@@ -374,25 +374,92 @@ export default function RotationBoardClient() {
   const productLabel = PRODUCT_LINES.find((p) => p.id === line)?.label ?? line;
 
   return (
-    <div className="min-h-[calc(100dvh-3.5rem-4rem)] md:min-h-0 p-4 md:p-6 max-w-[1600px] mx-auto">
+    <div className="rotation-print-root min-h-[calc(100dvh-3.5rem-4rem)] md:min-h-0 p-4 md:p-6 max-w-[1600px] mx-auto">
       <style>{`
+        @page rotation-a3 {
+          size: A3 landscape;
+          margin: 8mm;
+        }
+        /* 이 화면에서 인쇄할 때는 A3 가로. named page를 모르는 브라우저도 맞춘다 */
         @media print {
+          @page {
+            size: A3 landscape;
+            margin: 8mm;
+          }
+          .rotation-print-root {
+            page: rotation-a3;
+            max-width: none !important;
+            width: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            min-height: 0 !important;
+            color: #0f172a !important;
+            background: #fff !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .rotation-print-root h1,
+          .rotation-print-root p {
+            color: #0f172a !important;
+          }
           .no-print { display: none !important; }
           .print-only { display: table-row !important; }
           .heat-detail, .heat-section { display: none !important; }
-          .print-board { break-inside: avoid; border-color: #cbd5e1 !important; background: #fff !important; }
-          .print-board th, .print-board td { color: #0f172a !important; border-color: #cbd5e1 !important; background: #fff !important; }
-          .print-board .row-head th { background: #f8fafc !important; }
-          .print-board .row-section th { background: #e2e8f0 !important; color: #334155 !important; }
+          .print-board {
+            break-inside: avoid;
+            width: 100% !important;
+            overflow: visible !important;
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 0 !important;
+            background: #fff !important;
+            box-shadow: none !important;
+          }
+          .print-board table {
+            width: 100% !important;
+            table-layout: fixed;
+            border-collapse: collapse;
+          }
+          .print-board th, .print-board td {
+            color: #0f172a !important;
+            border-color: #cbd5e1 !important;
+            background: #fff !important;
+            padding: 2.5mm 1.5mm !important;
+            vertical-align: top;
+            font-size: 9pt;
+            line-height: 1.25;
+          }
+          .print-board .row-head th {
+            background: #f8fafc !important;
+            font-size: 10pt;
+          }
+          .print-board .row-section th {
+            background: #e2e8f0 !important;
+            color: #334155 !important;
+            font-size: 9pt;
+            letter-spacing: 0.08em;
+            padding: 1.5mm !important;
+          }
           .print-board .row-lunch th, .print-board .row-lunch td { background: #fde68a !important; }
-          .print-chip { color: #0f172a !important; box-shadow: none !important; }
+          .print-board th.sticky, .print-board td.sticky {
+            position: static !important;
+            left: auto !important;
+          }
+          .print-chip {
+            color: #0f172a !important;
+            box-shadow: none !important;
+            font-size: 9pt !important;
+            padding: 0.8mm 1.4mm !important;
+            border-radius: 1mm !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
           .print-chip-heating { background: #ffedd5 !important; }
           .print-chip-inner { background: #e0f2fe !important; }
           .print-chip-outer { background: #bae6fd !important; }
           .print-chip-topping { background: #ede9fe !important; }
           .print-chip-dough { background: #d1fae5 !important; }
           .print-chip-other { background: #f1f5f9 !important; }
-          .print-chip-warn { background: #ffedd5 !important; outline: 2px solid #f97316 !important; }
+          .print-chip-warn { background: #ffedd5 !important; outline: 0.4mm solid #f97316 !important; }
           .print-chip-em { background: #fecaca !important; }
         }
         .print-only { display: none; }
@@ -441,7 +508,7 @@ export default function RotationBoardClient() {
             className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-700/60 bg-cyan-950/40 px-3 py-2 text-sm text-cyan-100 hover:bg-cyan-900/40"
           >
             <Printer className="w-4 h-4" />
-            인쇄
+            A3 인쇄
           </button>
         </div>
       </header>

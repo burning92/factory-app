@@ -58,7 +58,7 @@ input:focus, select:focus, textarea:focus {
   background-color: #ffffff;
 }
 
-/* 기본 인쇄: A4 세로. 월간 플래닝은 아래 named page(planning-a3)만 A3 가로 */
+/* 기본 인쇄: A4 세로. 월간 플래닝·로테이션은 각자 named page로 A3 가로 */
 @page {
   size: A4 portrait;
   margin: 10mm;
