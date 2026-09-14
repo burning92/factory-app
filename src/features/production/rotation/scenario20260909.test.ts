@@ -280,6 +280,7 @@ describe("2026-09-09 운영 흐름", () => {
       expect(stationOf(result, "start", name)).toBe("dough");
       expect(stationOf(result, "lunch1", name)).toBe("heating");
       expect(stationOf(result, "lunch2", name)).toBe("lunch");
+      expect(stationOf(result, "noon", name)).toBe("dough");
       expect(stationOf(result, "after", name)).toBe("dough");
     }
     expect(namesAt(result, "after", "dough")).toEqual([...DAWN].sort());

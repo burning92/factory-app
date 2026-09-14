@@ -78,6 +78,7 @@ export function defaultStaffingForProcess(process: ProcessId): PositionStaffing 
       start: { min: 4, max: 4 },
       lunch1: { min: 3, max: 3 },
       lunch2: { min: 3, max: 3 },
+      noon: { min: 4, max: 5 },
       after: { min: 4, max: 5 },
       late: { min: 4, max: 5 },
       evening: { min: 4, max: 5 },
@@ -90,6 +91,7 @@ export function defaultStaffingForProcess(process: ProcessId): PositionStaffing 
       start: { min: 4, max: 4 },
       lunch1: { min: 2, max: 2 },
       lunch2: { min: 2, max: 2 },
+      noon: { min: 4, max: 4 },
       after: { min: 4, max: 4 },
       late: { min: 4, max: 4 },
       evening: { min: 4, max: 4 },
@@ -104,6 +106,7 @@ export function defaultStaffingForProcess(process: ProcessId): PositionStaffing 
       // 점심 구간은 가열 자리 유지가 먼저다. 토핑은 상한만 두고 남는 인원으로 돌린다
       lunch1: { min: 0, max: 3 },
       lunch2: { min: 0, max: 4 },
+      noon: { min: 4, max: 6 },
       after: { min: 4, max: 6 },
       late: { min: 4, max: 6 },
       evening: { min: 4, max: 6 },
@@ -128,6 +131,7 @@ export function defaultStaffingForProcess(process: ProcessId): PositionStaffing 
 /** 저장본에 없는 새 구간은 가장 가까운 기존 구간에서 물려받는다 */
 const INHERIT_PERIOD: Partial<Record<PeriodId, PeriodId>> = {
   early: "start",
+  noon: "after",
   late: "after",
   evening: "after",
 };

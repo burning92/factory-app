@@ -28,7 +28,7 @@ describe("근무조 파싱", () => {
 });
 
 describe("구간 근무 판정", () => {
-  const day: PeriodId[] = ["early", "start", "lunch1", "lunch2", "after", "late", "evening", "closing"];
+  const day: PeriodId[] = ["early", "start", "lunch1", "lunch2", "noon", "after", "late", "evening", "closing"];
 
   it("08–18조는 18~19에 빠지고 09–19조는 08~09에 빠진다", () => {
     const early = parseWorkWindow("0800-1800");
@@ -65,12 +65,26 @@ describe("구간 근무 판정", () => {
 });
 
 describe("근무조와 연차·반차", () => {
-  it("반차는 근무조 안에서만 적용된다", () => {
+  it("반차(오후출근)는 13:30~18시만 근무한다", () => {
     const halfPm = person("0800-1800", { leaveKind: "half_pm" });
     expect(isAvailableInPeriod(halfPm, "early")).toBe(false);
+    expect(isAvailableInPeriod(halfPm, "lunch2")).toBe(false);
+    expect(isAvailableInPeriod(halfPm, "noon")).toBe(false);
     expect(isAvailableInPeriod(halfPm, "after")).toBe(true);
     expect(isAvailableInPeriod(halfPm, "late")).toBe(true);
+    expect(isAvailableInPeriod(halfPm, "evening")).toBe(true);
     expect(isAvailableInPeriod(halfPm, "closing")).toBe(false);
+    expect(restStationFor(halfPm, "noon")).toBe("off");
+  });
+
+  it("반차(오전출근)는 조 시작~13:30만 근무한다", () => {
+    const halfAm = person("0800-1800", { leaveKind: "half_am" });
+    expect(isAvailableInPeriod(halfAm, "early")).toBe(true);
+    expect(isAvailableInPeriod(halfAm, "lunch2")).toBe(true);
+    expect(isAvailableInPeriod(halfAm, "noon")).toBe(true);
+    expect(isAvailableInPeriod(halfAm, "after")).toBe(false);
+    expect(isAvailableInPeriod(halfAm, "evening")).toBe(false);
+    expect(restStationFor(halfAm, "after")).toBe("off");
   });
 
   it("연차는 휴무, 출근 전은 9시 출근, 퇴근 후는 근무 외로 나눈다", () => {

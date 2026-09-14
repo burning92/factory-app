@@ -1,6 +1,6 @@
 import { isHalfDayLeaveType, parsePlanningLeaveType } from "@/features/production/planning/leaveTypes";
 import { SEED_ROSTER } from "./seedRoster";
-import { isAfternoonPeriod, isMorningPeriod, personWorksDuringPeriod, periodWindow, workWindowOf } from "./workHours";
+import { personWorksDuringPeriod, periodWindow, effectiveWorkWindow } from "./workHours";
 import type { PeriodId, Person, ProcessId, ShiftId, StationId } from "./types";
 
 export type RotationLeaveKind = "none" | "annual" | "other" | "half" | "half_am" | "half_pm";
@@ -59,14 +59,19 @@ export function isOutsideShift(person: Person, period: PeriodId): boolean {
 /** 아직 출근 시각 전이라 이 구간에 안 들어온 상태인지 */
 export function isBeforeShiftStart(person: Person, period: PeriodId): boolean {
   if (!isOutsideShift(person, period)) return false;
-  return workWindowOf(person).startMin >= periodWindow(period).endMin;
+  return effectiveWorkWindow(person).startMin >= periodWindow(period).endMin;
 }
 
 /** 배치 대상이 아닐 때 표에 어떤 상태로 보일지. 배치 가능하면 null */
 export function restStationFor(person: Person, period: PeriodId): Extract<StationId, "off" | "outside" | "arriving"> | null {
   if (isFullDayLeave(person.leaveKind) || !person.present) return "off";
+  const kind = person.leaveKind ?? "none";
+  // 반차의 쉬는 반은 휴무로 둔다. 출근 전(arriving)·퇴근 후(outside)와 섞지 않는다
+  if (kind === "half_am" || kind === "half" || kind === "half_pm") {
+    if (!personWorksDuringPeriod(person, period)) return "off";
+    return null;
+  }
   if (isOutsideShift(person, period)) return isBeforeShiftStart(person, period) ? "arriving" : "outside";
-  if (!isAvailableInPeriod(person, period)) return "off";
   return null;
 }
 
@@ -74,9 +79,7 @@ export function isAvailableInPeriod(person: Person, period: PeriodId): boolean {
   if (!person.present) return false;
   const k = person.leaveKind ?? "none";
   if (k === "annual" || k === "other") return false;
-  if (!personWorksDuringPeriod(person, period)) return false;
-  if (k === "none") return true;
-  return k === "half_pm" ? isAfternoonPeriod(period) : isMorningPeriod(period);
+  return personWorksDuringPeriod(person, period);
 }
 
 function kindRank(kind: RotationLeaveKind): number {

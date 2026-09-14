@@ -581,6 +581,7 @@ describe("반죽팀 정책", () => {
     expect(namesOn(result, "lunch2", "lunch").filter((id) => doughIds.includes(id)).sort()).toEqual(doughIds);
     expect(namesOn(result, "lunch2", "heating").some((id) => doughIds.includes(id))).toBe(false);
     expect(namesOn(result, "early", "dough").sort()).toEqual(doughIds);
+    expect(namesOn(result, "noon", "dough").sort()).toEqual(doughIds);
     expect(namesOn(result, "after", "dough").sort()).toEqual(doughIds);
     expect(namesOn(result, "late", "dough").sort()).toEqual(doughIds);
   });

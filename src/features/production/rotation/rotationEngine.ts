@@ -1407,8 +1407,8 @@ function applyFixedDoughTargets(
   }
 }
 
-/** 점심 가열 백업: 13시 이후 반죽팀 복귀 자리 확보. 퇴근 전까지 이어진다 */
-const DOUGH_RETURN_PERIODS: PeriodId[] = ["after", "late", "evening"];
+/** 점심 가열 백업: 13:00(noon)부터 반죽팀 복귀 자리 확보. 퇴근 전까지 이어진다 */
+const DOUGH_RETURN_PERIODS: PeriodId[] = ["noon", "after", "late", "evening"];
 
 /** 점심 백업이 끝나면 반죽 자리로 돌아간다 */
 function doughReturnPosition(catalog: PositionCatalog, group: ProductGroup): PositionDef | undefined {
@@ -1532,6 +1532,7 @@ export function generateRotation(input: GenerateInput): GenerateResult {
   const startFloor = floorIn("start");
   const lunch1Floor = floorIn("lunch1");
   const lunch2Floor = floorIn("lunch2");
+  const noonFloor = floorIn("noon");
   const afterFloor = floorIn("after");
   const lateFloor = floorIn("late");
   const eveningFloor = floorIn("evening");
@@ -1664,7 +1665,7 @@ export function generateRotation(input: GenerateInput): GenerateResult {
     noLunch.start = start;
     const waves = [earlyRun.placed, startRun.placed];
     let unfilled = earlyRun.unfilled.length + startRun.unfilled.length;
-    for (const period of ["lunch1", "lunch2", "after", "late", "evening", "closing"] as const) {
+    for (const period of ["lunch1", "lunch2", "noon", "after", "late", "evening", "closing"] as const) {
       const run = runProductionPeriod({
         period,
         pool: floorIn(period),
@@ -1681,7 +1682,7 @@ export function generateRotation(input: GenerateInput): GenerateResult {
   const lunchSlots = buildSlots(catalog, group, "lunch1", targets.lunch1);
   const allDayFloor = floor.filter((p) => isAvailableInPeriod(p, "start") && isAvailableInPeriod(p, "after"));
   const halfAm = floor.filter((p) => p.leaveKind === "half_am" || p.leaveKind === "half");
-  const halfPm = floor.filter((p) => p.leaveKind === "half_pm");
+  // 반차(오후출근)는 13:30부터라 점심 교대 풀에 넣지 않는다. afterFloor에서 자연히 들어온다
   // 반죽팀은 일반 점심 교대 분배에 넣지 않는다 (FIXED·점심백업·차단 모두)
   const eaters = allDayFloor.filter((p) => !isDoughCorePerson(p));
   const doughHeld =
@@ -1729,7 +1730,8 @@ export function generateRotation(input: GenerateInput): GenerateResult {
   const lunch2Work = [
     ...part.waveA.filter((p) => lunch2Floor.some((x) => x.id === p.id) && !lunchDoughForce.taken.has(p.id)),
     ...doughHeld.filter((p) => lunch2Floor.some((x) => x.id === p.id)),
-    ...halfPm.filter((p) => !lunchDoughForce.taken.has(p.id) && !isDoughCorePerson(p)),
+    // 오전출근 반차는 1차 식사 후 12~13·13~13:30에 배치한다
+    ...halfAm.filter((p) => lunch2Floor.some((x) => x.id === p.id)),
   ];
   const lunch1Eat = [...part.waveA.filter((p) => lunch1Floor.some((x) => x.id === p.id)), ...halfAm];
   const lunch2Eat = [
@@ -1800,11 +1802,20 @@ export function generateRotation(input: GenerateInput): GenerateResult {
   ];
   const lunch2 = appendOfficeAndOff(lunch2Placed, roster, "lunch2", catalog, group, skills);
 
-  // 13:00~15:30 오후 정상운영. 반죽팀은 여기서 반죽 마감으로 복귀한다
+  // 13:00~13:30 반차 경계. 오전출근 반차는 여기까지 근무하고, 오후출근 반차는 아직 없다
+  const noonRun = runProductionPeriod({
+    period: "noon",
+    pool: noonFloor,
+    prevWaves: [start, lunch1Placed, lunch2Placed],
+    doughSeat: doughSeatFor("noon"),
+  });
+  const noon = appendOfficeAndOff(noonRun.placed, roster, "noon", catalog, group, skills);
+
+  // 13:30~15:30 오후. 오후출근 반차가 합류한다 (반죽 복귀는 noon부터)
   const afterRun = runProductionPeriod({
     period: "after",
     pool: afterFloor,
-    prevWaves: [start, lunch1Placed, lunch2Placed],
+    prevWaves: [start, lunch1Placed, lunch2Placed, noonRun.placed],
     doughSeat: doughSeatFor("after"),
   });
   const after = appendOfficeAndOff(afterRun.placed, roster, "after", catalog, group, skills);
@@ -1813,7 +1824,7 @@ export function generateRotation(input: GenerateInput): GenerateResult {
   const lateRun = runProductionPeriod({
     period: "late",
     pool: lateFloor,
-    prevWaves: [start, lunch1Placed, lunch2Placed, afterRun.placed],
+    prevWaves: [start, lunch1Placed, lunch2Placed, noonRun.placed, afterRun.placed],
     doughSeat: doughSeatFor("late"),
   });
   const late = appendOfficeAndOff(lateRun.placed, roster, "late", catalog, group, skills);
@@ -1822,7 +1833,7 @@ export function generateRotation(input: GenerateInput): GenerateResult {
   const eveningRun = runProductionPeriod({
     period: "evening",
     pool: eveningFloor,
-    prevWaves: [start, lunch1Placed, lunch2Placed, afterRun.placed, lateRun.placed],
+    prevWaves: [start, lunch1Placed, lunch2Placed, noonRun.placed, afterRun.placed, lateRun.placed],
     doughSeat: doughSeatFor("evening"),
   });
   const evening = appendOfficeAndOff(eveningRun.placed, roster, "evening", catalog, group, skills);
@@ -1831,7 +1842,7 @@ export function generateRotation(input: GenerateInput): GenerateResult {
   const closingRun = runProductionPeriod({
     period: "closing",
     pool: closingFloor,
-    prevWaves: [start, lunch1Placed, lunch2Placed, afterRun.placed, lateRun.placed, eveningRun.placed],
+    prevWaves: [start, lunch1Placed, lunch2Placed, noonRun.placed, afterRun.placed, lateRun.placed, eveningRun.placed],
     doughSeat: undefined,
   });
   const closing = appendOfficeAndOff(closingRun.placed, roster, "closing", catalog, group, skills);
@@ -1841,12 +1852,13 @@ export function generateRotation(input: GenerateInput): GenerateResult {
       startRun.unfilled.length +
       lunch1Out.unfilled.length +
       lunch2Out.unfilled.length +
+      noonRun.unfilled.length +
       afterRun.unfilled.length +
       lateRun.unfilled.length +
       eveningRun.unfilled.length +
       closingRun.unfilled.length >
     0;
-  const assignments: PeriodAssignments = { early, start, lunch1, lunch2, after, late, evening, closing };
+  const assignments: PeriodAssignments = { early, start, lunch1, lunch2, noon, after, late, evening, closing };
   return finish(assignments, visible, targets, warnings, impact, modes, catalog, group, skills, failed);
 }
 

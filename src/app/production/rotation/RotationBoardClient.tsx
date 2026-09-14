@@ -64,8 +64,8 @@ function LeaveLine(props: { items: PlanningLeaveItem[]; unmatched: string[] }) {
   }
   const parts = [
     ["annual", "연차"],
-    ["half_am", "반(오전)"],
-    ["half_pm", "반(오후)"],
+    ["half_am", "반(오전출근)"],
+    ["half_pm", "반(오후출근)"],
     ["half", "반차"],
     ["other", "기타"],
   ] as const;
@@ -86,6 +86,38 @@ function LeaveLine(props: { items: PlanningLeaveItem[]; unmatched: string[] }) {
       )}
     </div>
   );
+}
+
+/** 인쇄 상단용. 휴무·반차를 한 줄로 모은다 */
+function leaveSummaryText(items: PlanningLeaveItem[], roster: Person[]): string | null {
+  const parts = [
+    ["annual", "휴무"],
+    ["other", "휴무"],
+    ["half_am", "반(오전출근)"],
+    ["half_pm", "반(오후출근)"],
+    ["half", "반차"],
+  ] as const;
+  const chunks: string[] = [];
+  if (items.length > 0) {
+    const used = new Set<string>();
+    for (const [key, label] of parts) {
+      const rows = items.filter((i) => i.kind === key && !used.has(i.name));
+      if (rows.length === 0) continue;
+      rows.forEach((r) => used.add(r.name));
+      chunks.push(`${label} ${rows.map((r) => r.name).join(", ")}`);
+    }
+  } else {
+    const off = roster.filter((p) => p.leaveKind && p.leaveKind !== "none");
+    const full = off.filter((p) => p.leaveKind === "annual" || p.leaveKind === "other");
+    const halfAm = off.filter((p) => p.leaveKind === "half_am");
+    const halfPm = off.filter((p) => p.leaveKind === "half_pm");
+    const half = off.filter((p) => p.leaveKind === "half");
+    if (full.length) chunks.push(`휴무 ${full.map((p) => p.name).join(", ")}`);
+    if (halfAm.length) chunks.push(`반(오전출근) ${halfAm.map((p) => p.name).join(", ")}`);
+    if (halfPm.length) chunks.push(`반(오후출근) ${halfPm.map((p) => p.name).join(", ")}`);
+    if (half.length) chunks.push(`반차 ${half.map((p) => p.name).join(", ")}`);
+  }
+  return chunks.length > 0 ? chunks.join(" · ") : null;
 }
 
 /** 09~19조 결원 추천. 근무시간이 실제로 바뀌므로 관리자가 고르기 전에는 아무것도 확정하지 않는다 */
@@ -372,6 +404,7 @@ export default function RotationBoardClient() {
   );
 
   const productLabel = PRODUCT_LINES.find((p) => p.id === line)?.label ?? line;
+  const leaveSummary = leaveSummaryText(planningLeaveItems, boardRoster);
 
   return (
     <div className="rotation-print-root min-h-[calc(100dvh-3.5rem-4rem)] md:min-h-0 p-4 md:p-6 max-w-[1600px] mx-auto">
@@ -402,11 +435,25 @@ export default function RotationBoardClient() {
           .rotation-print-root p {
             color: #0f172a !important;
           }
+          .rotation-print-root header {
+            margin-bottom: 2mm !important;
+            gap: 0 !important;
+          }
+          .rotation-print-root h1 {
+            font-size: 14pt !important;
+            margin: 0 !important;
+          }
+          .rotation-print-root h1 svg {
+            width: 12pt !important;
+            height: 12pt !important;
+            color: #0f172a !important;
+          }
           .no-print { display: none !important; }
           .print-only { display: table-row !important; }
+          .print-omit { display: none !important; }
           .heat-detail, .heat-section { display: none !important; }
           .print-board {
-            break-inside: avoid;
+            /* break-inside:avoid 를 쓰면 표가 통째로 밀려 첫 장이 비게 된다 */
             width: 100% !important;
             overflow: visible !important;
             border: 1px solid #cbd5e1 !important;
@@ -416,6 +463,7 @@ export default function RotationBoardClient() {
           }
           .print-board table {
             width: 100% !important;
+            min-width: 0 !important;
             table-layout: fixed;
             border-collapse: collapse;
           }
@@ -423,32 +471,38 @@ export default function RotationBoardClient() {
             color: #0f172a !important;
             border-color: #cbd5e1 !important;
             background: #fff !important;
-            padding: 2.5mm 1.5mm !important;
+            padding: 1.6mm 1.2mm !important;
             vertical-align: top;
-            font-size: 9pt;
-            line-height: 1.25;
+            font-size: 8.5pt;
+            line-height: 1.2;
           }
           .print-board .row-head th {
             background: #f8fafc !important;
-            font-size: 10pt;
+            font-size: 9.5pt;
           }
           .print-board .row-section th {
             background: #e2e8f0 !important;
             color: #334155 !important;
-            font-size: 9pt;
+            font-size: 8.5pt;
             letter-spacing: 0.08em;
-            padding: 1.5mm !important;
+            padding: 1.2mm !important;
           }
           .print-board .row-lunch th, .print-board .row-lunch td { background: #fde68a !important; }
           .print-board th.sticky, .print-board td.sticky {
             position: static !important;
             left: auto !important;
           }
+          .print-leave-line {
+            display: block !important;
+            margin-top: 1mm;
+            font-size: 9pt;
+            color: #334155 !important;
+          }
           .print-chip {
             color: #0f172a !important;
             box-shadow: none !important;
-            font-size: 9pt !important;
-            padding: 0.8mm 1.4mm !important;
+            font-size: 8.5pt !important;
+            padding: 0.6mm 1.1mm !important;
             border-radius: 1mm !important;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
@@ -463,6 +517,7 @@ export default function RotationBoardClient() {
           .print-chip-em { background: #fecaca !important; }
         }
         .print-only { display: none; }
+        .print-leave-line { display: none; }
       `}</style>
 
       <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -478,6 +533,7 @@ export default function RotationBoardClient() {
             {date} {weekdayKo(date)}요일 · {productLabel} · 실근무 {presentCount}명
             {result.impact.extraHours > 0 ? ` · 가열 +${result.impact.extraHours}시간 / +${result.impact.extraQty.toLocaleString("ko-KR")}개` : ""}
           </p>
+          {leaveSummary ? <p className="print-leave-line">{leaveSummary}</p> : null}
           {saveNote && <p className="mt-1 text-[11px] text-slate-500 no-print">{saveNote}</p>}
         </div>
         <div className="no-print flex items-center gap-2">
@@ -875,10 +931,12 @@ function BoardTable(props: {
             const row = item.row;
             const isLunch = row.key === "lunch";
             const isOff = row.key === "off" || row.key === "outside" || row.key === "arriving";
+            // 인쇄본에서는 근무 외·휴무·미배치를 빼고, 휴무·반차는 상단 제목줄에만 둔다
+            const printOmit = row.key === "outside" || row.key === "off" || row.key === "unassigned";
             return (
               <tr
                 key={row.key}
-                className={`${row.heating ? "heat-detail" : ""} ${isLunch ? "row-lunch bg-amber-300" : isOff ? "bg-slate-950/70" : "odd:bg-slate-900/50 even:bg-slate-900/25"}`}
+                className={`${row.heating ? "heat-detail" : ""} ${printOmit ? "print-omit" : ""} ${isLunch ? "row-lunch bg-amber-300" : isOff ? "bg-slate-950/70" : "odd:bg-slate-900/50 even:bg-slate-900/25"}`}
               >
                 <th
                   className={`sticky left-0 z-10 px-3 py-2.5 text-left align-middle ${SECTION_BAR[row.section]} ${

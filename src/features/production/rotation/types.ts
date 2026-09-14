@@ -10,7 +10,9 @@ export const PERIODS = [
   { id: "start", label: "09:00–11:00", short: "09시 합류", startMin: 540, endMin: 660, production: true },
   { id: "lunch1", label: "11:00–12:00", short: "1차 교대", startMin: 660, endMin: 720, production: true },
   { id: "lunch2", label: "12:00–13:00", short: "2차 교대", startMin: 720, endMin: 780, production: true },
-  { id: "after", label: "13:00–15:30", short: "오후", startMin: 780, endMin: 930, production: true },
+  /** 반차 경계. 오전출근은 여기까지, 오후출근은 여기서부터 */
+  { id: "noon", label: "13:00–13:30", short: "13시", startMin: 780, endMin: 810, production: true },
+  { id: "after", label: "13:30–15:30", short: "오후", startMin: 810, endMin: 930, production: true },
   { id: "late", label: "15:30–17:00", short: "늦은 오후", startMin: 930, endMin: 1020, production: true },
   { id: "evening", label: "17:00–18:00", short: "17시 이후", startMin: 1020, endMin: 1080, production: true },
   { id: "closing", label: "18:00–19:00", short: "마감", startMin: 1080, endMin: 1140, production: false },

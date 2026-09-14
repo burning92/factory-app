@@ -58,6 +58,30 @@ export function workWindowOf(person: Person): WorkWindow {
   return parseWorkWindow(effectiveShift(person));
 }
 
+/** 반차 자르는 시각. 오전출근은 여기까지, 오후출근은 여기서부터 */
+export const HALF_DAY_CUT_MIN = 13 * 60 + 30;
+/** 반차(오후출근) 퇴근. 기본 근무조가 더 이르면 그쪽으로 */
+export const HALF_PM_END_MIN = 18 * 60;
+
+/**
+ * 그날 실제로 자리를 줄 수 있는 근무창.
+ * 반차(오전출근)=기본 조 시작~13:30, 반차(오후출근)=13:30~min(조 퇴근, 18:00).
+ */
+export function effectiveWorkWindow(person: Person): WorkWindow {
+  const base = workWindowOf(person);
+  const kind = person.leaveKind ?? "none";
+  if (kind === "half_am" || kind === "half") {
+    return { startMin: base.startMin, endMin: Math.min(base.endMin, HALF_DAY_CUT_MIN) };
+  }
+  if (kind === "half_pm") {
+    return {
+      startMin: Math.max(base.startMin, HALF_DAY_CUT_MIN),
+      endMin: Math.min(base.endMin, HALF_PM_END_MIN),
+    };
+  }
+  return base;
+}
+
 export function periodWindow(period: PeriodId): WorkWindow {
   const row = PERIODS.find((p) => p.id === period);
   return row ? { startMin: row.startMin, endMin: row.endMin } : DEFAULT_WORK_WINDOW;
@@ -70,16 +94,16 @@ export function worksDuringPeriod(window: WorkWindow, period: PeriodId): boolean
 }
 
 export function personWorksDuringPeriod(person: Person, period: PeriodId): boolean {
-  return worksDuringPeriod(workWindowOf(person), period);
+  return worksDuringPeriod(effectiveWorkWindow(person), period);
 }
 
-/** 이 구간이 점심 이전인지. 반차 판정에 쓴다 */
+/** @deprecated 반차는 effectiveWorkWindow로 판정한다. 호환용으로 남긴다 */
 export function isMorningPeriod(period: PeriodId): boolean {
-  return periodWindow(period).endMin <= 12 * 60;
+  return periodWindow(period).endMin <= HALF_DAY_CUT_MIN;
 }
 
 export function isAfternoonPeriod(period: PeriodId): boolean {
-  return periodWindow(period).startMin >= 12 * 60;
+  return periodWindow(period).startMin >= HALF_DAY_CUT_MIN;
 }
 
 export function periodProduces(period: PeriodId): boolean {
