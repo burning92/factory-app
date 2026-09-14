@@ -754,6 +754,34 @@ describe("숙련·수동이동 회귀", () => {
     expect(result.warnings.some((w) => w.kind === "fieldBackup")).toBe(true);
   });
 
+  it("주공정이 숙련보다 먼저다: 외포장 주공정자는 외포장 숙련이 더 높아도 다른 공정 사람보다 우선한다", () => {
+    const catalog = catalogWith([
+      { id: "h1", label: "가열 1", process: "heating" },
+      { id: "inner", label: "내포장", process: "inner", staffing: staffing(1, 1) },
+      { id: "outer", label: "외포장", process: "outer", staffing: staffing(1, 1) },
+      { id: "topping", label: "토핑", process: "topping", staffing: staffing(2, 2) },
+      { id: "office", label: "사무", process: "office", staffing: zeros },
+    ]);
+    const roster = [
+      person("양경민", "outer"),
+      person("심수덕", "topping", { constraints: innerQual() }),
+      person("heat-1", "heating"),
+      person("inner-1", "inner", { constraints: innerQual() }),
+      person("top-1", "topping"),
+    ];
+    const skills = skillsFor(roster, catalog, {
+      양경민: { outer: 3 },
+      심수덕: { outer: 2, topping: 3, inner: 1 },
+      "heat-1": { h1: 1 },
+      "inner-1": { inner: 1 },
+      "top-1": { topping: 1 },
+    });
+    const result = run({ roster, catalog, skills });
+    expect(namesOn(result, "start", "outer")).toContain("양경민");
+    expect(namesOn(result, "start", "outer")).not.toContain("심수덕");
+    expect(namesOn(result, "start", "topping")).toContain("심수덕");
+  });
+
   it("테스트 14: 외포장 수동 이동은 기존 배치자를 밀어내지 않는다", () => {
     const catalog = miniCatalog({ innerStart: 1, outerStart: 2 });
     const roster = [

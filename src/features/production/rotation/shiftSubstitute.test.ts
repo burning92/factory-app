@@ -307,8 +307,8 @@ describe("대체 확정 시 전체 재계산", () => {
   const before = runRecalc(base);
   const after = runRecalc(applyShiftOverrides(base, { "day-ready": NIGHT_SHIFT }));
 
-  it("확정 전에는 08~09 외포장을 맡고 18~19 내포장이 비어 있다", () => {
-    expect(holderOf(before, "early", "outer")).toBe("day-ready");
+  it("확정 전에는 외포장 주공정인 spare가 08~09를 맡고 18~19 내포장이 비어 있다", () => {
+    expect(holderOf(before, "early", "outer")).toBe("spare");
     expect(holderOf(before, "closing", "inner")).toBeUndefined();
     expect(before.checks.find((c) => c.id === "count:closing:inner")?.ok).toBe(false);
   });
@@ -317,7 +317,7 @@ describe("대체 확정 시 전체 재계산", () => {
     expect(stationOf(after, "early", "day-ready")).toBe("arriving");
   });
 
-  it("08~09에 생긴 빈자리를 다른 근무 가능자가 채운다", () => {
+  it("08~09 외포장은 주공정 인원이 그대로 맡는다", () => {
     expect(holderOf(after, "early", "outer")).toBe("spare");
   });
 
@@ -356,7 +356,7 @@ describe("대체 확정 시 전체 재계산", () => {
 
   it("해제하면 원래 08~18 기준으로 전체가 다시 계산된다", () => {
     const released = runRecalc(applyShiftOverrides(base, {}));
-    expect(holderOf(released, "early", "outer")).toBe("day-ready");
+    expect(holderOf(released, "early", "outer")).toBe("spare");
     expect(stationOf(released, "closing", "day-ready")).toBe("outside");
     expect(released.checks.find((c) => c.id === "count:closing:inner")?.ok).toBe(false);
   });

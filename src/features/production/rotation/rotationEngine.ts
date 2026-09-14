@@ -264,6 +264,13 @@ function backupStationCount(
   ).length;
 }
 
+/** 주공정과 자리가 맞는지. 가열 주공정은 가열 마감도 본업으로 본다 */
+function matchesPreferred(person: Person, process: ProcessId, group: ProductGroup): boolean {
+  const preferred = preferredProcess(person, group);
+  if (preferred === process) return true;
+  return preferred === "heating" && process === "heatingClose";
+}
+
 function scoreCandidate(
   person: Person,
   slot: Slot,
@@ -275,8 +282,9 @@ function scoreCandidate(
 ): number {
   const prevA = prev.get(person.id);
   let s = 0;
+  // 주공정이 숙련 등급보다 먼저. 상~하 차이(300)보다 크게 둬서 주공정 사람을 먼저 앉힌다
+  if (matchesPreferred(person, slot.position.process, group)) s += 400;
   s += (6 - priority) * 100;
-  if (preferredProcess(person, group) === slot.position.process) s += 30;
   if (prevA?.positionId === slot.position.id) s += 20;
   if (prevA?.station === slot.position.process) s += 6;
   if (prevA && floorsDiffer(prevA.station, slot.position.process)) s -= 220;
@@ -312,10 +320,10 @@ function cmpScore(a: ScoreVec, b: ScoreVec): number {
     "backupUsed",
     "floorMoves",
     "flexOnHeat",
+    "prefLeave",
     "rank4",
     "rank3",
     "rankSum",
-    "prefLeave",
     "changed",
   ];
   for (const k of keys) {
@@ -380,7 +388,7 @@ function scoreRequired(
     if (slot.position.process === "heating" && person && backupStationCount(person, skills, catalog, group) > 0) {
       vec.flexOnHeat += 1;
     }
-    if (person && preferredProcess(person, group) !== slot.position.process) vec.prefLeave += 1;
+    if (person && !matchesPreferred(person, slot.position.process, group)) vec.prefLeave += 1;
     const prevA = prev.get(a.personId);
     if (prevA && floorsDiffer(prevA.station, slot.position.process)) vec.floorMoves += 1;
     if (prevA && prevA.positionId && prevA.positionId !== a.positionId) vec.changed += 1;
@@ -421,8 +429,8 @@ function warnForPriority(
   } else if (priority === 3) {
     out.push({ kind: "rank3", message: `${person.name} → ${label} [중]` });
   }
-  const preferred = preferredProcess(person, group);
-  if (preferred !== process) {
+  if (!matchesPreferred(person, process, group)) {
+    const preferred = preferredProcess(person, group);
     out.push({ kind: "preferredLeave", message: `${person.name} 주공정 ${processLabel(preferred)} → ${label}` });
   }
   return out;
@@ -474,8 +482,17 @@ function pickForSlot(
   const regular = all.filter((p) => !isFieldBackup(p));
   const base = regular.length > 0 ? regular : all;
   const stay = base.filter((p) => staysOnFloor(p, slot.position.process, prev));
+  // 주공정으로 돌아가는 사람은 층이 달라도 후보에 넣는다
+  const preferredCross = base.filter(
+    (p) =>
+      !staysOnFloor(p, slot.position.process, prev) &&
+      matchesPreferred(p, slot.position.process, group) &&
+      !hardStayFloor(p)
+  );
+  const preferredPool = [...stay, ...preferredCross];
   const fallback = base.filter((p) => !hardStayFloor(p));
-  const pool = stay.length > 0 ? stay : slot.required && !opts.strictFloor ? fallback : [];
+  const pool =
+    preferredPool.length > 0 ? preferredPool : slot.required && !opts.strictFloor ? fallback : [];
   return [...pool].sort((a, b) => {
     const pa = getPriority(skills, a.id, group, slot.position.id);
     const pb = getPriority(skills, b.id, group, slot.position.id);
@@ -895,11 +912,12 @@ function placeLeftovers(
           if (cur >= range.max) return [];
           if (!isUsableCandidate(person, pr, cur < range.min)) return [];
           let sc = (6 - pr) * 10;
-          if (preferredProcess(person, group) === process) sc += 8;
+          // 여유 인원도 주공정을 먼저 채운다 (숙련 상~하 차이 40보다 큼)
+          if (matchesPreferred(person, process, group)) sc += 50;
           if (prev.get(person.id)?.positionId === d.id) sc += 12;
           if (prev.get(person.id)?.station === process) sc += 6;
           const prevSt = prev.get(person.id)?.station;
-          if (prevSt && floorsDiffer(prevSt, process)) return [];
+          if (prevSt && floorsDiffer(prevSt, process) && !matchesPreferred(person, process, group)) return [];
           return [{ process, d, pr, sc }];
         });
     });
@@ -915,7 +933,7 @@ function placeLeftovers(
   return improveSkillFit([...kept, ...extra], roster, skills, catalog, group, prev, period, opts);
 }
 
-/** 숙련이 낮은 배치를 앞에 두고 비교한다. 하 인원 수 → 중 인원 수 → 숙련 합 → 주공정 이탈 순 */
+/** 주공정 이탈을 먼저 줄이고, 그다음 숙련(하·중·합)을 본다 */
 function fitProfile(
   rows: Assignment[],
   byId: Map<string, Person>,
@@ -937,9 +955,9 @@ function fitProfile(
     // 그래야 가열 숙련자를 빼서 다른 공정의 '하'를 메꾸는 맞바꿈이 일어나지 않는다
     const weight = def && (def.process === "heating" || def.process === "heatingClose") ? 2 : 1;
     rankSum += pr * weight;
-    if (person && def && preferredProcess(person, group) !== def.process) prefLeave += 1;
+    if (person && def && !matchesPreferred(person, def.process, group)) prefLeave += 1;
   }
-  return [rankSum, rank4, rank3, prefLeave];
+  return [prefLeave, rankSum, rank4, rank3];
 }
 
 function cmpFit(a: number[], b: number[]): number {
@@ -950,8 +968,8 @@ function cmpFit(a: number[], b: number[]): number {
 }
 
 /**
- * 배치를 마친 뒤 숙련이 어긋난 곳을 바로잡는다.
- * 하나는 그 자리를 더 잘하는 사람이 미배치로 남은 경우고, 다른 하나는 두 사람이 자리를 맞바꾸면 둘 다 숙련이 오르는 경우다.
+ * 배치를 마친 뒤 주공정·숙련이 어긋난 곳을 바로잡는다.
+ * 여유 인원이 자기 주공정 자리를 되찾거나, 맞바꾸면 주공정·숙련이 나아지는 경우를 본다.
  * 사람만 바꿔 앉히므로 자리 수는 그대로고 정원은 건드리지 않는다.
  */
 function improveSkillFit(
@@ -983,7 +1001,9 @@ function improveSkillFit(
     const range = staffingForPosition(def, period);
     if (!isUsableCandidate(person, pr, (counts.get(def.id) ?? 0) <= range.min)) return 0;
     const prevStation = prev.get(personId)?.station;
-    if (prevStation && floorsDiffer(prevStation, def.process)) return 0;
+    if (prevStation && floorsDiffer(prevStation, def.process) && !matchesPreferred(person, def.process, group)) {
+      return 0;
+    }
     return pr;
   };
 
@@ -1019,16 +1039,23 @@ function improveSkillFit(
       const holder = byId.get(personId);
       return Boolean(holder) && isDoughCorePerson(holder!);
     };
-    // 그 자리를 더 잘하는 사람이 놀고 있으면 바꿔 넣는다
+    // 놀고 있는 사람이 그 자리를 더 잘하거나, 자기 주공정인데 앉은 사람은 아니면 바꿔 넣는다
     for (const idle of current.filter((r) => r.station === "unassigned")) {
       const newcomer = byId.get(idle.personId);
       for (const seat of seats) {
         if (isPinned(seat.personId)) continue;
         const def = defById.get(seat.positionId!)!;
         const pr = rankFor(idle.personId, def);
-        if (pr === 0 || pr >= (seat.priority ?? 0)) continue;
-        // 현장백업은 이미 자리를 잡은 일반 인원을 밀어내지 않는다
+        if (pr === 0) continue;
         const holder = byId.get(seat.personId);
+        const reclaimPreferred =
+          Boolean(newcomer) &&
+          matchesPreferred(newcomer!, def.process, group) &&
+          Boolean(holder) &&
+          !matchesPreferred(holder!, def.process, group);
+        const betterSkill = pr < (seat.priority ?? 0);
+        if (!reclaimPreferred && !betterSkill) continue;
+        // 현장백업은 이미 자리를 잡은 일반 인원을 밀어내지 않는다
         if (newcomer && isFieldBackup(newcomer) && holder && !isFieldBackup(holder)) continue;
         const next = current.map((row) => {
           if (row.personId === seat.personId) return { personId: row.personId, station: "unassigned" as const, unassignedReason: "NO_AVAILABLE_SLOT" as const };
@@ -1046,7 +1073,7 @@ function improveSkillFit(
       if (improved) break;
     }
     if (improved) continue;
-    // 두 사람이 자리를 맞바꿔 둘 다 숙련이 오르면 바꾼다
+    // 두 사람이 자리를 맞바꿔 주공정·숙련이 나아지면 바꾼다
     for (let i = 0; i < seats.length && !improved; i++) {
       for (let j = i + 1; j < seats.length; j++) {
         const one = seats[i];

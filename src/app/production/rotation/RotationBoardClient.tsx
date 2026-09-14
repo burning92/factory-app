@@ -756,7 +756,6 @@ function splitSeatLabel(label: string): { title: string; hint?: string } {
 }
 
 function sectionForStation(station?: StationId, heating?: boolean): BoardRow["section"] {
-  // 가열 마감은 18~19 가열실 정리라 가열 자리 바로 밑에 붙인다
   if (heating || station === "heating" || station === "heatingClose") return "가열";
   if (station === "inner" || station === "outer") return "포장";
   if (station === "topping") return "토핑";
@@ -793,10 +792,11 @@ function BoardTable(props: {
 }) {
   const { catalog, group, roster, assignments, targets, skills } = props;
   const heat = heatingPositions(catalog, group);
-  const staffed = catalog[group]
-    .filter((p) => processNeedsStaffing(p.process) && p.process !== "office")
-    // 가열 마감은 가열 자리 바로 밑에 붙인다. 저장 순서가 뒤여도 가열 묶음 안에 들어가야 표가 갈리지 않는다
-    .sort((a, b) => Number(b.process === "heatingClose") - Number(a.process === "heatingClose"));
+  const heatClose = catalog[group].filter((p) => p.process === "heatingClose");
+  const firstHeatKey = heat[0]?.id;
+  const staffed = catalog[group].filter(
+    (p) => processNeedsStaffing(p.process) && p.process !== "office" && p.process !== "heatingClose"
+  );
   const rndShown = catalog[group].some((p) => p.process === "rnd");
   const officeShown = roster.some((p) => isAssignedOfficePerson(p, skills, catalog, group));
   const allRows: BoardRow[] = [
@@ -827,11 +827,11 @@ function BoardTable(props: {
     { key: "lunch", title: "식사", match: { station: "lunch" as const }, section: "기타" },
     { key: "arriving", title: "9시 출근", match: { station: "arriving" as const }, section: "기타" },
     { key: "outside", title: "근무 외", match: { station: "outside" as const }, section: "기타" },
-    { key: "off", title: "휴무", match: { station: "off" as const }, section: "기타" },
+    // 휴무는 상단 LeaveLine에 있으므로 표에서 빼 세로 길이를 줄인다
     { key: "unassigned", title: "미배치", match: { station: "unassigned" as const }, section: "기타" },
   ];
   const rows = allRows.filter((row) => {
-    if (row.heating || row.key === "lunch" || row.key === "off" || row.key === "office" || row.key === "unassigned") return true;
+    if (row.heating || row.key === "lunch" || row.key === "office" || row.key === "unassigned") return true;
     const hasPeople = PERIODS.some((period) => peopleOn(assignments[period.id], roster, row.match).length > 0);
     if (row.staffed && row.match.positionId) {
       const hasNeed = PERIODS.some((period) => {
@@ -852,7 +852,7 @@ function BoardTable(props: {
   let seenHeat = false;
   let heatPrinted = false;
   for (const row of rows) {
-    // 인쇄본은 가열 자리를 한 줄로 합친다. 가열 마감은 따로 남기므로 그 앞에 넣는다
+    // 인쇄본은 가열 자리를 한 줄로 합친다
     if (seenHeat && !heatPrinted && !row.heating) {
       rendered.push({ type: "heat-print" });
       heatPrinted = true;
@@ -906,7 +906,11 @@ function BoardTable(props: {
                     가열
                   </th>
                   {PERIODS.map((period) => {
-                    const people = peopleOn(assignments[period.id], roster, { station: "heating" });
+                    // 마감 구간은 가열 자리 대신 가열 마감조를 한 덩어리로 찍는다
+                    const people =
+                      period.id === "closing"
+                        ? peopleOn(assignments[period.id], roster, { station: "heatingClose" })
+                        : peopleOn(assignments[period.id], roster, { station: "heating" });
                     return (
                       <td key={period.id} className="px-2.5 py-2 border-l border-slate-800/80 align-top">
                         {people.length === 0 ? (
@@ -930,9 +934,10 @@ function BoardTable(props: {
             }
             const row = item.row;
             const isLunch = row.key === "lunch";
-            const isOff = row.key === "off" || row.key === "outside" || row.key === "arriving";
-            // 인쇄본에서는 근무 외·휴무·미배치를 빼고, 휴무·반차는 상단 제목줄에만 둔다
-            const printOmit = row.key === "outside" || row.key === "off" || row.key === "unassigned";
+            const isOff = row.key === "outside" || row.key === "arriving";
+            // 인쇄본에서는 근무 외·미배치를 뺀다
+            const printOmit = row.key === "outside" || row.key === "unassigned";
+            const heatRows = rows.filter((r) => r.heating);
             return (
               <tr
                 key={row.key}
@@ -951,6 +956,62 @@ function BoardTable(props: {
                   {row.hint ? <span className="no-print mt-0.5 block text-[10px] font-normal text-slate-500">{row.hint}</span> : null}
                 </th>
                 {PERIODS.map((period) => {
+                  // 마감 열: 가열 자리 행을 합쳐 가열 마감조만 보여 준다
+                  if (row.heating && period.id === "closing" && heatClose.length > 0 && heatRows.length > 0) {
+                    if (row.key !== firstHeatKey) return null;
+                    const closePeople = peopleOn(assignments.closing, roster, { station: "heatingClose" });
+                    const closeRange = heatClose.reduce(
+                      (acc, pos) => {
+                        const r = staffingForPosition(pos, "closing");
+                        return { min: acc.min + r.min, max: acc.max + r.max };
+                      },
+                      { min: 0, max: 0 }
+                    );
+                    const n = closePeople.length;
+                    const under = closeRange.min > 0 && n < closeRange.min;
+                    const over = n > closeRange.max && closeRange.max > 0;
+                    return (
+                      <td
+                        key={period.id}
+                        rowSpan={heatRows.length}
+                        className={`px-2.5 py-2 border-l border-slate-800/80 align-top ${
+                          under || over ? "bg-rose-950/40" : ""
+                        }`}
+                      >
+                        {(closeRange.min > 0 || closeRange.max > 0) && (
+                          <p className={`mb-1.5 text-[10px] tabular-nums ${under || over ? "text-rose-200 font-semibold" : "text-slate-500"}`}>
+                            {n}명 · {staffingRangeLabel(closeRange.min, closeRange.max)}
+                          </p>
+                        )}
+                        {closePeople.length === 0 ? (
+                          <span className={`text-xs ${under ? "font-medium text-rose-300" : "text-slate-600"}`}>
+                            {under ? "비어 있음" : "—"}
+                          </span>
+                        ) : (
+                          <ul className="flex flex-col gap-1.5">
+                            {closePeople.map(({ person, assignment }) => (
+                              <li key={person.id} className="relative">
+                                <PersonChip
+                                  person={person}
+                                  assignment={assignment}
+                                  period="closing"
+                                  lunch={false}
+                                  heating
+                                  editing={props.editing}
+                                  setEditing={props.setEditing}
+                                  catalog={catalog}
+                                  group={group}
+                                  skills={skills}
+                                  onMove={props.onMove}
+                                />
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </td>
+                    );
+                  }
+
                   const people = peopleOn(assignments[period.id], roster, row.match);
                   const pos = row.match.positionId
                     ? catalog[group].find((p) => p.id === row.match.positionId)
