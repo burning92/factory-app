@@ -172,6 +172,20 @@ export type CompactJournalQtyRow = {
   finishedWasteQty: number;
 };
 
+function extraParbakeUsedQty(comp: ComputedResult): number {
+  const resolved = (comp.resolvedExtraParbakes ?? []).reduce(
+    (sum, row) => sum + toQty(row.qty),
+    0
+  );
+  const unresolved = (comp.unresolvedExtraParbakes ?? []).reduce(
+    (sum, row) => sum + toQty(row.qty),
+    0
+  );
+  const fromRows = resolved + unresolved;
+  if (fromRows > 0) return fromRows;
+  return toQty(comp.totalExtraParbakeQty);
+}
+
 export function compactJournalQtyRowFromComputed(
   date: string,
   authorName: string,
@@ -184,7 +198,8 @@ export function compactJournalQtyRowFromComputed(
     productNames,
     doughMixQty: comp.doughMixQty ?? 0,
     doughUsageQty: comp.doughUsageQty ?? 0,
-    storedParbakeUsedQty: comp.storedParbakeFinishedQty ?? 0,
+    storedParbakeUsedQty:
+      toQty(comp.storedParbakeFinishedQty) + extraParbakeUsedQty(comp),
     doughWasteQty: comp.doughWasteQty ?? 0,
     finishedWasteQty: (comp.parbakeWasteQty ?? 0) + (comp.breadWasteQty ?? 0),
   };

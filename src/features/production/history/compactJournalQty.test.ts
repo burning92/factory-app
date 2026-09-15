@@ -59,6 +59,31 @@ describe("compactJournalQty", () => {
     expect(row.storedParbakeUsedQty).toBe(12);
   });
 
+  it("includes extra parbake usage in stored parbake used qty", () => {
+    const row = compactJournalQtyRowFromComputed(
+      "2026-09-14",
+      "김동호",
+      "허니고르곤졸라 2,003개",
+      stubComputed({
+        storedParbakeFinishedQty: 0,
+        totalExtraParbakeQty: 605,
+        resolvedExtraParbakes: [
+          {
+            extraParbakeId: "1",
+            parbakeName: "베샤멜 파베이크",
+            qty: 605,
+            manufacturedDate: "2026-09-14",
+            expiryDate: "2027-09-09",
+            displayLabel: "베샤멜 파베이크",
+            productCandidates: [],
+            targetProductResolved: true,
+          },
+        ],
+      })
+    );
+    expect(row.storedParbakeUsedQty).toBe(605);
+  });
+
   it("quotes product names that contain commas", () => {
     const csv = buildCompactJournalQtyCsv([
       compactJournalQtyRowFromComputed(
