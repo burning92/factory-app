@@ -186,6 +186,13 @@ function extraParbakeUsedQty(comp: ComputedResult): number {
   return toQty(comp.totalExtraParbakeQty);
 }
 
+/** 추가 파베이크가 있으면 그 합, 없으면 파베이크사용 완제품 수량. 둘을 더하면 같은 사용을 두 번 센다. */
+function storedParbakeUsedQtyFromComputed(comp: ComputedResult): number {
+  const extra = extraParbakeUsedQty(comp);
+  if (extra > 0) return extra;
+  return toQty(comp.storedParbakeFinishedQty);
+}
+
 export function compactJournalQtyRowFromComputed(
   date: string,
   authorName: string,
@@ -198,8 +205,7 @@ export function compactJournalQtyRowFromComputed(
     productNames,
     doughMixQty: comp.doughMixQty ?? 0,
     doughUsageQty: comp.doughUsageQty ?? 0,
-    storedParbakeUsedQty:
-      toQty(comp.storedParbakeFinishedQty) + extraParbakeUsedQty(comp),
+    storedParbakeUsedQty: storedParbakeUsedQtyFromComputed(comp),
     doughWasteQty: comp.doughWasteQty ?? 0,
     finishedWasteQty: (comp.parbakeWasteQty ?? 0) + (comp.breadWasteQty ?? 0),
   };
