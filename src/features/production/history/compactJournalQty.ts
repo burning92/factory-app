@@ -157,6 +157,8 @@ export const COMPACT_JOURNAL_QTY_HEADERS = [
   "도우반죽량",
   "도우사용량",
   "보관용파베이크사용수량",
+  "보관용파베이크생산",
+  "판매용파베이크생산",
   "도우폐기량",
   "완제품폐기량",
 ] as const;
@@ -168,6 +170,10 @@ export type CompactJournalQtyRow = {
   doughMixQty: number;
   doughUsageQty: number;
   storedParbakeUsedQty: number;
+  storageParbakeProducedQty: number;
+  storageParbakeProducedLabel: string;
+  saleParbakeProducedQty: number;
+  saleParbakeProducedLabel: string;
   doughWasteQty: number;
   finishedWasteQty: number;
 };
@@ -193,12 +199,33 @@ function storedParbakeUsedQtyFromComputed(comp: ComputedResult): number {
   return toQty(comp.storedParbakeFinishedQty);
 }
 
+function parbakeProductionByRole(
+  comp: ComputedResult,
+  role: "astronaut" | "sale"
+): { qty: number; label: string } {
+  const fromLines = (comp.parbakePurposeProductionLines ?? []).filter(
+    (line) => line.role === role && toQty(line.qty) > 0
+  );
+  if (fromLines.length > 0) {
+    const qty = fromLines.reduce((sum, line) => sum + toQty(line.qty), 0);
+    const label = fromLines
+      .map((line) => `${line.parbakeName} ${toQty(line.qty).toLocaleString()}개`)
+      .join(", ");
+    return { qty, label };
+  }
+  const total = role === "astronaut" ? toQty(comp.astronautParbakeQty) : toQty(comp.saleParbakeQty);
+  if (total <= 0) return { qty: 0, label: "" };
+  return { qty: total, label: `${total.toLocaleString()}개` };
+}
+
 export function compactJournalQtyRowFromComputed(
   date: string,
   authorName: string,
   productNames: string,
   comp: ComputedResult
 ): CompactJournalQtyRow {
+  const storage = parbakeProductionByRole(comp, "astronaut");
+  const sale = parbakeProductionByRole(comp, "sale");
   return {
     date,
     authorName,
@@ -206,6 +233,10 @@ export function compactJournalQtyRowFromComputed(
     doughMixQty: comp.doughMixQty ?? 0,
     doughUsageQty: comp.doughUsageQty ?? 0,
     storedParbakeUsedQty: storedParbakeUsedQtyFromComputed(comp),
+    storageParbakeProducedQty: storage.qty,
+    storageParbakeProducedLabel: storage.label,
+    saleParbakeProducedQty: sale.qty,
+    saleParbakeProducedLabel: sale.label,
     doughWasteQty: comp.doughWasteQty ?? 0,
     finishedWasteQty: (comp.parbakeWasteQty ?? 0) + (comp.breadWasteQty ?? 0),
   };
@@ -227,6 +258,8 @@ export function buildCompactJournalQtyCsv(rows: CompactJournalQtyRow[]): string 
         r.doughMixQty,
         r.doughUsageQty,
         r.storedParbakeUsedQty,
+        r.storageParbakeProducedLabel,
+        r.saleParbakeProducedLabel,
         r.doughWasteQty,
         r.finishedWasteQty,
       ]

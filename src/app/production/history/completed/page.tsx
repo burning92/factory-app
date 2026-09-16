@@ -412,13 +412,15 @@ export default function CompletedListPage() {
                       작성자: {item.authorName || "—"}
                     </div>
                     <div className="overflow-x-auto rounded-lg border border-slate-700 bg-space-900/50">
-                      <table className="w-full min-w-[720px] text-xs sm:text-sm text-slate-200">
+                      <table className="w-full min-w-[960px] text-xs sm:text-sm text-slate-200">
                         <thead>
                           <tr className="text-slate-400 text-left">
                             <th className="px-2 py-1.5 font-medium whitespace-nowrap">제품명</th>
                             <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">도우반죽량</th>
                             <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">도우사용량</th>
                             <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">보관용파베이크사용수량</th>
+                            <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">보관용파베이크생산</th>
+                            <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">판매용파베이크생산</th>
                             <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">도우폐기량</th>
                             <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">완제품폐기량</th>
                           </tr>
@@ -436,6 +438,12 @@ export default function CompletedListPage() {
                             </td>
                             <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
                               {item.compactQty.storedParbakeUsedQty.toLocaleString()}
+                            </td>
+                            <td className="px-2 py-1.5 text-right tabular-nums">
+                              {item.compactQty.storageParbakeProducedLabel || "0"}
+                            </td>
+                            <td className="px-2 py-1.5 text-right tabular-nums">
+                              {item.compactQty.saleParbakeProducedLabel || "0"}
                             </td>
                             <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
                               {item.compactQty.doughWasteQty.toLocaleString()}

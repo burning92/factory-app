@@ -57,6 +57,8 @@ describe("compactJournalQty", () => {
     );
     expect(row.finishedWasteQty).toBe(80);
     expect(row.storedParbakeUsedQty).toBe(12);
+    expect(row.storageParbakeProducedQty).toBe(0);
+    expect(row.saleParbakeProducedQty).toBe(0);
   });
 
   it("includes extra parbake usage in stored parbake used qty", () => {
@@ -119,6 +121,25 @@ describe("compactJournalQty", () => {
     expect(row.storedParbakeUsedQty).toBe(1082);
   });
 
+  it("shows storage and sale parbake production by type", () => {
+    const row = compactJournalQtyRowFromComputed(
+      "2026-09-14",
+      "김동호",
+      "허니고르곤졸라 2,003개",
+      stubComputed({
+        parbakePurposeProductionLines: [
+          { role: "astronaut", parbakeName: "베샤멜 파베이크", qty: 608 },
+          { role: "astronaut", parbakeName: "토마토 파베이크", qty: 615 },
+          { role: "sale", parbakeName: "토마토 파베이크", qty: 120 },
+        ],
+      })
+    );
+    expect(row.storageParbakeProducedQty).toBe(1223);
+    expect(row.storageParbakeProducedLabel).toBe("베샤멜 파베이크 608개, 토마토 파베이크 615개");
+    expect(row.saleParbakeProducedQty).toBe(120);
+    expect(row.saleParbakeProducedLabel).toBe("토마토 파베이크 120개");
+  });
+
   it("quotes product names that contain commas", () => {
     const csv = buildCompactJournalQtyCsv([
       compactJournalQtyRowFromComputed(
@@ -129,7 +150,7 @@ describe("compactJournalQty", () => {
       ),
     ]);
     expect(csv).toContain(
-      '"생산일자","작성자","제품명","도우반죽량","도우사용량","보관용파베이크사용수량","도우폐기량","완제품폐기량"'
+      '"생산일자","작성자","제품명","도우반죽량","도우사용량","보관용파베이크사용수량","보관용파베이크생산","판매용파베이크생산","도우폐기량","완제품폐기량"'
     );
     expect(csv).toContain('"마르게리따 100개, 페퍼로니 50개"');
   });
