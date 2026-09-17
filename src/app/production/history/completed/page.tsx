@@ -134,6 +134,23 @@ type CompletedItem = {
   compactQty: CompactJournalQtyRow;
 };
 
+function CompactStat({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-700/80 bg-space-900/60 px-3 py-2">
+      <div className="text-[11px] font-medium text-slate-400 leading-tight">{label}</div>
+      <div className="mt-1 text-sm font-medium text-slate-100 tabular-nums leading-snug break-keep">
+        {value}
+      </div>
+    </div>
+  );
+}
+
 export default function CompletedListPage() {
   const router = useRouter();
   const {
@@ -408,52 +425,43 @@ export default function CompletedListPage() {
                 <div className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                   <div className="min-w-0 flex-1">
                     <div className="font-semibold text-slate-100 text-lg mb-1">{item.date}</div>
-                    <div className="text-sm text-slate-400 mb-2">
+                    <div className="text-sm text-slate-400 mb-3">
                       작성자: {item.authorName || "—"}
                     </div>
-                    <div className="overflow-x-auto rounded-lg border border-slate-700 bg-space-900/50">
-                      <table className="w-full min-w-[960px] text-xs sm:text-sm text-slate-200">
-                        <thead>
-                          <tr className="text-slate-400 text-left">
-                            <th className="px-2 py-1.5 font-medium whitespace-nowrap">제품명</th>
-                            <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">도우반죽량</th>
-                            <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">도우사용량</th>
-                            <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">보관용파베이크사용수량</th>
-                            <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">보관용파베이크생산</th>
-                            <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">판매용파베이크생산</th>
-                            <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">도우폐기량</th>
-                            <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">완제품폐기량</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr>
-                            <td className="px-2 py-1.5 text-slate-200">
-                              {item.compactQty.productNames || "—"}
-                            </td>
-                            <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
-                              {item.compactQty.doughMixQty.toLocaleString()}
-                            </td>
-                            <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
-                              {item.compactQty.doughUsageQty.toLocaleString()}
-                            </td>
-                            <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
-                              {item.compactQty.storedParbakeUsedQty.toLocaleString()}
-                            </td>
-                            <td className="px-2 py-1.5 text-right tabular-nums">
-                              {item.compactQty.storageParbakeProducedLabel || "0"}
-                            </td>
-                            <td className="px-2 py-1.5 text-right tabular-nums">
-                              {item.compactQty.saleParbakeProducedLabel || "0"}
-                            </td>
-                            <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
-                              {item.compactQty.doughWasteQty.toLocaleString()}
-                            </td>
-                            <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
-                              {item.compactQty.finishedWasteQty.toLocaleString()}
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
+                    <p className="text-sm text-slate-100 leading-relaxed mb-3">
+                      {item.compactQty.productNames || "—"}
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                      <CompactStat
+                        label="도우반죽량"
+                        value={`${item.compactQty.doughMixQty.toLocaleString()}개`}
+                      />
+                      <CompactStat
+                        label="도우사용량"
+                        value={`${item.compactQty.doughUsageQty.toLocaleString()}개`}
+                      />
+                      <CompactStat
+                        label="보관용 파베이크 사용"
+                        value={`${item.compactQty.storedParbakeUsedQty.toLocaleString()}개`}
+                      />
+                      <CompactStat
+                        label="도우폐기량"
+                        value={`${item.compactQty.doughWasteQty.toLocaleString()}개`}
+                      />
+                      <CompactStat
+                        label="완제품폐기량"
+                        value={`${item.compactQty.finishedWasteQty.toLocaleString()}개`}
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                      <CompactStat
+                        label="보관용 파베이크 생산"
+                        value={item.compactQty.storageParbakeProducedLabel || "0개"}
+                      />
+                      <CompactStat
+                        label="판매용 파베이크 생산"
+                        value={item.compactQty.saleParbakeProducedLabel || "0개"}
+                      />
                     </div>
                     <span className="inline-block mt-2 px-3 py-1 rounded-full text-xs font-medium bg-cyan-500/20 text-cyan-300">
                       생산일지 완료
