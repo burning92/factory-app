@@ -13,6 +13,7 @@ import {
 } from "@/features/production/outbound/inventoryLots";
 import { getBomMaterialNamesForAdditionalOutbound } from "@/features/production/outbound/additionalOutboundMaterials";
 import { insertAdditionalOutboundHistory } from "@/features/production/outbound/additionalOutboundHistory";
+import { createSafeId } from "@/lib/createSafeId";
 
 type MaterialLike = {
   materialName: string;
@@ -730,11 +731,13 @@ export default function OutboundHistoryPage() {
       const cleanExpiry = payload.expiry.trim();
       const boxQty = Math.max(0, payload.boxQty || 0);
       const gQty = Math.max(0, payload.gQty || 0);
+      const historyId = createSafeId();
       const newLine: OutboundLine = {
         소비기한: cleanExpiry,
         박스: boxQty,
         낱개: Math.max(0, payload.bagQty || 0),
         g: gQty,
+        additional_outbound_log_id: historyId,
       };
       try {
         const existing = group.logs.find((l) => l.원료명 === cleanMaterial);
@@ -753,6 +756,7 @@ export default function OutboundHistoryPage() {
           });
         }
         await insertAdditionalOutboundHistory({
+          id: historyId,
           organizationCode: orgCode,
           productionDate: group.생산일자,
           productName: group.제품명,

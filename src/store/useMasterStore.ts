@@ -4,6 +4,24 @@ import { computeOutboundTotalG } from "@/features/production/outbound/computeOut
 import { requestProductionOutboundLabSync } from "@/lib/materialStockLab/clientSyncProductionOutbound";
 import { requestSecondCloseLabSync } from "@/lib/materialStockLab/clientSyncFirstCloseReturn";
 import { supabase } from "@/lib/supabase";
+import {
+  cancelAdditionalOutboundHistory,
+  cancelUnlinkedAdditionalOutboundHistory,
+  updateAdditionalOutboundHistoryQty,
+} from "@/features/production/outbound/additionalOutboundHistory";
+
+/** 추가 출고 내역 동기화는 출고 저장을 막지 않는다 */
+function syncAdditionalOutboundHistory(task: () => Promise<void>) {
+  void task().catch((err) => {
+    console.warn("추가 출고 내역 동기화 실패", err);
+  });
+}
+
+function linkedAdditionalOutboundIds(lines: OutboundLine[] | undefined): string[] {
+  return (lines ?? [])
+    .map((l) => l.additional_outbound_log_id ?? "")
+    .filter(Boolean);
+}
 
 function materialWeightForName(materialName: string, materials: Material[]): Material | undefined {
   const name = String(materialName ?? "").trim();
@@ -61,6 +79,8 @@ export interface OutboundLine {
   closing_remainder_g?: number;
   /** 해당 소비기한 라인만의 사용량(g) = 전일재고 + 출고량 - 당일잔량 (라인별 저장·표시용) */
   actual_usage_g?: number;
+  /** 추가 출고로 생긴 라인이면 additional_outbound_logs.id */
+  additional_outbound_log_id?: string;
 }
 
 /** 미리 구워놓은 파베이크 사용 한 줄 (수량 + 소비기한) */
@@ -494,6 +514,10 @@ function mapProductionLogFromDb(row: {
         prior_stock_g: o.prior_stock_g != null ? toNum(o.prior_stock_g) : undefined,
         closing_remainder_g: o.closing_remainder_g != null ? toNum(o.closing_remainder_g) : undefined,
         actual_usage_g: o.actual_usage_g != null ? toNum(o.actual_usage_g) : undefined,
+        additional_outbound_log_id:
+          typeof o.additional_outbound_log_id === "string" && o.additional_outbound_log_id
+            ? o.additional_outbound_log_id
+            : undefined,
       };
     });
   const rawParbake = Array.isArray(row.parbake_used_lines) ? row.parbake_used_lines as unknown[] : [];
@@ -1629,11 +1653,14 @@ export const useMasterStore = create<MasterState>((set, get) => ({
     };
     try {
       const rawLines = log.출고_라인 ?? [];
-      const 출고_라인 = rawLines.map((r) => ({
+      const 출고_라인: OutboundLine[] = rawLines.map((r) => ({
         소비기한: r.소비기한 ?? "",
         박스: safeNum(r.박스, 0),
         낱개: safeNum(r.낱개, 0),
         g: safeNum(r.g, 0),
+        ...(r.additional_outbound_log_id
+          ? { additional_outbound_log_id: r.additional_outbound_log_id }
+          : {}),
       }));
       const 출고_박스 = 출고_라인.reduce((s, r) => s + r.박스, 0);
       const 출고_낱개 = 출고_라인.reduce((s, r) => s + r.낱개, 0);
@@ -1750,11 +1777,14 @@ export const useMasterStore = create<MasterState>((set, get) => ({
       const n = Number(v);
       return Number.isFinite(n) ? n : d;
     };
-    const normalized = {
+    const normalized: OutboundLine = {
       소비기한: String(newLine.소비기한 ?? "").trim(),
       박스: safeNum(newLine.박스, 0),
       낱개: safeNum(newLine.낱개, 0),
       g: safeNum(newLine.g, 0),
+      ...(newLine.additional_outbound_log_id
+        ? { additional_outbound_log_id: newLine.additional_outbound_log_id }
+        : {}),
     };
     try {
       const log = get().productionLogs.find((x) => x.id === logId);
@@ -2037,9 +2067,11 @@ export const useMasterStore = create<MasterState>((set, get) => ({
 
   deleteProductionLogsByGroup: async (생산일자, 제품명) => {
     set({ saving: "logs", error: null });
-    const logIdsToVoid = get()
-      .productionLogs.filter((log) => log.생산일자 === 생산일자 && log.제품명 === 제품명)
-      .map((log) => log.id);
+    const groupLogs = get().productionLogs.filter(
+      (log) => log.생산일자 === 생산일자 && log.제품명 === 제품명
+    );
+    const logIdsToVoid = groupLogs.map((log) => log.id);
+    const historyIdsToCancel = groupLogs.flatMap((log) => linkedAdditionalOutboundIds(log.출고_라인));
     try {
       const [usageResult, logsResult] = await Promise.all([
         supabase
@@ -2065,6 +2097,7 @@ export const useMasterStore = create<MasterState>((set, get) => ({
         saving: "",
       }));
       for (const id of logIdsToVoid) labSyncOutboundVoid(id);
+      syncAdditionalOutboundHistory(() => cancelAdditionalOutboundHistory(historyIdsToCancel));
     } catch (err) {
       set({
         saving: "",
@@ -2162,6 +2195,12 @@ export const useMasterStore = create<MasterState>((set, get) => ({
         saving: "",
       }));
       if (synced) labSyncOutboundUpsert(synced);
+      const historyId = existing.additional_outbound_log_id;
+      if (historyId) {
+        syncAdditionalOutboundHistory(() =>
+          updateAdditionalOutboundHistoryQty(historyId, { boxQty: 박스, bagQty: 낱개, gQty: g })
+        );
+      }
     } catch (err) {
       set({
         saving: "",
@@ -2181,12 +2220,32 @@ export const useMasterStore = create<MasterState>((set, get) => ({
         Array.isArray(log.출고_라인) && log.출고_라인.length > 0
           ? log.출고_라인
           : [{ 소비기한: "", 박스: log.출고_박스 ?? 0, 낱개: log.출고_낱개 ?? 0, g: log.출고_g ?? 0 }];
+      const removedLine = current[lineIndex];
       const nextLines = current.filter((_, i) => i !== lineIndex);
+      const cancelRemovedLineHistory = () => {
+        if (!removedLine) return;
+        const linkedId = removedLine.additional_outbound_log_id;
+        syncAdditionalOutboundHistory(() =>
+          linkedId
+            ? cancelAdditionalOutboundHistory([linkedId])
+            : cancelUnlinkedAdditionalOutboundHistory({
+                productionDate: log.생산일자,
+                productName: log.제품명,
+                materialName: log.원료명,
+                lotExpiry: removedLine.소비기한 ?? "",
+                boxQty: removedLine.박스 ?? 0,
+                bagQty: removedLine.낱개 ?? 0,
+                gQty: removedLine.g ?? 0,
+                excludeIds: linkedAdditionalOutboundIds(nextLines),
+              })
+        );
+      };
       if (nextLines.length === 0) {
         const { error: e } = await supabase.from("production_logs").delete().eq("id", logId);
         if (e) throw e;
         set((s) => ({ productionLogs: s.productionLogs.filter((x) => x.id !== logId), saving: "" }));
         labSyncOutboundVoid(logId);
+        cancelRemovedLineHistory();
       } else {
         const 출고_박스 = nextLines.reduce((s, r) => s + r.박스, 0);
         const 출고_낱개 = nextLines.reduce((s, r) => s + r.낱개, 0);
@@ -2212,6 +2271,7 @@ export const useMasterStore = create<MasterState>((set, get) => ({
           saving: "",
         }));
         if (synced) labSyncOutboundUpsert(synced);
+        cancelRemovedLineHistory();
       }
     } catch (err) {
       set({
@@ -2224,6 +2284,9 @@ export const useMasterStore = create<MasterState>((set, get) => ({
 
   deleteProductionLog: async (logId) => {
     set({ saving: "logs", error: null });
+    const historyIdsToCancel = linkedAdditionalOutboundIds(
+      get().productionLogs.find((x) => x.id === logId)?.출고_라인
+    );
     try {
       const { error: e } = await supabase.from("production_logs").delete().eq("id", logId);
       if (e) throw e;
@@ -2232,6 +2295,7 @@ export const useMasterStore = create<MasterState>((set, get) => ({
         saving: "",
       }));
       labSyncOutboundVoid(logId);
+      syncAdditionalOutboundHistory(() => cancelAdditionalOutboundHistory(historyIdsToCancel));
     } catch (err) {
       set({
         saving: "",

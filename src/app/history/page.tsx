@@ -5,6 +5,7 @@ import { useMasterStore, type ProductionLog, type OutboundLine } from "@/store/u
 import DateWheelPicker from "@/components/DateWheelPicker";
 import { useAuth } from "@/contexts/AuthContext";
 import { insertAdditionalOutboundHistory } from "@/features/production/outbound/additionalOutboundHistory";
+import { createSafeId } from "@/lib/createSafeId";
 
 /** 박스/낱개/g → 총중량(g). g전용이면 boxG=0, unitG=0 → g만 */
 function totalGFromQty(
@@ -418,12 +419,13 @@ export default function OutboundHistoryPage() {
     낱개: number,
     g: number
   ) => {
+    const historyId = createSafeId();
     try {
       await addProductionLog({
         생산일자,
         제품명,
         원료명,
-        출고_라인: [{ 소비기한, 박스, 낱개, g }],
+        출고_라인: [{ 소비기한, 박스, 낱개, g, additional_outbound_log_id: historyId }],
         출고_박스: 0,
         출고_낱개: 0,
         출고_g: 0,
@@ -431,6 +433,7 @@ export default function OutboundHistoryPage() {
       });
       await setLastUsedDate(원료명, 소비기한);
       await insertAdditionalOutboundHistory({
+        id: historyId,
         organizationCode: orgCode,
         productionDate: 생산일자,
         productName: 제품명,

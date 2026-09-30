@@ -22,6 +22,7 @@ import {
   type InventoryLotOption,
 } from "@/features/production/outbound/inventoryLots";
 import { insertAdditionalOutboundHistory } from "@/features/production/outbound/additionalOutboundHistory";
+import { createSafeId } from "@/lib/createSafeId";
 import { useMasterStore, type OutboundLine } from "@/store/useMasterStore";
 
 function todayLocalIso(): string {
@@ -218,7 +219,14 @@ function AdditionalOutboundClient() {
       return;
     }
 
-    const newLine: OutboundLine = { 소비기한: expiry, 박스: box, 낱개: bag, g };
+    const historyId = createSafeId();
+    const newLine: OutboundLine = {
+      소비기한: expiry,
+      박스: box,
+      낱개: bag,
+      g,
+      additional_outbound_log_id: historyId,
+    };
     const plan = planAdditionalOutbound(productLogs, cleanMaterial);
     setPending(true);
     try {
@@ -238,6 +246,7 @@ function AdditionalOutboundClient() {
       }
       await setLastUsedDate(cleanMaterial, expiry);
       await insertAdditionalOutboundHistory({
+        id: historyId,
         organizationCode: orgCode,
         productionDate: date,
         productName,

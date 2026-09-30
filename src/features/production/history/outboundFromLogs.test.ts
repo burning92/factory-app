@@ -13,15 +13,15 @@ const materials = [
 
 function log(partial: Partial<ProductionLog> & Pick<ProductionLog, "id">): ProductionLog {
   return {
-    id: partial.id,
-    생산일자: partial.생산일자 ?? "2026-08-21",
-    제품명: partial.제품명 ?? "테스트",
-    원료명: partial.원료명 ?? "",
-    출고_박스: partial.출고_박스 ?? 0,
-    출고_낱개: partial.출고_낱개 ?? 0,
-    출고_g: partial.출고_g ?? 0,
+    생산일자: "2026-08-21",
+    제품명: "테스트",
+    원료명: "",
+    출고_박스: 0,
+    출고_낱개: 0,
+    출고_g: 0,
+    상태: "출고됨",
     ...partial,
-  };
+  } as ProductionLog;
 }
 
 describe("getOutboundLinesFromLog", () => {
