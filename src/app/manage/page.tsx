@@ -45,6 +45,7 @@ interface ProfileRow {
   is_active: boolean;
   must_change_password: boolean;
   include_in_field_headcount: boolean;
+  can_manage_leave: boolean;
   /** Supabase relation: 단일 객체 또는 배열로 올 수 있음 */
   organizations?: { organization_code: string; name: string } | { organization_code: string; name: string }[] | null;
 }
@@ -81,7 +82,7 @@ export default function ManagePage() {
   const loadProfiles = useCallback(async () => {
     const { data, error: e } = await supabase
       .from("profiles")
-      .select("id, organization_id, login_id, display_name, role, is_active, must_change_password, include_in_field_headcount, organizations(organization_code, name)");
+      .select("id, organization_id, login_id, display_name, role, is_active, must_change_password, include_in_field_headcount, can_manage_leave, organizations(organization_code, name)");
     if (e) {
       setError(e.message);
       return;
@@ -106,6 +107,7 @@ export default function ManagePage() {
   const [showInitialPassword, setShowInitialPassword] = useState(false);
   const [savingRoleId, setSavingRoleId] = useState<string | null>(null);
   const [savingHeadcountId, setSavingHeadcountId] = useState<string | null>(null);
+  const [savingLeavePermId, setSavingLeavePermId] = useState<string | null>(null);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [userSearch, setUserSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("");
@@ -242,6 +244,18 @@ export default function ManagePage() {
       .update({ include_in_field_headcount: !pro.include_in_field_headcount })
       .eq("id", pro.id);
     setSavingHeadcountId(null);
+    if (e) setError(e.message);
+    else loadProfiles();
+  }
+
+  async function toggleLeavePermission(pro: ProfileRow) {
+    setError(null);
+    setSavingLeavePermId(pro.id);
+    const { error: e } = await supabase
+      .from("profiles")
+      .update({ can_manage_leave: !pro.can_manage_leave })
+      .eq("id", pro.id);
+    setSavingLeavePermId(null);
     if (e) setError(e.message);
     else loadProfiles();
   }
@@ -473,7 +487,7 @@ export default function ManagePage() {
         </div>
 
         <div className="mb-6 overflow-x-auto rounded-lg border border-slate-700/80 -mx-1 sm:mx-0">
-          <table className="w-full min-w-[760px] text-left text-sm text-slate-300">
+          <table className="w-full min-w-[860px] text-left text-sm text-slate-300">
             <thead>
               <tr className="border-b border-slate-600 bg-space-900/90 text-xs font-medium uppercase tracking-wide text-slate-500">
                 <th className="px-3 py-2.5 whitespace-nowrap">아이디</th>
@@ -482,13 +496,14 @@ export default function ManagePage() {
                 <th className="px-3 py-2.5 whitespace-nowrap min-w-[8rem]">권한</th>
                 <th className="px-3 py-2.5 whitespace-nowrap">상태</th>
                 <th className="px-3 py-2.5 whitespace-nowrap">총원</th>
+                <th className="px-3 py-2.5 whitespace-nowrap">연월차 권한</th>
                 <th className="px-3 py-2.5 text-right whitespace-nowrap min-w-[12rem]">작업</th>
               </tr>
             </thead>
             <tbody>
               {displayedProfiles.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
+                  <td colSpan={8} className="px-4 py-10 text-center text-slate-500">
                     조건에 맞는 사용자가 없습니다. 검색어나 필터를 바꿔 보세요.
                   </td>
                 </tr>
@@ -561,6 +576,26 @@ export default function ManagePage() {
                             ? "총원에서 빼기"
                             : "총원에 넣기"}
                       </button>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      {isAdminLikeRole(p.role) ? (
+                        <span className="text-[11px] text-slate-500">전체(관리자급)</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void toggleLeavePermission(p)}
+                          disabled={submitting || savingLeavePermId === p.id}
+                          className={`rounded px-1.5 py-0.5 text-[11px] font-medium disabled:opacity-50 ${
+                            p.can_manage_leave
+                              ? "bg-violet-500/20 text-violet-200 hover:bg-violet-500/30"
+                              : "bg-slate-700/60 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+                          }`}
+                          aria-pressed={p.can_manage_leave}
+                          title="켜면 소속 사업장 직원의 연월차를 관리할 수 있습니다."
+                        >
+                          {savingLeavePermId === p.id ? "저장…" : p.can_manage_leave ? "부여됨 (해제)" : "부여하기"}
+                        </button>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1">

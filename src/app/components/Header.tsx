@@ -6,7 +6,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { SHOW_ORGANIZATION_VIEW_SWITCHER } from "@/lib/featureFlags";
-import { isAdminLikeRole, isManagerOrAbove } from "@/lib/roles";
+import { canAccessLeaveManagement, isAdminLikeRole, isManagerOrAbove } from "@/lib/roles";
 
 const HARANG_PEOPLE_ICON_SRC = "/harang/people-icon.png";
 const ARMORED_LOGO_SRC = "/apple-icon.png";
@@ -134,16 +134,21 @@ export default function Header() {
   const desktopMaterialsItems: DropdownItem[] = isRestrictedWorker
     ? WORKER_DESKTOP_MATERIALS
     : DESKTOP_DROPDOWN_MATERIALS;
+  const canManageLeave = canAccessLeaveManagement(profile);
   const desktopManagementItems: DropdownItem[] = useMemo(
-    () => [
-      ...DESKTOP_DROPDOWN_MANAGEMENT,
-      { href: "/admin/material-stock-lab", label: "재고 장부 테스트(Lab)" },
-    ],
-    []
+    () =>
+      isAdmin
+        ? [
+            ...DESKTOP_DROPDOWN_MANAGEMENT,
+            { href: "/admin/material-stock-lab", label: "재고 장부 테스트(Lab)" },
+          ]
+        : [{ href: "/manage/leave", label: "연월차관리" }],
+    [isAdmin]
   );
+  const showManagementDropdown = isAdmin || canManageLeave;
   const desktopNavDropdownKeys: DropdownKey[] = isRestrictedWorker
-    ? ["production", "materials"]
-    : ["production", "materials", "daily", ...(isAdmin ? (["management"] as const) : [])];
+    ? ["production", "materials", ...(showManagementDropdown ? (["management"] as const) : [])]
+    : ["production", "materials", "daily", ...(showManagementDropdown ? (["management"] as const) : [])];
   /** 임원 대시보드: 로그인 사용자 전원(100 조직 보기 시) */
   const showExecutiveLink = !viewIsHarang;
 

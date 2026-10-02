@@ -137,6 +137,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       must_change_password: profileRow.must_change_password ?? true,
     };
 
+    // 컬럼 미적용 환경에서도 로그인이 깨지지 않도록 별도 조회
+    const { data: leaveFlagRow, error: leaveFlagError } = await supabase
+      .from("profiles")
+      .select("can_manage_leave")
+      .eq("id", effectiveUserId)
+      .maybeSingle();
+    profile.can_manage_leave = !leaveFlagError && leaveFlagRow?.can_manage_leave === true;
+
     // 2단계: profile.organization_id로 organizations 1건 조회 후, 필요 시 organization_ui_settings 조회 (join 없음)
     const { data: orgRow } = await supabase
       .from("organizations")

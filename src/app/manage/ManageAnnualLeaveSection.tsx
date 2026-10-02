@@ -208,7 +208,10 @@ export default function ManageAnnualLeaveSection({ profiles }: { profiles: Manag
     const hire_date = raw.length > 0 ? raw : null;
     setSavingHireId(profileId);
     setError(null);
-    const { error: e } = await supabase.from("profiles").update({ hire_date }).eq("id", profileId);
+    const { error: e } = await supabase.rpc("set_profile_hire_date", {
+      target_profile_id: profileId,
+      new_hire_date: hire_date,
+    });
     setSavingHireId(null);
     if (e) {
       setError(e.message);

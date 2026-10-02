@@ -10,6 +10,8 @@ export interface Profile {
   role: "worker" | "assistant_manager" | "manager" | "quality_manager" | "headquarters" | "admin";
   is_active: boolean;
   must_change_password: boolean;
+  /** 연월차 관리 권한(자기 조직 한정). admin급은 이 값과 무관 */
+  can_manage_leave?: boolean;
 }
 
 /** organizations 테이블 행 (조회용) */

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
-import { isAdminLikeRole } from "@/lib/roles";
+import { canAccessLeaveManagement, isAdminLikeRole } from "@/lib/roles";
 import ManageAnnualLeaveSection, { type ManageLeaveProfileRow } from "../ManageAnnualLeaveSection";
 
 type OrgRow = {
@@ -19,6 +19,9 @@ type LeaveProfileWithActive = ManageLeaveProfileRow & {
 
 export default function ManageLeavePage() {
   const { profile } = useAuth();
+  const isAdminLike = isAdminLikeRole(profile?.role);
+  const canAccess = canAccessLeaveManagement(profile);
+  const myOrgId = profile?.organization_id ?? "";
   const [orgs, setOrgs] = useState<OrgRow[]>([]);
   const [profiles, setProfiles] = useState<ManageLeaveProfileRow[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState("");
@@ -28,12 +31,14 @@ export default function ManageLeavePage() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    let profileQuery = supabase
+      .from("profiles")
+      .select("id,login_id,display_name,organization_id,is_active,hire_date,organizations(organization_code, name)")
+      .order("login_id");
+    if (!isAdminLike) profileQuery = profileQuery.eq("organization_id", myOrgId);
     const [orgRes, profileRes] = await Promise.all([
       supabase.from("organizations").select("id,organization_code,name").order("organization_code"),
-      supabase
-        .from("profiles")
-        .select("id,login_id,display_name,organization_id,is_active,hire_date,organizations(organization_code, name)")
-        .order("login_id"),
+      profileQuery,
     ]);
     if (orgRes.error) {
       setError(orgRes.error.message);
@@ -60,19 +65,19 @@ export default function ManageLeavePage() {
     });
     setProfiles(activeProfiles as ManageLeaveProfileRow[]);
     setLoading(false);
-  }, []);
+  }, [isAdminLike, myOrgId]);
 
   useEffect(() => {
-    if (!isAdminLikeRole(profile?.role)) return;
+    if (!canAccess) return;
     load();
-  }, [profile?.role, load]);
+  }, [canAccess, load]);
 
   const filteredProfiles = useMemo(
     () => (selectedOrgId ? profiles.filter((p) => p.organization_id === selectedOrgId) : profiles),
     [profiles, selectedOrgId]
   );
 
-  if (!isAdminLikeRole(profile?.role)) {
+  if (!canAccess) {
     return (
       <div className="p-6">
         <p className="text-slate-500">권한이 없습니다.</p>
@@ -93,9 +98,13 @@ export default function ManageLeavePage() {
       <div>
         <h1 className="text-2xl font-bold text-slate-100">관리 (연월차)</h1>
         <p className="text-sm text-slate-400 mt-1">
-          <Link href="/manage" className="text-cyan-400 hover:text-cyan-300">
-            사용자관리로 이동
-          </Link>
+          {isAdminLike ? (
+            <Link href="/manage" className="text-cyan-400 hover:text-cyan-300">
+              사용자관리로 이동
+            </Link>
+          ) : (
+            "소속 사업장 직원만 표시됩니다."
+          )}
         </p>
       </div>
 
@@ -105,21 +114,23 @@ export default function ManageLeavePage() {
         </p>
       ) : null}
 
-      <section className="rounded-xl border border-slate-700 bg-space-800/80 p-4">
-        <label className="block text-xs text-slate-400 mb-1">조직 필터</label>
-        <select
-          value={selectedOrgId}
-          onChange={(e) => setSelectedOrgId(e.target.value)}
-          className="px-3 py-2 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100"
-        >
-          <option value="">전체</option>
-          {orgs.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.organization_code}
-            </option>
-          ))}
-        </select>
-      </section>
+      {isAdminLike ? (
+        <section className="rounded-xl border border-slate-700 bg-space-800/80 p-4">
+          <label className="block text-xs text-slate-400 mb-1">조직 필터</label>
+          <select
+            value={selectedOrgId}
+            onChange={(e) => setSelectedOrgId(e.target.value)}
+            className="px-3 py-2 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100"
+          >
+            <option value="">전체</option>
+            {orgs.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.organization_code}
+              </option>
+            ))}
+          </select>
+        </section>
+      ) : null}
 
       <ManageAnnualLeaveSection profiles={filteredProfiles} />
     </div>
