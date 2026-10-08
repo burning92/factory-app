@@ -40,12 +40,16 @@ type LogHeader = {
   am_temp_topping_refrigerator_c: number | null;
   am_temp_blast_freezer_1_c: number | null;
   am_temp_blast_freezer_2_c: number | null;
+  am_temp_floor3_aging_c: number | null;
+  am_temp_floor3_blast_freezer_c: number | null;
   pm_temp_floor1_refrigerator_c: number | null;
   pm_temp_floor1_freezer_c: number | null;
   pm_temp_dough_aging_c: number | null;
   pm_temp_topping_refrigerator_c: number | null;
   pm_temp_blast_freezer_1_c: number | null;
   pm_temp_blast_freezer_2_c: number | null;
+  pm_temp_floor3_aging_c: number | null;
+  pm_temp_floor3_blast_freezer_c: number | null;
 };
 
 type LogItem = {
@@ -83,6 +87,8 @@ const AM_KEY: Record<ColdStorageTempKey, keyof LogHeader> = {
   topping_refrigerator: "am_temp_topping_refrigerator_c",
   blast_freezer_1: "am_temp_blast_freezer_1_c",
   blast_freezer_2: "am_temp_blast_freezer_2_c",
+  floor3_aging: "am_temp_floor3_aging_c",
+  floor3_blast_freezer: "am_temp_floor3_blast_freezer_c",
 };
 
 const PM_KEY: Record<ColdStorageTempKey, keyof LogHeader> = {
@@ -92,6 +98,8 @@ const PM_KEY: Record<ColdStorageTempKey, keyof LogHeader> = {
   topping_refrigerator: "pm_temp_topping_refrigerator_c",
   blast_freezer_1: "pm_temp_blast_freezer_1_c",
   blast_freezer_2: "pm_temp_blast_freezer_2_c",
+  floor3_aging: "pm_temp_floor3_aging_c",
+  floor3_blast_freezer: "pm_temp_floor3_blast_freezer_c",
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

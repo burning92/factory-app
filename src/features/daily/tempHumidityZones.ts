@@ -9,7 +9,10 @@ export type TempHumidityZone = {
   maxHumidityPct: number;
 };
 
-/** 표시·저장(zone_index) 순서: 1 가열실 … 9 토핑실 */
+/**
+ * 표시·저장(zone_index) 순서: 1 가열실 … 9 토핑실, 10~12 3층 구역.
+ * zone_index는 배열 위치로 저장되므로 기존 항목 순서를 바꾸지 말고 새 구역은 끝에만 추가할 것.
+ */
 export const TEMP_HUMIDITY_ZONES: TempHumidityZone[] = [
   { id: "heating", name: "가열실", maxTempC: 35, maxHumidityPct: 80 },
   { id: "forming", name: "성형실", maxTempC: 30, maxHumidityPct: 80 },
@@ -20,4 +23,7 @@ export const TEMP_HUMIDITY_ZONES: TempHumidityZone[] = [
   { id: "sorting", name: "선별실", maxTempC: 30, maxHumidityPct: 80 },
   { id: "inner_pack", name: "내포장실", maxTempC: 25, maxHumidityPct: 80 },
   { id: "topping", name: "토핑실", maxTempC: 25, maxHumidityPct: 80 },
+  { id: "forming_3f", name: "3층 성형실", maxTempC: 30, maxHumidityPct: 80 },
+  { id: "inner_pack_3f", name: "3층 내포장실", maxTempC: 25, maxHumidityPct: 80 },
+  { id: "dough_3f", name: "3층 도우실", maxTempC: 25, maxHumidityPct: 80 },
 ];

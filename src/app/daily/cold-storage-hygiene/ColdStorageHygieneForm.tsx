@@ -77,12 +77,16 @@ type HeaderRow = {
   am_temp_topping_refrigerator_c: number | null;
   am_temp_blast_freezer_1_c: number | null;
   am_temp_blast_freezer_2_c: number | null;
+  am_temp_floor3_aging_c: number | null;
+  am_temp_floor3_blast_freezer_c: number | null;
   pm_temp_floor1_refrigerator_c: number | null;
   pm_temp_floor1_freezer_c: number | null;
   pm_temp_dough_aging_c: number | null;
   pm_temp_topping_refrigerator_c: number | null;
   pm_temp_blast_freezer_1_c: number | null;
   pm_temp_blast_freezer_2_c: number | null;
+  pm_temp_floor3_aging_c: number | null;
+  pm_temp_floor3_blast_freezer_c: number | null;
 };
 
 function headerToAmPm(header: HeaderRow): {
@@ -101,6 +105,8 @@ function headerToAmPm(header: HeaderRow): {
       topping_refrigerator: formatNumForInput(header.am_temp_topping_refrigerator_c),
       blast_freezer_1: formatNumForInput(header.am_temp_blast_freezer_1_c),
       blast_freezer_2: formatNumForInput(header.am_temp_blast_freezer_2_c),
+      floor3_aging: formatNumForInput(header.am_temp_floor3_aging_c),
+      floor3_blast_freezer: formatNumForInput(header.am_temp_floor3_blast_freezer_c),
     },
     pm: {
       floor1_refrigerator: formatNumForInput(header.pm_temp_floor1_refrigerator_c),
@@ -109,6 +115,8 @@ function headerToAmPm(header: HeaderRow): {
       topping_refrigerator: formatNumForInput(header.pm_temp_topping_refrigerator_c),
       blast_freezer_1: formatNumForInput(header.pm_temp_blast_freezer_1_c),
       blast_freezer_2: formatNumForInput(header.pm_temp_blast_freezer_2_c),
+      floor3_aging: formatNumForInput(header.pm_temp_floor3_aging_c),
+      floor3_blast_freezer: formatNumForInput(header.pm_temp_floor3_blast_freezer_c),
     },
   };
 }
@@ -128,12 +136,16 @@ function buildTempHeaderPatch(
     am_temp_topping_refrigerator_c: parseOptionalNum(am.topping_refrigerator),
     am_temp_blast_freezer_1_c: parseOptionalNum(am.blast_freezer_1),
     am_temp_blast_freezer_2_c: parseOptionalNum(am.blast_freezer_2),
+    am_temp_floor3_aging_c: parseOptionalNum(am.floor3_aging),
+    am_temp_floor3_blast_freezer_c: parseOptionalNum(am.floor3_blast_freezer),
     pm_temp_floor1_refrigerator_c: parseOptionalNum(pm.floor1_refrigerator),
     pm_temp_floor1_freezer_c: parseOptionalNum(pm.floor1_freezer),
     pm_temp_dough_aging_c: parseOptionalNum(pm.dough_aging),
     pm_temp_topping_refrigerator_c: parseOptionalNum(pm.topping_refrigerator),
     pm_temp_blast_freezer_1_c: parseOptionalNum(pm.blast_freezer_1),
     pm_temp_blast_freezer_2_c: parseOptionalNum(pm.blast_freezer_2),
+    pm_temp_floor3_aging_c: parseOptionalNum(pm.floor3_aging),
+    pm_temp_floor3_blast_freezer_c: parseOptionalNum(pm.floor3_blast_freezer),
   };
 }
 
@@ -223,7 +235,7 @@ export function ColdStorageHygieneForm({ mode, editLogId }: Props) {
       const { data: logData, error } = await supabase
         .from("daily_cold_storage_hygiene_logs")
         .select(
-          "id, inspection_date, status, corrective_datetime, corrective_deviation, corrective_detail, corrective_remarks, corrective_actor, am_measure_time, pm_measure_time, am_temp_floor1_refrigerator_c, am_temp_floor1_freezer_c, am_temp_dough_aging_c, am_temp_topping_refrigerator_c, am_temp_blast_freezer_1_c, am_temp_blast_freezer_2_c, pm_temp_floor1_refrigerator_c, pm_temp_floor1_freezer_c, pm_temp_dough_aging_c, pm_temp_topping_refrigerator_c, pm_temp_blast_freezer_1_c, pm_temp_blast_freezer_2_c"
+          "id, inspection_date, status, corrective_datetime, corrective_deviation, corrective_detail, corrective_remarks, corrective_actor, am_measure_time, pm_measure_time, am_temp_floor1_refrigerator_c, am_temp_floor1_freezer_c, am_temp_dough_aging_c, am_temp_topping_refrigerator_c, am_temp_blast_freezer_1_c, am_temp_blast_freezer_2_c, am_temp_floor3_aging_c, am_temp_floor3_blast_freezer_c, pm_temp_floor1_refrigerator_c, pm_temp_floor1_freezer_c, pm_temp_dough_aging_c, pm_temp_topping_refrigerator_c, pm_temp_blast_freezer_1_c, pm_temp_blast_freezer_2_c, pm_temp_floor3_aging_c, pm_temp_floor3_blast_freezer_c"
         )
         .eq("id", editLogId)
         .maybeSingle();
