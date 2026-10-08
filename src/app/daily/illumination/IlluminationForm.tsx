@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import {
   ILLUMINATION_CHECKLIST,
+  type IlluminationChecklistItem,
   conformityFromLux,
   parseLux,
 } from "@/features/daily/illuminationChecklist";
@@ -56,6 +57,8 @@ export function IlluminationForm({ mode, editLogId }: Props) {
   const { user, profile, viewOrganizationCode } = useAuth();
   const [inspectionDate, setInspectionDate] = useState(todayDateString);
   const [luxByIndex, setLuxByIndex] = useState<Record<number, string>>({});
+  /** 수정 시에는 저장 당시의 항목 구성·이름·기준을 그대로 사용 (이후 설정 변경이 과거 일지에 반영되지 않도록) */
+  const [storedItems, setStoredItems] = useState<IlluminationChecklistItem[] | null>(null);
   const [corrective, setCorrective] = useState<CorrectiveState>({
     datetime: "",
     deviation: "",
@@ -75,12 +78,12 @@ export function IlluminationForm({ mode, editLogId }: Props) {
   const inspectorName = (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
 
   const evaluatedRows = useMemo(() => {
-    return ILLUMINATION_CHECKLIST.map((item) => {
+    return (storedItems ?? ILLUMINATION_CHECKLIST).map((item) => {
       const measuredLux = parseLux(luxByIndex[item.index] ?? "");
       const conformity = conformityFromLux(measuredLux, item.minLux);
       return { ...item, measuredLux, conformity };
     });
-  }, [luxByIndex]);
+  }, [luxByIndex, storedItems]);
 
   const hasAnyNonConform = evaluatedRows.some((row) => row.conformity === "X");
   const hasAnyMissingLux = evaluatedRows.some((row) => row.measuredLux == null);
@@ -172,15 +175,26 @@ export function IlluminationForm({ mode, editLogId }: Props) {
 
       const { data: itemData } = await supabase
         .from("daily_illumination_log_items")
-        .select("item_index, measured_lux")
+        .select("item_index, item_label, min_lux, measured_lux")
         .eq("log_id", log.id)
         .order("item_index", { ascending: true });
       if (cancelled) return;
+      const stored = (itemData ?? []) as {
+        item_index: number;
+        item_label: string;
+        min_lux: number;
+        measured_lux: number | null;
+      }[];
       const next: Record<number, string> = {};
-      (itemData ?? []).forEach((row: { item_index: number; measured_lux: number | null }) => {
+      stored.forEach((row) => {
         next[row.item_index] = row.measured_lux == null ? "" : String(row.measured_lux);
       });
       setLuxByIndex(next);
+      setStoredItems(
+        stored.length > 0
+          ? stored.map((row) => ({ index: row.item_index, label: row.item_label, minLux: row.min_lux }))
+          : null
+      );
       setLoadDone(true);
     })();
     return () => {

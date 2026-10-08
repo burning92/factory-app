@@ -26,8 +26,11 @@ export const ILLUMINATION_CHECKLIST: IlluminationChecklistItem[] = [
   { index: 18, label: "3층 도우 숙성고 구역2 중앙 바닥에서 80 cm 위", minLux: 110 },
   { index: 19, label: "3층 성형실 작업대 위", minLux: 220 },
   { index: 20, label: "3층 도우실 중앙 바닥에서 80 cm 위", minLux: 220 },
-  { index: 21, label: "3층 내포장실 작업대 위", minLux: 540 },
+  { index: 21, label: "3층 내포장실 삼면포장기 작업 위치", minLux: 540 },
   { index: 22, label: "3층 세척실 중앙 바닥에서 80 cm 위", minLux: 220 },
+  { index: 23, label: "3층 부자재창고 중앙 바닥에서 80 cm 위", minLux: 110 },
+  { index: 24, label: "3층 내포장실 금속검출기 2호기 작업 위치", minLux: 540 },
+  { index: 25, label: "2층 금속검출실 작업대 위", minLux: 540 },
 ];
 
 export function parseLux(value: string): number | null {

@@ -33,7 +33,7 @@ export const COLD_STORAGE_TEMPERATURE_DEFS: ColdStorageTempDef[] = [
   { key: "blast_freezer_1", label: "급속냉동고 1", kind: "freezer_le30", autoNegative: true },
   { key: "blast_freezer_2", label: "급속냉동고 2", kind: "freezer_le30", autoNegative: true },
   { key: "floor3_aging", label: "3층 도우숙성고", kind: "chill_0_10", autoNegative: false },
-  { key: "floor3_blast_freezer", label: "3층 급속냉동고", kind: "freezer_le30", autoNegative: true },
+  { key: "floor3_blast_freezer", label: "3층 급속냉동고 3호기", kind: "freezer_le30", autoNegative: true },
 ];
 
 export const COLD_STORAGE_FREEZER_KEYS = new Set<ColdStorageTempKey>(
