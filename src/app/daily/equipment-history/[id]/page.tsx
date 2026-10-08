@@ -13,6 +13,7 @@ import {
 } from "@/features/equipment/equipmentHistoryPermissions";
 import { deleteEquipmentHistoryRecord, deleteEquipmentHistoryUpdate } from "@/features/equipment/equipmentHistoryMutations";
 import type { EquipmentHistoryRecordRow, EquipmentHistoryUpdateRow, EquipmentMasterRow } from "@/features/equipment/equipmentTypes";
+import { IncidentMetaBadges } from "../IncidentMetaFields";
 
 const fieldClass =
   "w-full px-3 py-2 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500";
@@ -274,7 +275,10 @@ export default function EquipmentHistoryDetailPage() {
 
       <section className="rounded-xl border border-slate-700/60 bg-slate-800/40 p-4 mb-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-slate-300">초기 기록</h2>
+          <h2 className="text-sm font-semibold text-slate-300 flex flex-wrap items-center gap-2">
+            초기 기록
+            <IncidentMetaBadges incidentType={record.incident_type} hasProductionImpact={record.has_production_impact} />
+          </h2>
           <span className={`text-xs font-medium px-2 py-0.5 rounded ${record.closure_status === "closed" ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-200"}`}>
             {record.closure_status === "closed" ? "완료" : "진행 중"}
           </span>
@@ -288,6 +292,39 @@ export default function EquipmentHistoryDetailPage() {
             <dt className="text-slate-500">고장내용</dt>
             <dd className="text-slate-200 whitespace-pre-wrap">{record.issue_detail}</dd>
           </div>
+          {(record.incident_type || record.has_production_impact != null || record.resumed_at) && (
+            <div className="grid gap-2 sm:grid-cols-3">
+              <div>
+                <dt className="text-slate-500">구분</dt>
+                <dd className="text-slate-200">{record.incident_type ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">생산영향</dt>
+                <dd className="text-slate-200">
+                  {record.has_production_impact == null ? "—" : record.has_production_impact ? "있음" : "없음"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">재가동일시</dt>
+                <dd className="text-slate-200 tabular-nums">
+                  {record.resumed_at ? new Date(record.resumed_at).toLocaleString("ko-KR") : "—"}
+                </dd>
+              </div>
+            </div>
+          )}
+          {record.linked_inspection_id && (
+            <div>
+              <dt className="text-slate-500">점검일지 연동</dt>
+              <dd>
+                <Link
+                  href={`/daily/manufacturing-equipment/${record.linked_inspection_id}`}
+                  className="text-cyan-400 hover:text-cyan-300"
+                >
+                  제조설비 점검일지 보기
+                </Link>
+              </dd>
+            </div>
+          )}
           <div>
             <dt className="text-slate-500">응급조치</dt>
             <dd className="text-slate-300 whitespace-pre-wrap">{record.emergency_action ?? "—"}</dd>

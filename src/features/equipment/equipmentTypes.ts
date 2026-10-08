@@ -44,6 +44,12 @@ export type EquipmentHistoryRecordRow = {
   repair_detail: string | null;
   notes: string | null;
   closure_status: "ongoing" | "closed";
+  incident_type?: EquipmentIncidentKind | null;
+  has_production_impact?: boolean | null;
+  resumed_at?: string | null;
+  linked_inspection_id?: string | null;
+  linked_inspection_item_id?: string | null;
+  legacy_incident_id?: string | null;
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -51,6 +57,9 @@ export type EquipmentHistoryRecordRow = {
   updated_by: string | null;
   equipment_master?: EquipmentMasterRow | null;
 };
+
+export const EQUIPMENT_INCIDENT_KINDS = ["이상", "고장", "가동중지"] as const;
+export type EquipmentIncidentKind = (typeof EQUIPMENT_INCIDENT_KINDS)[number];
 
 export type EquipmentHistoryUpdateRow = {
   id: string;

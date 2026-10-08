@@ -5,10 +5,38 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
-import { formatEquipmentMasterListLabel } from "@/features/equipment/equipmentDisplay";
+import { formatEquipmentMasterListLabel, groupEquipmentMastersByFloor } from "@/features/equipment/equipmentDisplay";
 import { isEquipmentSelectableForHistory } from "@/features/equipment/equipmentConstants";
 import { canWriteEquipmentHistory } from "@/features/equipment/equipmentHistoryPermissions";
 import type { EquipmentMasterRow } from "@/features/equipment/equipmentTypes";
+import {
+  EMPTY_INCIDENT_META,
+  IncidentMetaFields,
+  incidentMetaToPayload,
+  type IncidentMetaState,
+} from "../IncidentMetaFields";
+
+/** 제조설비 점검일지 등에서 넘어올 때의 초기값 (?group=화덕&floor=2층&detail=…&inspection=…&type=이상) */
+type Prefill = {
+  equipmentId: string;
+  group: string;
+  floor: string;
+  detail: string;
+  inspectionId: string;
+  incidentType: string;
+};
+
+function readPrefill(): Prefill {
+  const q = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search);
+  return {
+    equipmentId: q.get("equipment_id") ?? "",
+    group: q.get("group") ?? "",
+    floor: q.get("floor") ?? "",
+    detail: q.get("detail") ?? "",
+    inspectionId: q.get("inspection") ?? "",
+    incidentType: q.get("type") ?? "",
+  };
+}
 
 const fieldClass =
   "w-full px-3 py-2 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500";
@@ -32,6 +60,32 @@ export default function EquipmentHistoryNewPage() {
   const [emergencyAction, setEmergencyAction] = useState("");
   const [repairDetail, setRepairDetail] = useState("");
   const [notes, setNotes] = useState("");
+  const [meta, setMeta] = useState<IncidentMetaState>(EMPTY_INCIDENT_META);
+  const [prefill, setPrefill] = useState<Prefill | null>(null);
+
+  useEffect(() => {
+    const p = readPrefill();
+    setPrefill(p);
+    if (p.detail) setIssueDetail(p.detail);
+    if (p.incidentType === "이상" || p.incidentType === "고장" || p.incidentType === "가동중지") {
+      setMeta((m) => ({ ...m, incidentType: p.incidentType as IncidentMetaState["incidentType"] }));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!prefill || equipmentId || masters.length === 0) return;
+    const byId = prefill.equipmentId && masters.find((m) => m.id === prefill.equipmentId);
+    const byGroup =
+      prefill.group &&
+      masters.find(
+        (m) =>
+          m.dashboard_group === prefill.group &&
+          isEquipmentSelectableForHistory(m) &&
+          (!prefill.floor || m.floor_label === prefill.floor)
+      );
+    const hit = byId || byGroup;
+    if (hit) setEquipmentId(hit.id);
+  }, [prefill, masters, equipmentId]);
 
   const loadMasters = useCallback(async () => {
     setLoading(true);
@@ -86,6 +140,8 @@ export default function EquipmentHistoryNewPage() {
         repair_detail: repairDetail.trim() || null,
         notes: notes.trim() || null,
         closure_status: "ongoing",
+        ...incidentMetaToPayload(meta),
+        linked_inspection_id: prefill?.inspectionId || null,
         created_by: user?.id ?? null,
         created_by_name: authorName || null,
         updated_at: new Date().toISOString(),
@@ -110,6 +166,9 @@ export default function EquipmentHistoryNewPage() {
         ← 목록
       </Link>
       <h1 className="text-lg font-semibold text-slate-100 mt-2 mb-4">새 이력 작성</h1>
+      {prefill?.inspectionId && (
+        <p className="mb-3 text-xs text-cyan-300/90">제조설비 점검일지 부적합 항목과 연동된 이력으로 저장됩니다.</p>
+      )}
 
       {err && (
         <p className="mb-3 text-sm text-red-400" role="alert">
@@ -144,15 +203,19 @@ export default function EquipmentHistoryNewPage() {
               required
             >
               <option value="">선택</option>
-              {masters.map((m) => {
-                const ls = m.lifecycle_status ?? (m.is_active ? "운영중" : "미운영");
-                return (
-                  <option key={m.id} value={m.id}>
-                    {formatEquipmentMasterListLabel(m)}
-                    {!isEquipmentSelectableForHistory(m) ? ` (${ls})` : ""}
-                  </option>
-                );
-              })}
+              {groupEquipmentMastersByFloor(masters).map((g) => (
+                <optgroup key={g.floor} label={g.floor}>
+                  {g.items.map((m) => {
+                    const ls = m.lifecycle_status ?? (m.is_active ? "운영중" : "미운영");
+                    return (
+                      <option key={m.id} value={m.id}>
+                        {formatEquipmentMasterListLabel(m)}
+                        {!isEquipmentSelectableForHistory(m) ? ` (${ls})` : ""}
+                      </option>
+                    );
+                  })}
+                </optgroup>
+              ))}
             </select>
           </div>
           <div>
@@ -168,6 +231,7 @@ export default function EquipmentHistoryNewPage() {
               required
             />
           </div>
+          <IncidentMetaFields value={meta} onChange={setMeta} fieldClass={fieldClass} />
           <div>
             <label className="block text-xs font-medium text-slate-400 mb-1">응급조치 (선택)</label>
             <textarea className={`${fieldClass} min-h-[72px]`} value={emergencyAction} onChange={(e) => setEmergencyAction(e.target.value)} />

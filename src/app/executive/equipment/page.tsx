@@ -12,7 +12,7 @@ import {
   type ExecutiveEquipmentGroupDetail,
   type ExecutiveEquipmentHistoryDetail,
 } from "@/features/equipment/executiveEquipmentHistory";
-import { canRegisterEquipmentIncident } from "@/features/daily/equipmentIncidentPermissions";
+import { canWriteEquipmentHistory } from "@/features/equipment/equipmentHistoryPermissions";
 import { DashboardBackLink } from "../DashboardBackLink";
 import type { EquipmentIssueRow } from "@/features/dashboard/climateAndEquipment";
 
@@ -157,7 +157,7 @@ export default function ExecutiveEquipmentDetailPage() {
   const { profile, viewOrganizationCode, loading: authLoading } = useAuth();
   const orgCode = viewOrganizationCode ?? "100";
   const canView = !!profile;
-  const canRegisterIncident = canRegisterEquipmentIncident(profile?.role);
+  const canRegisterIncident = canWriteEquipmentHistory(profile?.role);
 
   const [issues, setIssues] = useState<EquipmentIssueRow[]>([]);
   const [historyDetail, setHistoryDetail] = useState<{
@@ -215,18 +215,12 @@ export default function ExecutiveEquipmentDetailPage() {
           </Link>
           {canRegisterIncident && (
             <Link
-              href="/daily/manufacturing-equipment/incident/new"
+              href="/daily/equipment-history/new"
               className="shrink-0 whitespace-nowrap rounded-lg border border-amber-600/40 bg-amber-950/30 px-3 py-2 text-sm font-medium text-amber-200 hover:bg-amber-950/50"
             >
-              설비 이상 등록
+              설비 이력 등록
             </Link>
           )}
-          <Link
-            href="/daily/manufacturing-equipment/incidents"
-            className="shrink-0 whitespace-nowrap rounded-lg border border-slate-600/70 bg-slate-900/50 px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800/80"
-          >
-            설비 이상 이력
-          </Link>
         </div>
       </div>
 

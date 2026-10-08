@@ -5,10 +5,17 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
-import { formatEquipmentMasterListLabel } from "@/features/equipment/equipmentDisplay";
+import { formatEquipmentMasterListLabel, groupEquipmentMastersByFloor } from "@/features/equipment/equipmentDisplay";
 import { isEquipmentSelectableForHistory } from "@/features/equipment/equipmentConstants";
 import { canWriteEquipmentHistory } from "@/features/equipment/equipmentHistoryPermissions";
 import type { EquipmentHistoryRecordRow, EquipmentMasterRow } from "@/features/equipment/equipmentTypes";
+import {
+  EMPTY_INCIDENT_META,
+  IncidentMetaFields,
+  incidentMetaFromRecord,
+  incidentMetaToPayload,
+  type IncidentMetaState,
+} from "../../IncidentMetaFields";
 
 const fieldClass =
   "w-full px-3 py-2 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500";
@@ -35,6 +42,7 @@ export default function EquipmentHistoryEditPage() {
   const [repairDetail, setRepairDetail] = useState("");
   const [notes, setNotes] = useState("");
   const [closureStatus, setClosureStatus] = useState<"ongoing" | "closed">("ongoing");
+  const [meta, setMeta] = useState<IncidentMetaState>(EMPTY_INCIDENT_META);
 
   const load = useCallback(async () => {
     if (!id || !canWrite) return;
@@ -60,6 +68,7 @@ export default function EquipmentHistoryEditPage() {
     setRepairDetail(r.repair_detail ?? "");
     setNotes(r.notes ?? "");
     setClosureStatus(r.closure_status);
+    setMeta(incidentMetaFromRecord(r));
 
     const { data: ms, error: me } = await supabase
       .from("equipment_master")
@@ -106,6 +115,7 @@ export default function EquipmentHistoryEditPage() {
         repair_detail: repairDetail.trim() || null,
         notes: notes.trim() || null,
         closure_status: closureStatus,
+        ...incidentMetaToPayload(meta),
         updated_at: new Date().toISOString(),
         updated_by: user?.id ?? null,
       })
@@ -157,15 +167,19 @@ export default function EquipmentHistoryEditPage() {
           <label className="block text-xs font-medium text-slate-400 mb-1">설비</label>
           <select className={fieldClass} value={equipmentId} onChange={(e) => setEquipmentId(e.target.value)} required>
             <option value="">선택</option>
-            {masters.map((m) => {
-              const ls = m.lifecycle_status ?? (m.is_active ? "운영중" : "미운영");
-              return (
-                <option key={m.id} value={m.id}>
-                  {formatEquipmentMasterListLabel(m)}
-                  {!isEquipmentSelectableForHistory(m) ? ` (${ls})` : ""}
-                </option>
-              );
-            })}
+            {groupEquipmentMastersByFloor(masters).map((g) => (
+              <optgroup key={g.floor} label={g.floor}>
+                {g.items.map((m) => {
+                  const ls = m.lifecycle_status ?? (m.is_active ? "운영중" : "미운영");
+                  return (
+                    <option key={m.id} value={m.id}>
+                      {formatEquipmentMasterListLabel(m)}
+                      {!isEquipmentSelectableForHistory(m) ? ` (${ls})` : ""}
+                    </option>
+                  );
+                })}
+              </optgroup>
+            ))}
           </select>
         </div>
         <div>
@@ -176,6 +190,7 @@ export default function EquipmentHistoryEditPage() {
           <label className="block text-xs font-medium text-slate-400 mb-1">고장내용</label>
           <textarea className={`${fieldClass} min-h-[100px]`} value={issueDetail} onChange={(e) => setIssueDetail(e.target.value)} required />
         </div>
+        <IncidentMetaFields value={meta} onChange={setMeta} fieldClass={fieldClass} />
         <div>
           <label className="block text-xs font-medium text-slate-400 mb-1">응급조치</label>
           <textarea className={`${fieldClass} min-h-[72px]`} value={emergencyAction} onChange={(e) => setEmergencyAction(e.target.value)} />

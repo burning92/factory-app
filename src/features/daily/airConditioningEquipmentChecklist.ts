@@ -32,4 +32,12 @@ export const AIR_CONDITIONING_EQUIPMENT_CHECKLIST: AirConditioningEquipmentCateg
     title: "1층 사무실 에어컨",
     questions: ["작동상태", "필터청소"],
   },
+  { title: "2층 급기 공조기", questions: ["작동상태"] },
+  { title: "2층 배기설비", questions: ["작동상태"] },
+  { title: "2층 현장 쿨러", questions: ["작동상태"] },
+  { title: "3층 급기 공조기", questions: ["작동상태"] },
+  { title: "3층 배기설비", questions: ["작동상태"] },
+  { title: "3층 현장 쿨러", questions: ["작동상태"] },
+  { title: "2층 에어커튼", questions: ["작동상태"] },
+  { title: "3층 에어커튼", questions: ["작동상태"] },
 ];

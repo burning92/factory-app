@@ -4,12 +4,17 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
-import { MANUFACTURING_EQUIPMENT_CHECKLIST } from "@/features/daily/manufacturingEquipmentChecklist";
+import {
+  MANUFACTURING_EQUIPMENT_CHECKLIST,
+  MANUFACTURING_EQUIPMENT_FLOORS,
+  manufacturingItemKey,
+} from "@/features/daily/manufacturingEquipmentChecklist";
 import {
   checklistSlotToTrackedEquipment,
-  insertEquipmentIncident,
-} from "@/features/daily/equipmentIncidents";
-import { canRegisterEquipmentIncident } from "@/features/daily/equipmentIncidentPermissions";
+  equipmentHistoryNewHref,
+  resolveTrackedEquipmentId,
+} from "@/features/equipment/trackedEquipment";
+import { canWriteEquipmentHistory } from "@/features/equipment/equipmentHistoryPermissions";
 
 type LogStatus = "draft" | "submitted" | "approved" | "rejected";
 type ItemResult = "O" | "X";
@@ -22,7 +27,19 @@ type CorrectiveState = {
   actor: string;
 };
 
+type StoredItem = {
+  category: string;
+  question_index: number;
+  question_text: string;
+  result: ItemResult;
+  nonconformity_note: string | null;
+};
+
 type Props = { mode: "new" | "edit"; editLogId?: string };
+
+const CURRENT_ITEM_KEYS = new Set(
+  MANUFACTURING_EQUIPMENT_CHECKLIST.flatMap((c) => c.questions.map((q) => manufacturingItemKey(c.key, q))),
+);
 
 function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
@@ -40,29 +57,35 @@ export function ManufacturingEquipmentForm({ mode, editLogId }: Props) {
     actor: "",
   });
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState<{ message: string; error?: boolean } | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    error?: boolean;
+  } | null>(null);
   const [currentLogId, setCurrentLogId] = useState<string | null>(null);
   const [currentLogStatus, setCurrentLogStatus] = useState<LogStatus | null>(null);
   const [loadDone, setLoadDone] = useState(mode === "new");
   const [deviationManuallyEdited, setDeviationManuallyEdited] = useState(false);
   const [correctiveDatetimeManuallyEdited, setCorrectiveDatetimeManuallyEdited] = useState(false);
-  /** 화덕/호이스트 부적합 시: 설비 이상 등록 연동 */
+  /** 화덕/호이스트 부적합 시: 설비이력기록부 연동 */
   const [linkIncident, setLinkIncident] = useState<Record<string, boolean>>({});
   const [linkProductionImpact, setLinkProductionImpact] = useState<Record<string, boolean>>({});
   const [linkDowntime, setLinkDowntime] = useState<Record<string, boolean>>({});
+  /** 현재 체크리스트에서 빠진 항목의 기존 결과 — 수정 저장 시 그대로 보존 */
+  const [retiredItems, setRetiredItems] = useState<StoredItem[]>([]);
 
   const orgCode = viewOrganizationCode ?? "100";
-  const canRegisterIncident = canRegisterEquipmentIncident(profile?.role);
+  const canRegisterIncident = canWriteEquipmentHistory(profile?.role);
   const authorName = (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
   const canSubmit = currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus === null;
   const hasAnyX = useMemo(() => Object.values(results).some((v) => v === "X"), [results]);
 
   const autoDeviationText = useMemo(() => {
     const lines: string[] = [];
-    MANUFACTURING_EQUIPMENT_CHECKLIST.forEach((cat, ci) => {
-      cat.questions.forEach((q, qi) => {
-        const key = `${ci}-${qi}`;
-        if (results[key] === "X") lines.push(`${cat.title} - ${q} 부적합`);
+    MANUFACTURING_EQUIPMENT_FLOORS.forEach((f) => {
+      f.categories.forEach((cat) => {
+        cat.questions.forEach((q) => {
+          if (results[manufacturingItemKey(cat.key, q)] === "X") lines.push(`${f.floor} ${cat.title} - ${q} 부적합`);
+        });
       });
     });
     return lines.join("\n");
@@ -77,52 +100,48 @@ export function ManufacturingEquipmentForm({ mode, editLogId }: Props) {
     }
   }, []);
 
-  const rowKeyFromDb = useCallback((category: string, questionIndex1Based: number) => {
-    const ci = MANUFACTURING_EQUIPMENT_CHECKLIST.findIndex((c) => c.title === category);
-    if (ci < 0) return null;
-    return `${ci}-${questionIndex1Based - 1}`;
-  }, []);
-
   const persistLinkedIncidents = useCallback(
-    async (
-      logId: string,
-      insertedRows: { id: string; category: string; question_index: number }[]
-    ) => {
-      if (!canRegisterEquipmentIncident(profile?.role)) return;
-      const occurred =
-        corrective.datetime.trim() ? new Date(corrective.datetime).toISOString() : `${inspectionDate}T00:00:00`;
+    async (logId: string, insertedRows: { id: string; category: string; question_text: string }[]) => {
+      if (!canWriteEquipmentHistory(profile?.role)) return;
+      const recordDate = corrective.datetime.trim() ? corrective.datetime.slice(0, 10) : inspectionDate;
       for (const row of insertedRows) {
-        const key = rowKeyFromDb(row.category, row.question_index);
-        if (!key) continue;
-        const [ciStr, qiStr] = key.split("-");
-        const eqName = checklistSlotToTrackedEquipment(Number(ciStr), Number(qiStr));
-        if (!eqName || !linkIncident[key]) continue;
+        const key = manufacturingItemKey(row.category, row.question_text);
+        const slot = checklistSlotToTrackedEquipment(row.category, row.question_text);
+        if (!slot || !linkIncident[key]) continue;
 
-        const downtime = !!linkDowntime[key];
-        const cat = MANUFACTURING_EQUIPMENT_CHECKLIST[Number(ciStr)];
-        const qi = Number(qiStr);
-        const qLabel = cat?.questions[qi] ?? "";
-        const detail = `${cat?.title ?? ""} · ${qLabel} 정기점검 부적합(연동). ${corrective.deviation?.trim() ?? ""}`.trim();
+        const equipmentId = await resolveTrackedEquipmentId(supabase, orgCode, slot);
+        if (!equipmentId) {
+          setToast({
+            message: `설비이력기록부 연동 실패: 운영중인 ${slot.group} 설비를 찾지 못했습니다.`,
+            error: true,
+          });
+          continue;
+        }
 
-        const { error } = await insertEquipmentIncident(supabase, {
+        const detail =
+          `${slot.floor ?? ""} ${row.category.replace(/^\d+층 /, "")} · ${row.question_text} 정기점검 부적합(연동). ${corrective.deviation?.trim() ?? ""}`.trim();
+
+        const { error } = await supabase.from("equipment_history_records").insert({
           organization_code: orgCode,
-          equipment_name: eqName,
-          occurred_at: occurred,
-          incident_type: downtime ? "가동중지" : "이상",
-          symptom_type: "기타",
-          symptom_other: "정기점검 부적합 연동",
-          detail: detail.slice(0, 4000) || "정기점검 부적합 연동",
+          equipment_id: equipmentId,
+          record_date: recordDate,
+          issue_detail: detail.slice(0, 4000) || "정기점검 부적합 연동",
+          closure_status: "ongoing",
+          incident_type: linkDowntime[key] ? "가동중지" : "이상",
           has_production_impact: !!linkProductionImpact[key],
-          action_status: "확인중",
-          source_type: "linked_from_inspection",
           linked_inspection_id: logId,
           linked_inspection_item_id: row.id,
           created_by: user?.id ?? null,
+          created_by_name: authorName || null,
+          updated_at: new Date().toISOString(),
         });
         if (error) {
           const msg = error.message;
           if (!msg.includes("duplicate") && !msg.includes("unique")) {
-            setToast({ message: `설비 이상 연동 저장 오류: ${msg}`, error: true });
+            setToast({
+              message: `설비이력기록부 연동 저장 오류: ${msg}`,
+              error: true,
+            });
           }
         }
       }
@@ -135,10 +154,10 @@ export function ManufacturingEquipmentForm({ mode, editLogId }: Props) {
       linkIncident,
       linkDowntime,
       linkProductionImpact,
-      rowKeyFromDb,
       user?.id,
+      authorName,
       profile?.role,
-    ]
+    ],
   );
 
   useEffect(() => {
@@ -185,12 +204,16 @@ export function ManufacturingEquipmentForm({ mode, editLogId }: Props) {
       const { data: logData, error } = await supabase
         .from("daily_manufacturing_equipment_logs")
         .select(
-          "id, inspection_date, status, corrective_datetime, corrective_deviation, corrective_detail, corrective_remarks, corrective_actor"
+          "id, inspection_date, status, corrective_datetime, corrective_deviation, corrective_detail, corrective_remarks, corrective_actor",
         )
         .eq("id", editLogId)
         .maybeSingle();
       if (cancelled || error) {
-        if (!cancelled) setToast({ message: error?.message ?? "일지를 불러올 수 없습니다.", error: true });
+        if (!cancelled)
+          setToast({
+            message: error?.message ?? "일지를 불러올 수 없습니다.",
+            error: true,
+          });
         setLoadDone(true);
         return;
       }
@@ -228,23 +251,23 @@ export function ManufacturingEquipmentForm({ mode, editLogId }: Props) {
 
       const nextResults: ResultMap = {};
       const legacyNotes: string[] = [];
-      MANUFACTURING_EQUIPMENT_CHECKLIST.forEach((cat, ci) => {
-        cat.questions.forEach((_, qi) => {
-          const item = (itemsData ?? []).find(
-            (r: { category: string; question_index: number }) =>
-              r.category === cat.title && r.question_index === qi + 1
-          ) as { result: ItemResult; question_text: string; nonconformity_note: string | null } | undefined;
-          if (item) {
-            const key = `${ci}-${qi}`;
-            nextResults[key] = item.result;
-            if (item.nonconformity_note && item.nonconformity_note.trim()) {
-              legacyNotes.push(`${cat.title} - ${item.question_text}: ${item.nonconformity_note.trim()}`);
-            }
-          }
-        });
-      });
-      const hasHeaderCorrective =
-        !!(log.corrective_datetime || log.corrective_deviation || log.corrective_detail || log.corrective_remarks || log.corrective_actor);
+      const retired: StoredItem[] = [];
+      for (const item of (itemsData ?? []) as StoredItem[]) {
+        const key = manufacturingItemKey(item.category, item.question_text);
+        if (CURRENT_ITEM_KEYS.has(key)) nextResults[key] = item.result;
+        else retired.push(item);
+        if (item.nonconformity_note && item.nonconformity_note.trim()) {
+          legacyNotes.push(`${item.category} - ${item.question_text}: ${item.nonconformity_note.trim()}`);
+        }
+      }
+      setRetiredItems(retired);
+      const hasHeaderCorrective = !!(
+        log.corrective_datetime ||
+        log.corrective_deviation ||
+        log.corrective_detail ||
+        log.corrective_remarks ||
+        log.corrective_actor
+      );
       if (!hasHeaderCorrective && legacyNotes.length > 0) {
         setCorrective((prev) => ({
           ...prev,
@@ -259,33 +282,36 @@ export function ManufacturingEquipmentForm({ mode, editLogId }: Props) {
     };
   }, [mode, editLogId, authorName]);
 
-  const buildItemsPayload = useCallback((logId: string) => {
-    const items: {
-      log_id: string;
-      category: string;
-      question_index: number;
-      question_text: string;
-      result: ItemResult;
-      nonconformity_note: string | null;
-    }[] = [];
-    MANUFACTURING_EQUIPMENT_CHECKLIST.forEach((cat, ci) => {
-      cat.questions.forEach((q, qi) => {
-        const key = `${ci}-${qi}`;
-        const r = results[key];
-        if (r === "O" || r === "X") {
-          items.push({
-            log_id: logId,
-            category: cat.title,
-            question_index: qi + 1,
-            question_text: q,
-            result: r,
-            nonconformity_note: null,
-          });
-        }
+  const buildItemsPayload = useCallback(
+    (logId: string) => {
+      const items: {
+        log_id: string;
+        category: string;
+        question_index: number;
+        question_text: string;
+        result: ItemResult;
+        nonconformity_note: string | null;
+      }[] = [];
+      MANUFACTURING_EQUIPMENT_CHECKLIST.forEach((cat) => {
+        cat.questions.forEach((q, qi) => {
+          const r = results[manufacturingItemKey(cat.key, q)];
+          if (r === "O" || r === "X") {
+            items.push({
+              log_id: logId,
+              category: cat.key,
+              question_index: qi + 1,
+              question_text: q,
+              result: r,
+              nonconformity_note: null,
+            });
+          }
+        });
       });
-    });
-    return items;
-  }, [results]);
+      for (const it of retiredItems) items.push({ ...it, log_id: logId });
+      return items;
+    },
+    [results, retiredItems],
+  );
 
   const saveHeader = useCallback(async () => {
     const date = inspectionDate.trim();
@@ -359,12 +385,16 @@ export function ManufacturingEquipmentForm({ mode, editLogId }: Props) {
         const { data: insertedRows, error: itemsErr } = await supabase
           .from("daily_manufacturing_equipment_log_items")
           .insert(items)
-          .select("id, category, question_index");
+          .select("id, category, question_text");
         if (itemsErr) throw itemsErr;
         if (insertedRows?.length) {
           await persistLinkedIncidents(
             logId,
-            insertedRows as { id: string; category: string; question_index: number }[]
+            insertedRows as {
+              id: string;
+              category: string;
+              question_text: string;
+            }[],
           );
         }
       }
@@ -372,7 +402,10 @@ export function ManufacturingEquipmentForm({ mode, editLogId }: Props) {
       setCurrentLogId(logId);
       setCurrentLogStatus(mode === "edit" ? currentLogStatus : "draft");
     } catch (e) {
-      setToast({ message: e instanceof Error ? e.message : String(e), error: true });
+      setToast({
+        message: e instanceof Error ? e.message : String(e),
+        error: true,
+      });
     } finally {
       setSaving(false);
     }
@@ -397,12 +430,16 @@ export function ManufacturingEquipmentForm({ mode, editLogId }: Props) {
         const { data: insertedRows, error: insErr } = await supabase
           .from("daily_manufacturing_equipment_log_items")
           .insert(rows)
-          .select("id, category, question_index");
+          .select("id, category, question_text");
         if (insErr) throw insErr;
         if (insertedRows?.length) {
           await persistLinkedIncidents(
             logId,
-            insertedRows as { id: string; category: string; question_index: number }[]
+            insertedRows as {
+              id: string;
+              category: string;
+              question_text: string;
+            }[],
           );
         }
       }
@@ -420,7 +457,10 @@ export function ManufacturingEquipmentForm({ mode, editLogId }: Props) {
       setCurrentLogId(logId);
       setCurrentLogStatus("submitted");
     } catch (e) {
-      setToast({ message: e instanceof Error ? e.message : String(e), error: true });
+      setToast({
+        message: e instanceof Error ? e.message : String(e),
+        error: true,
+      });
     } finally {
       setSaving(false);
     }
@@ -447,20 +487,12 @@ export function ManufacturingEquipmentForm({ mode, editLogId }: Props) {
         <span className="text-slate-600">/</span>
         <span className="text-slate-200 font-medium">{mode === "new" ? "새 작성" : "수정"}</span>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-        <h1 className="text-lg font-semibold text-slate-100">
-          {mode === "new" ? "제조설비 점검표 — 새 작성" : "제조설비 점검표 — 수정"}
-        </h1>
-        {canRegisterIncident && (
-          <Link
-            href="/daily/manufacturing-equipment/incident/new"
-            className="shrink-0 rounded-lg border border-amber-600/40 bg-amber-950/30 px-3 py-1.5 text-xs font-medium text-amber-200 hover:bg-amber-950/50"
-          >
-            설비 이상 등록
-          </Link>
-        )}
-      </div>
-      <p className="text-slate-500 text-sm mb-4">항목별 적합/부적합을 선택하세요. 부적합이 있으면 개선조치를 입력합니다.</p>
+      <h1 className="text-lg font-semibold text-slate-100 mb-2">
+        {mode === "new" ? "제조설비 점검표 — 새 작성" : "제조설비 점검표 — 수정"}
+      </h1>
+      <p className="text-slate-500 text-sm mb-4">
+        항목별 적합/부적합을 선택하세요. 부적합이 있으면 개선조치를 입력합니다.
+      </p>
 
       {toast && (
         <div
@@ -494,109 +526,140 @@ export function ManufacturingEquipmentForm({ mode, editLogId }: Props) {
         />
       </div>
 
-      <div className="space-y-6 mb-8">
-        {MANUFACTURING_EQUIPMENT_CHECKLIST.map((category, catIndex) => (
-          <section key={category.title} className="rounded-xl border border-slate-700/60 bg-slate-800/50 overflow-hidden">
-            <h2 className="px-4 py-3 text-sm font-semibold text-cyan-300 bg-slate-800/80 border-b border-slate-700/60">
-              {category.title}
+      <div className="space-y-10 mb-8">
+        {MANUFACTURING_EQUIPMENT_FLOORS.map((floor) => (
+          <div key={floor.floor}>
+            <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-slate-100">
+              <span className="rounded-md bg-cyan-700/40 px-2 py-0.5 text-cyan-200">{floor.floor}</span>
+              <span className="text-xs font-normal text-slate-500">
+                {floor.categories.reduce((n, c) => n + c.questions.length, 0)}개 항목
+              </span>
             </h2>
-            <ul className="divide-y divide-slate-700/50">
-              {category.questions.map((question, qIndex) => {
-                const key = `${catIndex}-${qIndex}`;
-                const value = results[key] ?? "";
-                return (
-                  <li key={key} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-                    <p className="flex-1 text-sm text-slate-300 min-w-0">{question}</p>
-                    <div className="flex gap-2 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => setItemResult(key, "O")}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                          value === "O"
-                            ? "bg-emerald-600 border-emerald-500 text-white"
-                            : "bg-slate-800/80 border-slate-600 text-slate-300 hover:bg-slate-700/60"
-                        }`}
-                      >
-                        적합
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setItemResult(key, "X")}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                          value === "X"
-                            ? "bg-amber-700 border-amber-500 text-white"
-                            : "bg-slate-800/80 border-slate-600 text-slate-300 hover:bg-slate-700/60"
-                        }`}
-                      >
-                        부적합
-                      </button>
-                    </div>
-                    {value === "X" && checklistSlotToTrackedEquipment(catIndex, qIndex) && (
-                      <div className="mt-3 rounded-lg border border-amber-600/35 bg-amber-950/25 p-3 space-y-2">
-                        <p className="text-[11px] font-semibold text-amber-200/95">화덕·호이스트 — 실제 이상 이력</p>
-                        {canRegisterIncident ? (
-                          <>
-                            <p className="text-[11px] text-slate-500 leading-relaxed">
-                              정기 점검 부적합과 별도로, 실제 고장·가동중지가 있었다면 아래에서 연동할 수 있습니다.
-                            </p>
-                            <label className="flex items-start gap-2 text-xs text-slate-300 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                className="mt-0.5 rounded border-slate-500"
-                                checked={!!linkIncident[key]}
-                                onChange={(e) =>
-                                  setLinkIncident((p) => ({ ...p, [key]: e.target.checked }))
-                                }
-                              />
-                              <span>실제 설비 이상 등록으로 연결 (저장 시 함께 등록)</span>
-                            </label>
-                            {linkIncident[key] && (
-                              <div className="pl-6 space-y-2">
-                                <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    className="rounded border-slate-500"
-                                    checked={!!linkProductionImpact[key]}
-                                    onChange={(e) =>
-                                      setLinkProductionImpact((p) => ({ ...p, [key]: e.target.checked }))
-                                    }
-                                  />
-                                  생산영향 있음
-                                </label>
-                                <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    className="rounded border-slate-500"
-                                    checked={!!linkDowntime[key]}
-                                    onChange={(e) =>
-                                      setLinkDowntime((p) => ({ ...p, [key]: e.target.checked }))
-                                    }
-                                  />
-                                  가동중지 발생
-                                </label>
-                                <Link
-                                  href={`/daily/manufacturing-equipment/incident/new?equipment=${checklistSlotToTrackedEquipment(catIndex, qIndex)}&detail=${encodeURIComponent(
-                                    `${category.title} · ${question} 점검 부적합`
-                                  )}`}
-                                  className="inline-block text-[11px] text-cyan-400 hover:text-cyan-300"
-                                >
-                                  별도 화면에서 상세 입력 →
-                                </Link>
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <p className="text-[11px] text-slate-500 leading-relaxed">
-                            설비 이상 연동 등록은 관리자·매니저만 저장 시 반영됩니다.
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
+            <div className="space-y-4">
+              {floor.categories.map((category) => (
+                <section
+                  key={category.key}
+                  className="rounded-xl border border-slate-700/60 bg-slate-800/50 overflow-hidden"
+                >
+                  <h3 className="px-4 py-3 text-sm font-semibold text-cyan-300 bg-slate-800/80 border-b border-slate-700/60">
+                    {category.title}
+                  </h3>
+                  <ul className="divide-y divide-slate-700/50">
+                    {category.questions.map((question) => {
+                      const key = manufacturingItemKey(category.key, question);
+                      const value = results[key] ?? "";
+                      const trackedSlot = checklistSlotToTrackedEquipment(category.key, question);
+                      return (
+                        <li key={key} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                          <p className="flex-1 text-sm text-slate-300 min-w-0">{question}</p>
+                          <div className="flex gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => setItemResult(key, "O")}
+                              className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                                value === "O"
+                                  ? "bg-emerald-600 border-emerald-500 text-white"
+                                  : "bg-slate-800/80 border-slate-600 text-slate-300 hover:bg-slate-700/60"
+                              }`}
+                            >
+                              적합
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setItemResult(key, "X")}
+                              className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                                value === "X"
+                                  ? "bg-amber-700 border-amber-500 text-white"
+                                  : "bg-slate-800/80 border-slate-600 text-slate-300 hover:bg-slate-700/60"
+                              }`}
+                            >
+                              부적합
+                            </button>
+                          </div>
+                          {value === "X" && trackedSlot && (
+                            <div className="mt-3 rounded-lg border border-amber-600/35 bg-amber-950/25 p-3 space-y-2">
+                              <p className="text-[11px] font-semibold text-amber-200/95">
+                                {trackedSlot.floor ? `${trackedSlot.floor} ` : ""}
+                                {trackedSlot.group} — 설비이력기록부
+                              </p>
+                              {canRegisterIncident ? (
+                                <>
+                                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                                    정기 점검 부적합과 별도로, 실제 고장·가동중지가 있었다면 아래에서 연동할 수
+                                    있습니다.
+                                  </p>
+                                  <label className="flex items-start gap-2 text-xs text-slate-300 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      className="mt-0.5 rounded border-slate-500"
+                                      checked={!!linkIncident[key]}
+                                      onChange={(e) =>
+                                        setLinkIncident((p) => ({
+                                          ...p,
+                                          [key]: e.target.checked,
+                                        }))
+                                      }
+                                    />
+                                    <span>설비이력기록부에 이력으로 등록 (저장 시 함께 등록)</span>
+                                  </label>
+                                  {linkIncident[key] && (
+                                    <div className="pl-6 space-y-2">
+                                      <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          className="rounded border-slate-500"
+                                          checked={!!linkProductionImpact[key]}
+                                          onChange={(e) =>
+                                            setLinkProductionImpact((p) => ({
+                                              ...p,
+                                              [key]: e.target.checked,
+                                            }))
+                                          }
+                                        />
+                                        생산영향 있음
+                                      </label>
+                                      <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          className="rounded border-slate-500"
+                                          checked={!!linkDowntime[key]}
+                                          onChange={(e) =>
+                                            setLinkDowntime((p) => ({
+                                              ...p,
+                                              [key]: e.target.checked,
+                                            }))
+                                          }
+                                        />
+                                        가동중지 발생
+                                      </label>
+                                      <Link
+                                        href={equipmentHistoryNewHref(
+                                          trackedSlot,
+                                          `${floor.floor} ${category.title} · ${question} 점검 부적합`,
+                                          currentLogId,
+                                        )}
+                                        className="inline-block text-[11px] text-cyan-400 hover:text-cyan-300"
+                                      >
+                                        별도 화면에서 상세 입력 →
+                                      </Link>
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <p className="text-[11px] text-slate-500 leading-relaxed">
+                                  설비이력기록부 연동 등록은 관리자·매니저만 저장 시 반영됩니다.
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              ))}
+            </div>
+          </div>
         ))}
       </div>
 

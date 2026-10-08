@@ -305,7 +305,7 @@ export function EquipmentMasterForm({
               className="min-w-0 flex-1 px-3 py-2 text-sm bg-transparent text-slate-100 placeholder-slate-500 outline-none"
               value={values.management_no_suffix}
               onChange={(e) => set({ management_no_suffix: e.target.value })}
-              placeholder="예: 12 또는 1-2"
+              placeholder="예: 37 (도입일 순 다음 번호)"
               inputMode="numeric"
               required
               aria-invalid={!!managementNoError}

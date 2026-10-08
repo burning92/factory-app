@@ -1,10 +1,6 @@
-import { Suspense } from "react";
-import { EquipmentIncidentForm } from "../../EquipmentIncidentForm";
+import { redirect } from "next/navigation";
 
+/** 설비 이상 등록은 설비이력기록부로 통합됨 */
 export default function EquipmentIncidentNewPage() {
-  return (
-    <Suspense fallback={<p className="p-6 text-slate-500 text-sm">불러오는 중…</p>}>
-      <EquipmentIncidentForm />
-    </Suspense>
-  );
+  redirect("/daily/equipment-history/new");
 }

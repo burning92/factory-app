@@ -107,26 +107,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     router.replace("/production");
   }, [loading, profile, pathname, router]);
 
-  /** 설비 이상 등록: worker/assistant_manager URL 직접 접근 차단 */
-  useEffect(() => {
-    if (loading || !profile) return;
-    if (
-      pathname === "/daily/manufacturing-equipment/incident/new" &&
-      (profile.role === "worker" || profile.role === "assistant_manager")
-    ) {
-      router.replace("/daily/manufacturing-equipment");
-    }
-  }, [loading, profile, pathname, router]);
-
-  /** 설비 이상 이력 수정 페이지 비활성화 — 상세로 이동 */
-  useEffect(() => {
-    if (loading || !profile) return;
-    const m = pathname.match(/^\/daily\/manufacturing-equipment\/incidents\/([^/]+)\/edit$/);
-    if (m?.[1]) {
-      router.replace(`/daily/manufacturing-equipment/incidents/${m[1]}?edit=disabled`);
-    }
-  }, [loading, profile, pathname, router]);
-
   /** 접속(페이지 진입) 로그: 자동로그인 사용자 포함, 동일 경로는 짧은 구간 중복 전송 방지 */
   useEffect(() => {
     if (loading || !user || !profile) return;

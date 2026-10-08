@@ -5,10 +5,12 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
-import { MANUFACTURING_EQUIPMENT_CHECKLIST } from "@/features/daily/manufacturingEquipmentChecklist";
+import {
+  MANUFACTURING_EQUIPMENT_CHECKLIST,
+  MANUFACTURING_EQUIPMENT_FLOORS,
+  manufacturingItemKey,
+} from "@/features/daily/manufacturingEquipmentChecklist";
 import { canShowDailyApproveReject } from "@/app/daily/dailyLogPermissions";
-import { canRegisterEquipmentIncident } from "@/features/daily/equipmentIncidentPermissions";
-
 type LogHeader = {
   id: string;
   inspection_date: string;
@@ -37,7 +39,10 @@ function formatDt(iso: string | null): string {
   if (!iso) return "—";
   try {
     const d = new Date(iso);
-    return d.toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" });
+    return d.toLocaleString("ko-KR", {
+      dateStyle: "short",
+      timeStyle: "short",
+    });
   } catch {
     return iso;
   }
@@ -49,12 +54,36 @@ function resultLabel(result: string): string {
   return "—";
 }
 
+const CURRENT_ITEM_KEYS = new Set(
+  MANUFACTURING_EQUIPMENT_CHECKLIST.flatMap((c) => c.questions.map((q) => manufacturingItemKey(c.key, q))),
+);
+
+function ResultRow({ question, raw }: { question: string; raw: string }) {
+  return (
+    <li className="px-4 py-3">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+        <p className="flex-1 text-sm text-slate-300 min-w-0">{question}</p>
+        <span
+          className={`shrink-0 min-w-[3.5rem] px-2 py-1.5 flex items-center justify-center rounded text-xs font-medium ${
+            raw === "O"
+              ? "bg-emerald-900/50 text-emerald-300"
+              : raw === "X"
+                ? "bg-amber-900/50 text-amber-300"
+                : "bg-slate-700/50 text-slate-500"
+          }`}
+        >
+          {resultLabel(raw)}
+        </span>
+      </div>
+    </li>
+  );
+}
+
 export default function DailyManufacturingEquipmentViewPage() {
   const router = useRouter();
   const params = useParams();
   const id = typeof params?.id === "string" ? params.id : "";
   const { user, profile } = useAuth();
-  const canRegisterIncident = canRegisterEquipmentIncident(profile?.role);
   const [header, setHeader] = useState<LogHeader | null>(null);
   const [items, setItems] = useState<LogItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -129,14 +158,12 @@ export default function DailyManufacturingEquipmentViewPage() {
     );
   }
 
-  const itemMap = new Map<string, { result: string; question_text: string; nonconformity_note: string | null }>();
-  items.forEach((i) => {
-    itemMap.set(`${i.category}-${i.question_index}`, {
-      result: i.result,
-      question_text: i.question_text,
-      nonconformity_note: i.nonconformity_note,
-    });
-  });
+  const itemMap = new Map<string, string>();
+  items.forEach((i) => itemMap.set(manufacturingItemKey(i.category, i.question_text), i.result));
+  const retiredItems = items.filter((i) => !CURRENT_ITEM_KEYS.has(manufacturingItemKey(i.category, i.question_text)));
+  const floorsWithData = MANUFACTURING_EQUIPMENT_FLOORS.filter((f) =>
+    f.categories.some((c) => c.questions.some((q) => itemMap.has(manufacturingItemKey(c.key, q)))),
+  );
 
   const hasCorrective =
     header.corrective_datetime ||
@@ -161,24 +188,7 @@ export default function DailyManufacturingEquipmentViewPage() {
         <span className="text-slate-600">/</span>
         <span className="text-slate-200 font-medium">{header.inspection_date}</span>
       </div>
-      <h1 className="text-lg font-semibold text-slate-100 mb-1">제조설비 점검표 — 상세</h1>
-
-      <div className="flex flex-wrap gap-2 mb-4">
-        {canRegisterIncident && (
-          <Link
-            href="/daily/manufacturing-equipment/incident/new"
-            className="inline-flex items-center rounded-lg border border-amber-600/40 bg-amber-950/25 px-3 py-2 text-sm font-medium text-amber-200 hover:bg-amber-950/40"
-          >
-            설비 이상 등록
-          </Link>
-        )}
-        <Link
-          href="/daily/manufacturing-equipment/incidents"
-          className="inline-flex items-center rounded-lg border border-cyan-500/35 bg-cyan-950/20 px-3 py-2 text-sm font-medium text-cyan-200 hover:bg-cyan-950/35"
-        >
-          설비 이상 이력
-        </Link>
-      </div>
+      <h1 className="text-lg font-semibold text-slate-100 mb-4">제조설비 점검표 — 상세</h1>
 
       {header.status === "approved" && (
         <div className="mb-4 px-4 py-3 rounded-lg bg-emerald-900/20 border border-emerald-700/50 text-emerald-200 text-sm font-medium">
@@ -209,40 +219,51 @@ export default function DailyManufacturingEquipmentViewPage() {
         {header.author_name && ` · 작성: ${header.author_name}`}
       </p>
 
-      <div className="space-y-6 mb-8">
-        {MANUFACTURING_EQUIPMENT_CHECKLIST.map((category) => (
-          <section key={category.title} className="rounded-xl border border-slate-700/60 bg-slate-800/50 overflow-hidden">
-            <h2 className="px-4 py-3 text-sm font-semibold text-cyan-300 bg-slate-800/80 border-b border-slate-700/60">
-              {category.title}
+      <div className="space-y-10 mb-8">
+        {(floorsWithData.length ? floorsWithData : MANUFACTURING_EQUIPMENT_FLOORS).map((floor) => (
+          <div key={floor.floor}>
+            <h2 className="mb-3 text-base font-bold text-slate-100">
+              <span className="rounded-md bg-cyan-700/40 px-2 py-0.5 text-cyan-200">{floor.floor}</span>
             </h2>
+            <div className="space-y-4">
+              {floor.categories.map((category) => (
+                <section
+                  key={category.key}
+                  className="rounded-xl border border-slate-700/60 bg-slate-800/50 overflow-hidden"
+                >
+                  <h3 className="px-4 py-3 text-sm font-semibold text-cyan-300 bg-slate-800/80 border-b border-slate-700/60">
+                    {category.title}
+                  </h3>
+                  <ul className="divide-y divide-slate-700/50">
+                    {category.questions.map((question) => (
+                      <ResultRow
+                        key={question}
+                        question={question}
+                        raw={itemMap.get(manufacturingItemKey(category.key, question)) ?? ""}
+                      />
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </div>
+          </div>
+        ))}
+        {retiredItems.length > 0 && (
+          <section className="rounded-xl border border-slate-700/60 bg-slate-800/30 overflow-hidden">
+            <h3 className="px-4 py-3 text-sm font-semibold text-slate-400 bg-slate-800/60 border-b border-slate-700/60">
+              이전 점검 항목 <span className="text-xs font-normal text-slate-500">(현재 점검표에서 제외됨)</span>
+            </h3>
             <ul className="divide-y divide-slate-700/50">
-              {category.questions.map((question, qIndex) => {
-                const key = `${category.title}-${qIndex + 1}`;
-                const data = itemMap.get(key);
-                const raw = data?.result ?? "";
-                const label = resultLabel(raw);
-                return (
-                  <li key={key} className="px-4 py-3 space-y-2">
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-                      <p className="flex-1 text-sm text-slate-300 min-w-0">{question}</p>
-                      <span
-                        className={`shrink-0 min-w-[3.5rem] px-2 py-1.5 flex items-center justify-center rounded text-xs font-medium ${
-                          raw === "O"
-                            ? "bg-emerald-900/50 text-emerald-300"
-                            : raw === "X"
-                              ? "bg-amber-900/50 text-amber-300"
-                              : "bg-slate-700/50 text-slate-500"
-                        }`}
-                      >
-                        {label}
-                      </span>
-                    </div>
-                  </li>
-                );
-              })}
+              {retiredItems.map((it) => (
+                <ResultRow
+                  key={`${it.category}-${it.question_index}-${it.question_text}`}
+                  question={`${it.category} · ${it.question_text}`}
+                  raw={it.result}
+                />
+              ))}
             </ul>
           </section>
-        ))}
+        )}
       </div>
 
       {hasCorrective && (

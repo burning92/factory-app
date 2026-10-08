@@ -33,7 +33,11 @@ export default function AdminEquipmentListPage() {
       setErr(error.message);
       return;
     }
-    setRows((data ?? []) as EquipmentMasterRow[]);
+    setRows(
+      ((data ?? []) as EquipmentMasterRow[]).sort((a, b) =>
+        a.management_no.localeCompare(b.management_no, "ko", { numeric: true })
+      )
+    );
   }, [orgCode]);
 
   useEffect(() => {
@@ -47,7 +51,7 @@ export default function AdminEquipmentListPage() {
       if (!showInactive && !r.is_active) return false;
       if (l && !r.install_location.toLowerCase().includes(l)) return false;
       if (!t) return true;
-      const label = `${r.management_no} ${r.equipment_name} ${r.display_name ?? ""} ${r.equipment_type ?? ""}`.toLowerCase();
+      const label = `${r.management_no} ${r.equipment_name} ${r.display_name ?? ""} ${r.equipment_type ?? ""} ${r.notes ?? ""}`.toLowerCase();
       return label.includes(t);
     });
   }, [rows, q, loc, showInactive]);
