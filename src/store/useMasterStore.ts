@@ -1,4 +1,16 @@
 import { create } from "zustand";
+import {
+  doughFloorLabel,
+  doughLogMapKey,
+  earliestDoughDate,
+  isDoughProductionFloor,
+  mergeDoughFloor,
+  readDoughFloors,
+  removeDoughFloor,
+  type DoughFloorEntry,
+  type DoughFloorMap,
+  type DoughProductionFloor,
+} from "@/features/production/doughLogFloor";
 import type { Material, BomRow, PlanningSubmaterialRow, PlanningSubmaterialItem } from "@/lib/mockData";
 import { computeOutboundTotalG } from "@/features/production/outbound/computeOutboundTotalG";
 import { requestProductionOutboundLabSync } from "@/lib/materialStockLab/clientSyncProductionOutbound";
@@ -191,6 +203,8 @@ export interface DoughLogRecord {
   dough_id?: string;
   /** 수분율(%) */
   수분율?: number;
+  /** 2F=2층, 3F=3층. 없으면 층 구분 전 통합 기록 */
+  productionFloor?: DoughProductionFloor | null;
 }
 
 /** 사용량 계산: 원료별 전일/당일 재고 다중 LOT */
@@ -285,12 +299,13 @@ interface MasterState {
   fetchProductionLogs: () => Promise<void>;
   fetchLastUsedDates: () => Promise<void>;
   fetchDoughLogs: () => Promise<void>;
-  getDoughLogByDate: (usageDate: string) => DoughLogRecord | null;
-  /** 신규: usage_date 기준 upsert */
+  getDoughLogByDate: (usageDate: string, floor?: DoughProductionFloor | null) => DoughLogRecord | null;
+  /** 신규: 같은 사용일자에 2층·3층을 각각 저장. 다른 층 기록은 유지 */
   saveNewDoughLog: (usageDate: string, data: DoughLogRecord) => Promise<void>;
   /** 수정: row id 기준 update (usage_date 변경 시 타 행과 충돌하면 실패) */
   updateDoughLogById: (id: string, data: DoughLogRecord) => Promise<void>;
-  deleteDoughLog: (usageDate: string) => Promise<void>;
+  /** floor 가 있으면 그 층만 지운다. 없으면 그 날짜 통합 기록을 지운다. */
+  deleteDoughLog: (usageDate: string, floor?: DoughProductionFloor | null) => Promise<void>;
   fetchUsageCalculations: () => Promise<void>;
   saveUsageCalculation: (data: UsageCalculationRecord) => Promise<void>;
   deleteUsageCalculation: (id: string) => Promise<void>;
@@ -625,6 +640,76 @@ function buildDoughLogDbPayload(usageDateKey: string, data: DoughLogRecord) {
     updated_at: new Date().toISOString(),
   };
 }
+
+type DoughLogDbRow = {
+  id?: string;
+  usage_date: string;
+  author_name?: string | null;
+  dough_ingredients?: unknown;
+  dust_oil?: unknown;
+  dough_date?: string | null;
+  meta?: unknown;
+};
+
+function floorEntryFromRecord(data: DoughLogRecord): DoughFloorEntry {
+  const payload = buildDoughLogDbPayload(data.사용일자, data);
+  const meta = payload.meta as { target_quantity?: number; dough_id?: string; hydration_percent?: number } | null;
+  return {
+    author_name: payload.author_name,
+    dough_date: payload.dough_date,
+    target_quantity: meta?.target_quantity,
+    dough_id: meta?.dough_id,
+    hydration_percent: meta?.hydration_percent,
+    dough_ingredients: payload.dough_ingredients as DoughFloorEntry["dough_ingredients"],
+    dust_oil: payload.dust_oil as DoughFloorEntry["dust_oil"],
+  };
+}
+
+function recordFromFloor(
+  row: DoughLogDbRow,
+  usageDate: string,
+  floor: DoughProductionFloor,
+  entry: DoughFloorEntry
+): DoughLogRecord {
+  return {
+    id: row.id != null ? String(row.id) : undefined,
+    사용일자: usageDate,
+    작성자명: entry.author_name ?? "",
+    반죽원료: entry.dough_ingredients,
+    덧가루덧기름: entry.dust_oil,
+    반죽일자: entry.dough_date || undefined,
+    예상수량: entry.target_quantity,
+    dough_id: entry.dough_id,
+    수분율: entry.hydration_percent,
+    productionFloor: floor,
+  };
+}
+
+function expandDoughLogRow(row: DoughLogDbRow): DoughLogRecord[] {
+  const usage_date = typeof row.usage_date === "string" ? row.usage_date.slice(0, 10) : String(row.usage_date).slice(0, 10);
+  const floors = readDoughFloors(row.meta);
+  if (!floors) {
+    return [{ ...mapDoughLogFromDb(row as Parameters<typeof mapDoughLogFromDb>[0]), productionFloor: null }];
+  }
+  const records: DoughLogRecord[] = [];
+  if (floors["2F"]) records.push(recordFromFloor(row, usage_date, "2F", floors["2F"]));
+  if (floors["3F"]) records.push(recordFromFloor(row, usage_date, "3F", floors["3F"]));
+  return records;
+}
+
+function floorRowPayload(dateKey: string, floors: DoughFloorMap, authorName: string | null) {
+  return {
+    usage_date: dateKey,
+    author_name: authorName,
+    dough_ingredients: {},
+    dust_oil: {},
+    dough_date: earliestDoughDate(floors),
+    meta: { floors },
+    updated_at: new Date().toISOString(),
+  };
+}
+
+const DOUGH_LOG_COLUMNS = "id, usage_date, author_name, dough_ingredients, dust_oil, dough_date, meta";
 
 export const useMasterStore = create<MasterState>((set, get) => ({
   materials: [],
@@ -1083,8 +1168,9 @@ export const useMasterStore = create<MasterState>((set, get) => ({
       if (e) throw e;
       const map: Record<string, DoughLogRecord> = {};
       for (const row of data ?? []) {
-        const usage_date = typeof row.usage_date === "string" ? row.usage_date.slice(0, 10) : String(row.usage_date).slice(0, 10);
-        map[usage_date] = mapDoughLogFromDb(row as Parameters<typeof mapDoughLogFromDb>[0]);
+        for (const rec of expandDoughLogRow(row as DoughLogDbRow)) {
+          map[doughLogMapKey(rec.사용일자, rec.productionFloor)] = rec;
+        }
       }
       set({ doughLogsMap: map, doughLogsLoading: false });
     } catch (err) {
@@ -1095,24 +1181,71 @@ export const useMasterStore = create<MasterState>((set, get) => ({
     }
   },
 
-  getDoughLogByDate: (usageDate: string) => {
+  getDoughLogByDate: (usageDate: string, floor?: DoughProductionFloor | null) => {
     const dateKey = usageDate.slice(0, 10);
-    return get().doughLogsMap[dateKey] ?? null;
+    return get().doughLogsMap[doughLogMapKey(dateKey, floor)] ?? null;
   },
 
   saveNewDoughLog: async (usageDate: string, data: DoughLogRecord) => {
     set({ saving: "logs", error: null });
     const dateKey = usageDate.slice(0, 10);
+    const floor = data.productionFloor;
+    if (!isDoughProductionFloor(floor)) {
+      const msg = "2층 또는 3층을 선택해 주세요.";
+      set({ saving: "", error: msg });
+      throw new Error(msg);
+    }
     try {
-      const payload = buildDoughLogDbPayload(dateKey, data);
-      const { error: e } = await supabase.from("dough_logs").upsert(payload, {
-        onConflict: "usage_date",
+      const { data: existing, error: readErr } = await supabase
+        .from("dough_logs")
+        .select(DOUGH_LOG_COLUMNS)
+        .eq("usage_date", dateKey)
+        .maybeSingle();
+      if (readErr) throw readErr;
+      if (existing && !readDoughFloors(existing.meta)) {
+        const msg = "이 사용일자는 층 구분 없이 이미 저장되어 있습니다. 목록에서 그 기록을 수정하세요.";
+        set({ saving: "", error: msg });
+        throw new Error(msg);
+      }
+      const current = existing ? (readDoughFloors(existing.meta) ?? {}) : {};
+      if (current[floor]) {
+        const msg = `이 사용일자의 ${doughFloorLabel(floor)} 반죽은 이미 있습니다. 목록에서 수정하세요.`;
+        set({ saving: "", error: msg });
+        throw new Error(msg);
+      }
+      const entry = floorEntryFromRecord({ ...data, 사용일자: dateKey, productionFloor: floor });
+      const floors: DoughFloorMap = { ...current, [floor]: entry };
+      const payload = floorRowPayload(dateKey, floors, entry.author_name);
+      let savedId = existing?.id != null ? String(existing.id) : undefined;
+      if (existing?.id) {
+        const { error: e } = await supabase.from("dough_logs").update(payload).eq("id", existing.id);
+        if (e) throw e;
+      } else {
+        const { data: inserted, error: e } = await supabase
+          .from("dough_logs")
+          .insert(payload)
+          .select("id")
+          .single();
+        if (e) throw e;
+        savedId = inserted?.id != null ? String(inserted.id) : undefined;
+      }
+      const records = expandDoughLogRow({
+        id: savedId,
+        usage_date: dateKey,
+        author_name: entry.author_name,
+        dough_date: payload.dough_date,
+        meta: payload.meta,
+        dough_ingredients: {},
+        dust_oil: {},
       });
-      if (e) throw e;
-      set((state) => ({
-        doughLogsMap: { ...state.doughLogsMap, [dateKey]: { ...data, 사용일자: dateKey } },
-        saving: "",
-      }));
+      set((state) => {
+        const next = { ...state.doughLogsMap };
+        for (const key of Object.keys(next)) {
+          if (next[key]?.사용일자.slice(0, 10) === dateKey) delete next[key];
+        }
+        for (const rec of records) next[doughLogMapKey(rec.사용일자, rec.productionFloor)] = rec;
+        return { doughLogsMap: next, saving: "" };
+      });
     } catch (err) {
       const msg = getErrorMessage(err);
       set({
@@ -1131,7 +1264,94 @@ export const useMasterStore = create<MasterState>((set, get) => ({
       set({ saving: "", error: msg });
       throw new Error(msg);
     }
+    const floor = data.productionFloor;
     try {
+      if (isDoughProductionFloor(floor)) {
+        const { data: source, error: sourceErr } = await supabase
+          .from("dough_logs")
+          .select(DOUGH_LOG_COLUMNS)
+          .eq("id", id)
+          .maybeSingle();
+        if (sourceErr) throw sourceErr;
+        if (!source || !readDoughFloors(source.meta)) {
+          const msg = "수정할 층 반죽을 찾지 못했습니다. 목록에서 다시 열어 주세요.";
+          set({ saving: "", error: msg });
+          throw new Error(msg);
+        }
+        const sourceDate = String(source.usage_date).slice(0, 10);
+        const entry = floorEntryFromRecord({ ...data, 사용일자: dateKey, productionFloor: floor });
+        const touchedDates = new Set<string>([sourceDate, dateKey]);
+
+        if (sourceDate !== dateKey) {
+          const { data: target, error: targetErr } = await supabase
+            .from("dough_logs")
+            .select(DOUGH_LOG_COLUMNS)
+            .eq("usage_date", dateKey)
+            .maybeSingle();
+          if (targetErr) throw targetErr;
+          if (target && !readDoughFloors(target.meta)) {
+            const msg = "옮기려는 사용일자는 층 구분 없이 이미 저장되어 있습니다.";
+            set({ saving: "", error: msg });
+            throw new Error(msg);
+          }
+          const targetFloors = target ? (readDoughFloors(target.meta) ?? {}) : {};
+          if (targetFloors[floor]) {
+            const msg = `옮기려는 사용일자에 ${doughFloorLabel(floor)} 반죽이 이미 있습니다.`;
+            set({ saving: "", error: msg });
+            throw new Error(msg);
+          }
+          const removed = removeDoughFloor(source.meta, floor);
+          if (removed.empty) {
+            const { error: delErr } = await supabase.from("dough_logs").delete().eq("id", source.id);
+            if (delErr) throw delErr;
+          } else {
+            const remaining = readDoughFloors(removed.meta) ?? {};
+            const { error: srcUpdErr } = await supabase
+              .from("dough_logs")
+              .update(floorRowPayload(sourceDate, remaining, source.author_name ?? null))
+              .eq("id", source.id);
+            if (srcUpdErr) throw srcUpdErr;
+          }
+          const nextFloors: DoughFloorMap = { ...targetFloors, [floor]: entry };
+          const payload = floorRowPayload(dateKey, nextFloors, entry.author_name);
+          if (target?.id) {
+            const { error: updErr } = await supabase.from("dough_logs").update(payload).eq("id", target.id);
+            if (updErr) throw updErr;
+          } else {
+            const { error: insErr } = await supabase.from("dough_logs").insert(payload);
+            if (insErr) throw insErr;
+          }
+        } else {
+          const nextMeta = mergeDoughFloor(source.meta, floor, entry);
+          const floors = readDoughFloors(nextMeta) ?? {};
+          const { error: updErr } = await supabase
+            .from("dough_logs")
+            .update(floorRowPayload(dateKey, floors, entry.author_name))
+            .eq("id", source.id);
+          if (updErr) throw updErr;
+        }
+
+        const { data: refreshed, error: refreshErr } = await supabase
+          .from("dough_logs")
+          .select(DOUGH_LOG_COLUMNS)
+          .in("usage_date", Array.from(touchedDates));
+        if (refreshErr) throw refreshErr;
+        set((state) => {
+          const next = { ...state.doughLogsMap };
+          for (const key of Object.keys(next)) {
+            const used = next[key]?.사용일자.slice(0, 10);
+            if (used && touchedDates.has(used)) delete next[key];
+          }
+          for (const row of refreshed ?? []) {
+            for (const rec of expandDoughLogRow(row as DoughLogDbRow)) {
+              next[doughLogMapKey(rec.사용일자, rec.productionFloor)] = rec;
+            }
+          }
+          return { doughLogsMap: next, saving: "" };
+        });
+        return;
+      }
+
       const { data: conflictRow, error: conflictErr } = await supabase
         .from("dough_logs")
         .select("id")
@@ -1153,7 +1373,8 @@ export const useMasterStore = create<MasterState>((set, get) => ({
         for (const k of Object.keys(next)) {
           if (next[k]?.id === id) delete next[k];
         }
-        next[dateKey] = { ...data, id, 사용일자: dateKey };
+        const saved = { ...data, id, 사용일자: dateKey, productionFloor: null };
+        next[doughLogMapKey(dateKey, null)] = saved;
         return { doughLogsMap: next, saving: "" };
       });
     } catch (err) {
@@ -1166,18 +1387,57 @@ export const useMasterStore = create<MasterState>((set, get) => ({
     }
   },
 
-  deleteDoughLog: async (usageDate: string) => {
+  deleteDoughLog: async (usageDate: string, floor?: DoughProductionFloor | null) => {
     set({ saving: "logs", error: null });
     const dateKey = usageDate.slice(0, 10);
     try {
-      const { error: e } = await supabase
+      const { data: existing, error: readErr } = await supabase
         .from("dough_logs")
-        .delete()
-        .eq("usage_date", dateKey);
+        .select(DOUGH_LOG_COLUMNS)
+        .eq("usage_date", dateKey)
+        .maybeSingle();
+      if (readErr) throw readErr;
+      if (existing && isDoughProductionFloor(floor) && readDoughFloors(existing.meta)) {
+        const removed = removeDoughFloor(existing.meta, floor);
+        if (removed.empty) {
+          const { error: delErr } = await supabase.from("dough_logs").delete().eq("id", existing.id);
+          if (delErr) throw delErr;
+          set((state) => {
+            const next = { ...state.doughLogsMap };
+            for (const key of Object.keys(next)) {
+              if (next[key]?.사용일자.slice(0, 10) === dateKey) delete next[key];
+            }
+            return { doughLogsMap: next, saving: "" };
+          });
+          return;
+        }
+        const floors = readDoughFloors(removed.meta) ?? {};
+        const payload = floorRowPayload(dateKey, floors, existing.author_name ?? null);
+        const { error: updErr } = await supabase.from("dough_logs").update(payload).eq("id", existing.id);
+        if (updErr) throw updErr;
+        const records = expandDoughLogRow({ ...(existing as DoughLogDbRow), ...payload });
+        set((state) => {
+          const next = { ...state.doughLogsMap };
+          for (const key of Object.keys(next)) {
+            if (next[key]?.사용일자.slice(0, 10) === dateKey) delete next[key];
+          }
+          for (const rec of records) next[doughLogMapKey(rec.사용일자, rec.productionFloor)] = rec;
+          return { doughLogsMap: next, saving: "" };
+        });
+        return;
+      }
+      if (isDoughProductionFloor(floor)) {
+        const msg = "지울 층 기록을 찾지 못했습니다.";
+        set({ saving: "", error: msg });
+        throw new Error(msg);
+      }
+      const { error: e } = await supabase.from("dough_logs").delete().eq("usage_date", dateKey);
       if (e) throw e;
       set((state) => {
         const next = { ...state.doughLogsMap };
-        delete next[dateKey];
+        for (const key of Object.keys(next)) {
+          if (next[key]?.사용일자.slice(0, 10) === dateKey) delete next[key];
+        }
         return { doughLogsMap: next, saving: "" };
       });
     } catch (err) {

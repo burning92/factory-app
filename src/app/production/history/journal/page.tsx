@@ -10,6 +10,7 @@ import type {
   ComputedResult,
 } from "@/features/production/history/types";
 import { doughQtyToNumber, isFloorSplitDoughDate } from "@/features/production/history/floorDough";
+import { doughFloorLabel, doughFloorRank } from "@/features/production/doughLogFloor";
 
 /** 반죽 내역(사용일자 기준)을 원료별·LOT별 합산하여 총괄 표시용 배열로 반환. 밀가루 → 반죽원료 → 덧가루/덧기름 순. */
 function aggregateDoughUsageForJournal(
@@ -172,10 +173,15 @@ function JournalPageContent() {
   const { bomList, fetchBom, fetchDoughLogs, fetchProductionLogs, productionLogs } = useMasterStore();
   /** 새로고침 직후 store에 BOM이 비어 있으면 fetch 완료까지 제품별 원료 표를 그리지 않음 */
   const [bomReady, setBomReady] = useState(() => bomList.length > 0);
-  /** doughLogsMap 갱신 시 구독되어 반죽 사용량이 다시 계산되도록 함 (getDoughLogByDate만 쓰면 useMemo가 갱신 안 됨) */
-  const doughLog = useMasterStore((s) =>
-    date ? s.doughLogsMap[date.slice(0, 10)] ?? null : null
-  );
+  /** doughLogsMap 갱신 시 구독되어 반죽 사용량이 다시 계산되도록 함 */
+  const doughLogsMap = useMasterStore((s) => s.doughLogsMap);
+  const doughLogsForDay = useMemo(() => {
+    const dateKey = date?.slice(0, 10);
+    if (!dateKey) return [];
+    return Object.values(doughLogsMap)
+      .filter((row) => row.사용일자.slice(0, 10) === dateKey)
+      .sort((a, b) => doughFloorRank(a.productionFloor) - doughFloorRank(b.productionFloor));
+  }, [date, doughLogsMap]);
 
   const [stored, setStored] = useState<StoredJournal | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -279,9 +285,14 @@ function JournalPageContent() {
     }, [stored, bomRefsEffective]);
 
   /** 반죽 내역(사용일자=생산일자 기준) 집계. P1 총괄 "반죽 사용량" 블록용. */
-  const doughUsageLines = useMemo(
-    () => aggregateDoughUsageForJournal(doughLog),
-    [doughLog]
+  const doughUsageSections = useMemo(
+    () =>
+      doughLogsForDay.map((log) => ({
+        key: log.productionFloor ?? "all",
+        label: doughFloorLabel(log.productionFloor),
+        lines: aggregateDoughUsageForJournal(log),
+      })),
+    [doughLogsForDay]
   );
 
   /** 페이지 배열: 총괄 1 + 제품별 N (브레드 제외). Hook 순서 고정을 위해 항상 호출. */
@@ -675,14 +686,25 @@ function JournalPageContent() {
                   <div className="journal-section">
                     <p className="journal-section-title">반죽 사용량</p>
                     <div className="journal-section-body journal-section-list">
-                      {doughUsageLines.length > 0 ? (
-                        <ul className="list-none pl-0 space-y-1">
-                          {doughUsageLines.map((line, i) => (
-                            <li key={`${line.name}-${line.lot}-${i}`}>
-                              {line.name}: {line.g.toLocaleString()}g ({line.lot})
-                            </li>
-                          ))}
-                        </ul>
+                      {doughUsageSections.some((section) => section.lines.length > 0) ? (
+                        <div className="space-y-3">
+                          {doughUsageSections.map((section) =>
+                            section.lines.length === 0 ? null : (
+                              <div key={section.key}>
+                                {section.label ? (
+                                  <p className="font-medium text-slate-900 print:text-black mb-1">{section.label}</p>
+                                ) : null}
+                                <ul className="list-none pl-0 space-y-1">
+                                  {section.lines.map((line, i) => (
+                                    <li key={`${section.key}-${line.name}-${line.lot}-${i}`}>
+                                      {line.name}: {line.g.toLocaleString()}g ({line.lot})
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )
+                          )}
+                        </div>
                       ) : (
                         <p className="text-slate-500 print:text-gray-600">없음</p>
                       )}

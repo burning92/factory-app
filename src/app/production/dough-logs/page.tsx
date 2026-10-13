@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMasterStore, type DoughLogRecord } from "@/store/useMasterStore";
 import { formatDoughHydration } from "@/features/production/doughHydration";
+import { doughFloorLabel, doughFloorRank, doughLogMapKey, isDoughProductionFloor } from "@/features/production/doughLogFloor";
 import { Pencil, Trash2, ChevronDown, ChevronRight } from "lucide-react";
 
 const KG_PER_BAG = 25;
@@ -35,15 +36,22 @@ export default function DoughLogsPage() {
 
   const sortedLogs = useMemo(() => {
     const entries = Object.entries(doughLogsMap);
-    return entries.sort(([a], [b]) => b.localeCompare(a));
+    return entries.sort(([, a], [, b]) => {
+      const byDate = (b.사용일자 || "").localeCompare(a.사용일자 || "");
+      if (byDate !== 0) return byDate;
+      return doughFloorRank(a.productionFloor) - doughFloorRank(b.productionFloor);
+    });
   }, [doughLogsMap]);
 
-  const handleDelete = async (usageDate: string) => {
-    if (!confirm(`해당 날짜(${usageDate}) 반죽 내역을 삭제하시겠습니까?`)) return;
+  const handleDelete = async (record: DoughLogRecord) => {
+    const floorLabel = doughFloorLabel(record.productionFloor);
+    const label = floorLabel ? `${record.사용일자} ${floorLabel}` : record.사용일자;
+    if (!confirm(`${label} 반죽 내역을 삭제하시겠습니까?`)) return;
+    const expandKey = doughLogMapKey(record.사용일자, record.productionFloor);
     try {
-      await deleteDoughLog(usageDate);
+      await deleteDoughLog(record.사용일자, isDoughProductionFloor(record.productionFloor) ? record.productionFloor : null);
       setToast({ message: "삭제되었습니다.", type: "success" });
-      if (expandedDate === usageDate) setExpandedDate(null);
+      if (expandedDate === expandKey) setExpandedDate(null);
     } catch {
       setToast({ message: "삭제에 실패했습니다.", type: "error" });
     }
@@ -109,7 +117,10 @@ export default function DoughLogsPage() {
             <div className="md:hidden space-y-3">
               {sortedLogs.map(([date, record]) => {
                 const { totalG, bags, kg } = flourSummary(record);
-                const isExpanded = expandedDate === date;
+                const rowKey = doughLogMapKey(record.사용일자, record.productionFloor);
+                const floorLabel = doughFloorLabel(record.productionFloor);
+                const editHref = `/production/dough-usage?date=${record.사용일자}${floorLabel ? `&floor=${record.productionFloor}` : ""}`;
+                const isExpanded = expandedDate === rowKey;
                 const 예상수량포맷 =
                   record.예상수량 != null && Number.isFinite(record.예상수량)
                     ? `${Math.round(record.예상수량).toLocaleString()}개`
@@ -118,12 +129,13 @@ export default function DoughLogsPage() {
                 const 밀가루텍스트 = totalG > 0 ? `${totalG.toLocaleString()}g (약 ${bags}포대 / ${kg.toFixed(1)}kg)` : "—";
                 return (
                   <div
-                    key={date}
+                    key={rowKey}
                     className="rounded-xl border border-slate-600 bg-space-800/80 overflow-hidden"
                   >
                     <div className="p-4">
                       <p className="text-base font-bold text-slate-100 mb-1">
                         {record.반죽일자 ?? "—"} → {record.사용일자 ?? date}
+                        {floorLabel ? ` · ${floorLabel}` : ""}
                       </p>
                       <p className="text-xs text-slate-400 mb-1">
                         예상수량 {예상수량포맷} · 수분율 {수분율텍스트} · 작성자 {record.작성자명 || "—"}
@@ -133,14 +145,14 @@ export default function DoughLogsPage() {
                       </p>
                       <div className="flex flex-wrap items-center justify-end gap-2">
                         <Link
-                          href={`/production/dough-usage?date=${date}`}
+                          href={editHref}
                           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-cyan-500/20 text-cyan-300 text-sm font-medium"
                         >
                           <Pencil className="w-4 h-4" /> 수정
                         </Link>
                         <button
                           type="button"
-                          onClick={() => handleDelete(date)}
+                          onClick={() => handleDelete(record)}
                           disabled={saving !== ""}
                           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-500/20 text-red-400 text-sm font-medium disabled:opacity-50"
                         >
@@ -148,7 +160,7 @@ export default function DoughLogsPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setExpandedDate(isExpanded ? null : date)}
+                          onClick={() => setExpandedDate(isExpanded ? null : rowKey)}
                           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-600 text-slate-300 text-sm"
                           aria-expanded={isExpanded}
                         >
@@ -224,22 +236,24 @@ export default function DoughLogsPage() {
                   <tbody>
                     {sortedLogs.map(([date, record]) => {
                       const { totalG, bags, kg } = flourSummary(record);
-                      const isExpanded = expandedDate === date;
+                      const rowKey = doughLogMapKey(record.사용일자, record.productionFloor);
+                      const floorLabel = doughFloorLabel(record.productionFloor);
+                      const editHref = `/production/dough-usage?date=${record.사용일자}${floorLabel ? `&floor=${record.productionFloor}` : ""}`;
+                      const isExpanded = expandedDate === rowKey;
                       const 예상수량포맷 =
                         record.예상수량 != null && Number.isFinite(record.예상수량)
                           ? `${Math.round(record.예상수량).toLocaleString()}개`
                           : "—";
                       const 수분율텍스트 = formatDoughHydration(record);
                       return (
-                        <Fragment key={date}>
+                        <Fragment key={rowKey}>
                           <tr
-                            key={date}
                             className="border-b border-slate-700 hover:bg-space-700/40"
                           >
                             <td className="px-3 py-3">
                               <button
                                 type="button"
-                                onClick={() => setExpandedDate(isExpanded ? null : date)}
+                                onClick={() => setExpandedDate(isExpanded ? null : rowKey)}
                                 className="text-slate-400 hover:text-slate-200 p-0.5"
                                 aria-expanded={isExpanded}
                               >
@@ -247,7 +261,10 @@ export default function DoughLogsPage() {
                               </button>
                             </td>
                             <td className="px-3 py-3 font-medium text-slate-100">{record.반죽일자 ?? "—"}</td>
-                            <td className="px-3 py-3 font-medium text-slate-100">{record.사용일자 ?? date}</td>
+                            <td className="px-3 py-3 font-medium text-slate-100">
+                              {record.사용일자 ?? date}
+                              {floorLabel ? ` · ${floorLabel}` : ""}
+                            </td>
                             <td className="px-3 py-3 text-right text-slate-300 tabular-nums">{예상수량포맷}</td>
                             <td className="px-3 py-3 text-slate-300">{record.작성자명 || "—"}</td>
                             <td className="px-3 py-3 text-right text-slate-300 tabular-nums">
@@ -256,14 +273,14 @@ export default function DoughLogsPage() {
                             <td className="px-3 py-3 text-right text-slate-300 tabular-nums">{수분율텍스트}</td>
                             <td className="px-3 py-3 text-right">
                               <Link
-                                href={`/production/dough-usage?date=${date}`}
+                                href={editHref}
                                 className="inline-flex items-center gap-1 text-cyan-400 hover:text-cyan-300 text-xs mr-2"
                               >
                                 <Pencil className="w-3.5 h-3.5" /> 수정
                               </Link>
                               <button
                                 type="button"
-                                onClick={() => handleDelete(date)}
+                                onClick={() => handleDelete(record)}
                                 disabled={saving !== ""}
                                 className="inline-flex items-center gap-1 text-slate-400 hover:text-red-400 text-xs disabled:opacity-50"
                               >
@@ -272,7 +289,7 @@ export default function DoughLogsPage() {
                             </td>
                           </tr>
                           {isExpanded && (
-                            <tr key={`${date}-detail`} className="bg-space-900/80 border-b border-slate-700">
+                            <tr className="bg-space-900/80 border-b border-slate-700">
                               <td colSpan={8} className="px-4 py-4">
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-sm">
                                   <div>

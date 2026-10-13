@@ -7,6 +7,7 @@ import DateWheelPicker from "@/components/DateWheelPicker";
 import { useAuth } from "@/contexts/AuthContext";
 import { getDefaultAuthorName, persistAuthorName } from "@/lib/authorDefault";
 import { getHydrationByDayOfWeek } from "@/features/production/doughHydration";
+import { doughFloorLabel, isDoughProductionFloor, type DoughProductionFloor } from "@/features/production/doughLogFloor";
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
@@ -133,6 +134,8 @@ function DoughUsageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editDate = searchParams.get("date");
+  const editFloorParam = searchParams.get("floor");
+  const editFloor: DoughProductionFloor | null = isDoughProductionFloor(editFloorParam) ? editFloorParam : null;
   const isEditMode = !!editDate;
 
   const { profile } = useAuth();
@@ -156,6 +159,8 @@ function DoughUsageContent() {
   const [batchExtraKgs, setBatchExtraKgs] = useState<string[]>([]);
 
   const [usageDate, setUsageDate] = useState(() => getDefaultUsageDate(todayStr()));
+  const [productionFloor, setProductionFloor] = useState<DoughProductionFloor | "">("");
+  const [legacyCombined, setLegacyCombined] = useState(false);
   /** 수정 모드에서 편집 중인 dough_logs 행 id (URL date로 최초 로드 시 1회만 고정). 저장은 id 기준 update. */
   const [editingDoughLogId, setEditingDoughLogId] = useState<string | null>(null);
   const editBoundForDateRef = useRef<string | null>(null);
@@ -175,6 +180,8 @@ function DoughUsageContent() {
   useEffect(() => {
     if (editDate != null && editDate !== "") return;
     setUsageDate(getDefaultUsageDate(todayStr()));
+    setProductionFloor("");
+    setLegacyCombined(false);
     setDoughDate(todayStr());
     setTargetQty("");
     setActualBags("");
@@ -202,7 +209,7 @@ function DoughUsageContent() {
     if (!isEditMode || !editDate || !/^\d{4}-\d{2}-\d{2}$/.test(editDate)) return;
     editBoundForDateRef.current = null;
     setEditingDoughLogId(null);
-  }, [isEditMode, editDate]);
+  }, [isEditMode, editDate, editFloor]);
 
   // 수정 모드: URL date 기준으로 목록만 패칭 (폼은 아래 edit 바인딩에서 한 번만 채움)
   useEffect(() => {
@@ -278,19 +285,31 @@ function DoughUsageContent() {
   const latestDoughLog = useMemo(() => {
     const entries = Object.entries(doughLogsMap ?? {});
     if (entries.length === 0) return null;
-    entries.sort((a, b) => String(b[0]).localeCompare(String(a[0])));
+    entries.sort((a, b) => {
+      const byDate = String(b[1]?.사용일자 ?? "").localeCompare(String(a[1]?.사용일자 ?? ""));
+      if (byDate !== 0) return byDate;
+      return String(b[0]).localeCompare(String(a[0]));
+    });
     return entries[0]?.[1] ?? null;
   }, [doughLogsMap]);
 
   // 수정 모드: URL의 사용일자(editDate)로만 최초 1회 폼 바인딩. 사용일자 필드를 바꿔도 다른 행을 다시 로드하지 않음.
   useEffect(() => {
     if (!isEditMode || !editDate || !/^\d{4}-\d{2}-\d{2}$/.test(editDate)) return;
-    const row = getDoughLogByDate(editDate);
+    const row = getDoughLogByDate(editDate, editFloor);
     if (!row) return;
     if (row.dough_id && doughBoms.length === 0) return;
-    if (editBoundForDateRef.current === editDate) return;
-    editBoundForDateRef.current = editDate;
+    const bindKey = `${editDate}|${editFloor ?? "all"}`;
+    if (editBoundForDateRef.current === bindKey) return;
+    editBoundForDateRef.current = bindKey;
     setEditingDoughLogId(row.id ?? null);
+    if (isDoughProductionFloor(row.productionFloor)) {
+      setProductionFloor(row.productionFloor);
+      setLegacyCombined(false);
+    } else {
+      setProductionFloor("");
+      setLegacyCombined(true);
+    }
     setUsageDate(row.사용일자);
     setDoughDate(row.반죽일자 ?? row.사용일자);
     setTargetQty(String(row.예상수량 ?? ""));
@@ -332,7 +351,7 @@ function DoughUsageContent() {
     }
     set덧가루덧기름(next덧);
     setAutoLotNoticeDate(null);
-  }, [isEditMode, editDate, doughLogsMap, getDoughLogByDate, doughBoms]);
+  }, [isEditMode, editDate, editFloor, doughLogsMap, getDoughLogByDate, doughBoms]);
 
   // 신규 작성 시에만: 최근 덧가루·원료 LOT 자동 세팅. 작성자명은 아래 useEffect에서 Supabase → localStorage 순으로 로드.
   useEffect(() => {
@@ -515,6 +534,15 @@ function DoughUsageContent() {
       const lines = fromInputLines(덧가루덧기름[k] ?? []);
       if (lines.length) 덧가루덧기름Parsed[k] = lines;
     }
+    const floorToSave: DoughProductionFloor | null = legacyCombined
+      ? null
+      : isDoughProductionFloor(productionFloor)
+        ? productionFloor
+        : null;
+    if (!legacyCombined && !floorToSave) {
+      setToast({ message: "2층 또는 3층을 선택해 주세요.", type: "error" });
+      return;
+    }
     if (authorName.trim())
       await persistAuthorName(DOUGH_LAST_AUTHOR_KEY, DOUGH_AUTHOR_STORAGE_KEY, authorName.trim());
     const targetQtyNum = targetQty.trim() ? Math.max(0, parseInt(targetQty, 10) || 0) : undefined;
@@ -527,6 +555,7 @@ function DoughUsageContent() {
       예상수량: targetQtyNum,
       dough_id: selectedDough?.id ?? undefined,
       수분율: Number.isFinite(hydrationPercent) ? hydrationPercent : undefined,
+      productionFloor: floorToSave,
     };
     try {
       if (isEditMode) {
@@ -552,6 +581,8 @@ function DoughUsageContent() {
     }
   }, [
     usageDate,
+    productionFloor,
+    legacyCombined,
     authorName,
     반죽원료,
     덧가루덧기름,
@@ -581,12 +612,36 @@ function DoughUsageContent() {
       <div className="max-w-3xl mx-auto">
         <h1 className="text-2xl font-bold text-slate-100 mb-2">{isEditMode ? "반죽사용량 수정" : "반죽사용량 입력"}</h1>
         <p className="text-slate-400 text-sm mb-6">
-          권장량 확인 → 실제 투입량 결정 → 배치 분할표 확인 → 실제 사용량 입력 및 저장. 관리일지 출력 시 해당 날짜로 자동 매핑됩니다.
+          2층과 3층을 각각 저장합니다. 원료는 그 층에서 쓴 양을 그대로 입력하고, 생산일지에는 두 기록이 한 장에 같이 나옵니다.
         </p>
 
         {/* 상단: 권장량 확인 + 실제 투입량 결정 */}
         <section className="rounded-2xl border border-slate-700 bg-space-800/80 p-6 mb-6">
           <h2 className="text-lg font-bold text-slate-100 mb-1">1. 권장량 확인 및 실제 투입량 결정</h2>
+
+          <div className="mb-4">
+            <label className="block text-xs text-slate-400 mb-1">생산 층</label>
+            {legacyCombined ? (
+              <p className="text-sm text-slate-300">이 기록은 층 구분 없이 저장된 반죽입니다.</p>
+            ) : (
+              <select
+                value={productionFloor}
+                disabled={isEditMode}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setProductionFloor(isDoughProductionFloor(next) ? next : "");
+                }}
+                className="w-full max-w-xs px-3 py-2 text-sm bg-space-900 border border-slate-600 rounded-lg text-slate-100 disabled:opacity-70"
+              >
+                <option value="">선택</option>
+                <option value="2F">2층</option>
+                <option value="3F">3층</option>
+              </select>
+            )}
+            {isEditMode && isDoughProductionFloor(productionFloor) && (
+              <p className="text-xs text-slate-500 mt-1">{doughFloorLabel(productionFloor)} 기록만 수정합니다.</p>
+            )}
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <div>

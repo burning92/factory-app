@@ -16,6 +16,7 @@ export interface DailyConsolidatedData {
   productionLogs: ProductionLog[];
   usageCalculations: UsageCalculationRecord[];
   doughLog: DoughLogRecord | null;
+  doughLogs: DoughLogRecord[];
   bomList: BomRow[];
 }
 
@@ -150,12 +151,16 @@ function consolidateDaily(
   const dateKey = date.slice(0, 10);
   const logs = productionLogs.filter((l) => l.생산일자 === dateKey);
   const calcs = usageCalculations.filter((u) => u.production_date === dateKey);
-  const doughLog = doughLogsMap[dateKey] ?? null;
+  const doughLogs = Object.values(doughLogsMap)
+    .filter((row) => row.사용일자.slice(0, 10) === dateKey)
+    .sort((a, b) => (a.productionFloor ?? "").localeCompare(b.productionFloor ?? ""));
+  const doughLog = doughLogs.find((row) => !row.productionFloor) ?? doughLogs[0] ?? null;
   return {
     date: dateKey,
     productionLogs: logs,
     usageCalculations: calcs,
     doughLog,
+    doughLogs,
     bomList,
   };
 }
@@ -359,18 +364,23 @@ export function useDailyProductionReport(date: string): {
     }
     const doughAdditives: Record<string, { totalG: number; lotDisplay: string }> = {};
     const doughIngredients: Record<string, number> = {};
-    if (daily.doughLog) {
-      const dl = daily.doughLog;
+    for (const dl of daily.doughLogs) {
       for (const [key, lines] of Object.entries(dl.덧가루덧기름 ?? {})) {
         const arr = Array.isArray(lines) ? lines : [];
         const totalG = arr.reduce((s, x) => s + (x?.사용량_g ?? 0), 0);
         const lotDisplay = arr.map((x) => x?.lot ?? "").filter(Boolean).join(", ") || "—";
-        if (key) doughAdditives[key] = { totalG, lotDisplay };
+        if (!key) continue;
+        const prev = doughAdditives[key];
+        const lots = [prev?.lotDisplay, lotDisplay].filter((lot) => lot && lot !== "—");
+        doughAdditives[key] = {
+          totalG: (prev?.totalG ?? 0) + totalG,
+          lotDisplay: lots.join(", ") || "—",
+        };
       }
       for (const [key, lines] of Object.entries(dl.반죽원료 ?? {})) {
         const arr = Array.isArray(lines) ? lines : [];
         const totalG = arr.reduce((s, x) => s + (x?.사용량_g ?? 0), 0);
-        if (key) doughIngredients[key] = totalG;
+        if (key) doughIngredients[key] = (doughIngredients[key] ?? 0) + totalG;
       }
     }
     let parbakeWoozooinQty = 0;
