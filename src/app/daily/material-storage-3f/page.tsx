@@ -108,11 +108,11 @@ export default function DailyMaterialStorage3fListPage() {
       <div className="flex items-center gap-2 mb-4">
         <Link href="/daily" className="text-slate-400 hover:text-slate-200 text-sm">데일리</Link>
         <span className="text-slate-600">/</span>
-        <span className="text-slate-200 font-medium">원부자재 창고 점검표(3F)</span>
+        <span className="text-slate-200 font-medium">부자재 창고 점검표(3F)</span>
       </div>
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <h1 className="text-lg font-semibold text-slate-100">원부자재 창고 점검표(3F) — 목록</h1>
+        <h1 className="text-lg font-semibold text-slate-100">부자재 창고 점검표(3F) — 목록</h1>
         <Link href="/daily/material-storage-3f/new" className="shrink-0 inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-sm">
           새 일지 작성
         </Link>

@@ -6,6 +6,8 @@ import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import {
+  MATERIAL_STORAGE_3F_LEGACY_RAW_ROOM,
+  MATERIAL_STORAGE_3F_LOG_TITLE,
   MATERIAL_STORAGE_3F_QUESTIONS,
   MATERIAL_STORAGE_3F_ROOMS,
   keyForResult,
@@ -140,14 +142,17 @@ export default function DailyMaterialStorage3fViewPage() {
       <div className="flex items-center gap-2 mb-4">
         <Link href="/daily" className="text-slate-400 hover:text-slate-200 text-sm">데일리</Link>
         <span className="text-slate-600">/</span>
-        <Link href="/daily/material-storage-3f" className="text-slate-400 hover:text-slate-200 text-sm">원부자재 창고 점검표(3F)</Link>
+        <Link href="/daily/material-storage-3f" className="text-slate-400 hover:text-slate-200 text-sm">{MATERIAL_STORAGE_3F_LOG_TITLE}</Link>
         <span className="text-slate-600">/</span>
         <span className="text-slate-200 font-medium">{header.inspection_date}</span>
       </div>
-      <h1 className="text-lg font-semibold text-slate-100 mb-1">원부자재 창고 점검표(3F) — 상세</h1>
+      <h1 className="text-lg font-semibold text-slate-100 mb-1">{MATERIAL_STORAGE_3F_LOG_TITLE} — 상세</h1>
       <p className="text-slate-500 text-sm mb-4">점검일자: {header.inspection_date}{header.author_name ? ` · 작성: ${header.author_name}` : ""}</p>
 
-      {MATERIAL_STORAGE_3F_ROOMS.map((room) => (
+      {(items.some((item) => item.room_key === "raw") || header.raw_room_temp_c != null || header.raw_room_humidity_pct != null
+        ? [MATERIAL_STORAGE_3F_LEGACY_RAW_ROOM, ...MATERIAL_STORAGE_3F_ROOMS]
+        : MATERIAL_STORAGE_3F_ROOMS
+      ).map((room) => (
         <section key={room.key} className="rounded-xl border border-slate-700/60 bg-slate-800/50 overflow-hidden mb-6">
           <h2 className="px-4 py-3 text-sm font-semibold text-cyan-300 bg-slate-800/80 border-b border-slate-700/60">{room.name}</h2>
           <div className="px-4 py-3 grid grid-cols-2 gap-3 text-sm border-b border-slate-700/50">

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import {
+  MATERIAL_STORAGE_3F_LOG_TITLE,
   MATERIAL_STORAGE_3F_QUESTIONS,
   MATERIAL_STORAGE_3F_ROOMS,
   buildMaterialStorage3fAutoDeviationText,
@@ -81,9 +82,8 @@ export function MaterialStorage3fForm({ mode, editLogId }: Props) {
     if (hasAnyIssue && !deviationManuallyEdited) {
       setCorrective((c) => ({ ...c, deviation: autoDeviationText }));
     }
-    if (!hasAnyIssue) {
+    if (!hasAnyIssue && !deviationManuallyEdited) {
       setCorrective((c) => ({ ...c, deviation: "" }));
-      setDeviationManuallyEdited(false);
       setCorrectiveDatetimeManuallyEdited(false);
     }
   }, [hasAnyIssue, deviationManuallyEdited, autoDeviationText]);
@@ -173,11 +173,12 @@ export function MaterialStorage3fForm({ mode, editLogId }: Props) {
       if (cancelled) return;
       const nextResults: MaterialStorage3fResultMap = {};
       (itemsData ?? []).forEach((row: { room_key: string; question_index: number; result: string }) => {
-        if ((row.result === "O" || row.result === "X") && (row.room_key === "raw" || row.room_key === "sub")) {
+        if ((row.result === "O" || row.result === "X") && row.room_key === "sub") {
           nextResults[keyForResult(row.room_key, row.question_index - 1)] = row.result;
         }
       });
       setResults(nextResults);
+      if ((log.corrective_deviation ?? "").trim()) setDeviationManuallyEdited(true);
       setLoadDone(true);
     })();
     return () => {
@@ -209,7 +210,8 @@ export function MaterialStorage3fForm({ mode, editLogId }: Props) {
       const { error: delErr } = await supabase
         .from("daily_material_storage_3f_log_items")
         .delete()
-        .eq("log_id", logId);
+        .eq("log_id", logId)
+        .in("room_key", MATERIAL_STORAGE_3F_ROOMS.map((room) => room.key));
       if (delErr) throw delErr;
       const rows: Array<{
         log_id: string;
@@ -389,11 +391,11 @@ export function MaterialStorage3fForm({ mode, editLogId }: Props) {
       <div className="flex items-center gap-2 mb-4">
         <Link href="/daily" className="text-slate-400 hover:text-slate-200 text-sm">데일리</Link>
         <span className="text-slate-600">/</span>
-        <Link href="/daily/material-storage-3f" className="text-slate-400 hover:text-slate-200 text-sm">원부자재 창고 점검표(3F)</Link>
+        <Link href="/daily/material-storage-3f" className="text-slate-400 hover:text-slate-200 text-sm">{MATERIAL_STORAGE_3F_LOG_TITLE}</Link>
         <span className="text-slate-600">/</span>
         <span className="text-slate-200 font-medium">{mode === "new" ? "새 작성" : "수정"}</span>
       </div>
-      <h1 className="text-lg font-semibold text-slate-100 mb-1">{mode === "new" ? "원부자재 창고 점검표(3F) — 새 작성" : "원부자재 창고 점검표(3F) — 수정"}</h1>
+      <h1 className="text-lg font-semibold text-slate-100 mb-1">{mode === "new" ? `${MATERIAL_STORAGE_3F_LOG_TITLE} — 새 작성` : `${MATERIAL_STORAGE_3F_LOG_TITLE} — 수정`}</h1>
 
       {toast && (
         <div className={`mb-4 px-4 py-2 rounded-lg text-sm ${toast.error ? "bg-red-900/30 text-red-200" : "bg-cyan-900/30 text-cyan-200"}`}>

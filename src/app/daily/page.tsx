@@ -29,7 +29,7 @@ const SECTIONS: { title: string; items: HubEntry[] }[] = [
       { href: "/daily/cold-storage-hygiene", label: "냉장·냉동 온도 및 위생 점검일지", Icon: Snowflake },
       { href: "/daily/process-control-bread", label: "공정관리 점검일지(빵류)", Icon: ClipboardList },
       { href: "/daily/illumination", label: "영업장 조도 점검일지", Icon: Lightbulb },
-      { href: "/daily/material-storage-3f", label: "원부자재 창고 점검표(3F)", Icon: Warehouse },
+      { href: "/daily/material-storage-3f", label: "부자재 창고 점검표(3F)", Icon: Warehouse },
     ],
   },
   {

@@ -5,10 +5,17 @@ export type MaterialStorage3fRoom = {
   name: string;
 };
 
+export const MATERIAL_STORAGE_3F_LOG_TITLE = "부자재 창고 점검표(3F)";
+
+/** 작성 화면은 부자재보관실만 받는다. raw는 예전 일지 조회용으로 타입만 남긴다. */
 export const MATERIAL_STORAGE_3F_ROOMS: MaterialStorage3fRoom[] = [
-  { key: "raw", name: "원료보관실" },
   { key: "sub", name: "부자재보관실" },
 ];
+
+export const MATERIAL_STORAGE_3F_LEGACY_RAW_ROOM: MaterialStorage3fRoom = {
+  key: "raw",
+  name: "원료보관실",
+};
 
 export const MATERIAL_STORAGE_3F_QUESTIONS: string[] = [
   "제품의 적재 및 이격상태는 양호한가?",
@@ -53,7 +60,9 @@ export function hasAnyMaterialStorage3fIssue(
   temps: Record<MaterialStorage3fRoomKey, string>,
   humidities: Record<MaterialStorage3fRoomKey, string>
 ): boolean {
-  const hasFail = Object.values(results).some((v) => v === "X");
+  const hasFail = MATERIAL_STORAGE_3F_ROOMS.some((room) =>
+    MATERIAL_STORAGE_3F_QUESTIONS.some((_, qi) => results[keyForResult(room.key, qi)] === "X")
+  );
   if (hasFail) return true;
   return MATERIAL_STORAGE_3F_ROOMS.some((room) => {
     const t = parseOptionalNum(temps[room.key] ?? "");
