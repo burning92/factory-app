@@ -17,6 +17,7 @@ import {
   applyIngredientWasteFifo,
   type IngredientWasteLotRow,
 } from "./wasteFifo";
+import { doughQtyToNumber, isFloorSplitDoughDate } from "./floorDough";
 
 const BREAD_STANDARD = "브레드";
 
@@ -184,11 +185,14 @@ export function calculateBreadDerived(
     (s, p) => s + (p.finishedQty ?? 0),
     0
   );
-  const rawBreadWaste =
-    doughMixQty -
-    doughWasteQty -
-    totalBreadFinished -
-    (generalDoughFinishedQty ?? 0);
+  const rawBreadWaste = isFloorSplitDoughDate(_dateGroup.date)
+    ? doughQtyToNumber(_dateGroup.floor3DoughMixQty) -
+      doughQtyToNumber(_dateGroup.floor3DoughWasteQty) -
+      totalBreadFinished
+    : doughMixQty -
+      doughWasteQty -
+      totalBreadFinished -
+      (generalDoughFinishedQty ?? 0);
   const breadWasteNegative = rawBreadWaste < 0;
   const resolvedTotalWaste =
     totalBreadWasteQty ?? Math.max(0, rawBreadWaste);

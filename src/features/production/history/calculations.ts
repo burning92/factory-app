@@ -31,6 +31,7 @@ import {
   resolveParbakeProductionRows,
   sumParbakeClosureQty,
 } from "./parbakeClosure";
+import { doughQtyToNumber, isFloorSplitDoughDate } from "./floorDough";
 
 export type { ComputedResult };
 
@@ -326,8 +327,13 @@ function calculateParbakeAndDough(
   warnings: string[];
 } {
   const warnings: string[] = [];
-  const doughMixQty = toNum(state.doughMixQty);
-  const doughWasteQty = toNum(state.doughWasteQty);
+  const splitFloors = isFloorSplitDoughDate(state.date);
+  const floor2Mix = doughQtyToNumber(state.floor2DoughMixQty);
+  const floor2Waste = doughQtyToNumber(state.floor2DoughWasteQty);
+  const floor3Mix = doughQtyToNumber(state.floor3DoughMixQty);
+  const floor3Waste = doughQtyToNumber(state.floor3DoughWasteQty);
+  const doughMixQty = splitFloors ? floor2Mix + floor3Mix : toNum(state.doughMixQty);
+  const doughWasteQty = splitFloors ? floor2Waste + floor3Waste : toNum(state.doughWasteQty);
   const { totalExtraParbakeQty, astronautParbakeQty, saleParbakeQty } = totals;
 
   const breadFinishedQty = productSummaries
@@ -341,18 +347,44 @@ function calculateParbakeAndDough(
     .reduce((s, p) => s + (p.finishedQty ?? 0), 0);
   const hasBread = productSummaries.some((p) => p.isBreadProduct);
   const storedParbakeOnly = isStoredParbakeOnlyDay(productSummaries);
+  const floor2DoughEntered = floor2Mix !== 0 || floor2Waste !== 0;
 
-  const rawBreadWaste =
-    doughMixQty - doughWasteQty - breadFinishedQty - generalDoughFinishedQty;
+  const rawBreadWaste = splitFloors
+    ? floor3Mix - floor3Waste - breadFinishedQty
+    : doughMixQty - doughWasteQty - breadFinishedQty - generalDoughFinishedQty;
   const breadWasteQty = hasBread ? Math.max(0, rawBreadWaste) : 0;
   if (hasBread && rawBreadWaste < 0) {
     warnings.push(
       `브레드 도우 폐기량이 음수입니다 (${rawBreadWaste}). 입력값을 확인해 주세요.`
     );
   }
+  if (splitFloors && !hasBread && (floor3Mix !== 0 || floor3Waste !== 0)) {
+    warnings.push("3층 도우가 입력됐는데 브레드 완제품이 없습니다.");
+  }
 
   let parbakeWasteQty: number;
-  if (hasBread && generalDoughFinishedQty === 0) {
+  if (splitFloors) {
+    if (hasBread && generalDoughFinishedQty === 0 && !floor2DoughEntered) {
+      parbakeWasteQty = 0;
+    } else if (storedParbakeOnly && !floor2DoughEntered) {
+      parbakeWasteQty = 0;
+    } else if (!hasBread) {
+      parbakeWasteQty =
+        floor2Mix +
+        totalExtraParbakeQty -
+        totals.totalFinishedQty -
+        (astronautParbakeQty + saleParbakeQty) -
+        floor2Waste;
+    } else {
+      parbakeWasteQty =
+        floor2Mix +
+        totalExtraParbakeQty -
+        generalDoughFinishedQty -
+        storedParbakeFinishedQty -
+        (astronautParbakeQty + saleParbakeQty) -
+        floor2Waste;
+    }
+  } else if (hasBread && generalDoughFinishedQty === 0) {
     /** 브레드 + 파베이크사용만: 반죽은 브레드 라인, 파베이크 개수 폐기는 도우 잔량식에 넣지 않음 */
     parbakeWasteQty = 0;
   } else if (storedParbakeOnly) {
@@ -384,7 +416,7 @@ function calculateParbakeAndDough(
 
   let doughUsageQty: number;
   let sameDayParbakeProductionQty: number;
-  if (storedParbakeOnly) {
+  if (storedParbakeOnly && !(splitFloors && floor2DoughEntered)) {
     /** 당일 반죽 없음 — 파베이크 잔량(개)은 도우 사용량·당일 생산량에 반영하지 않음 */
     doughUsageQty = 0;
     sameDayParbakeProductionQty = 0;
@@ -1300,11 +1332,16 @@ export function calculateUsageSummary(
   const storedParbakeFinishedQty = productSummaries
     .filter((p) => p.usesStoredParbake)
     .reduce((s, p) => s + p.finishedQty, 0);
-  const expectedDirectDoughFlowQty =
-    directDoughFinishedQty +
-    totals.astronautParbakeQty +
-    totals.saleParbakeQty +
-    parbakeDough.parbakeWasteQty;
+  const expectedDirectDoughFlowQty = isFloorSplitDoughDate(dateGroup.date)
+    ? directDoughFinishedQty +
+      storedParbakeFinishedQty +
+      totals.astronautParbakeQty +
+      totals.saleParbakeQty -
+      totals.totalExtraParbakeQty
+    : directDoughFinishedQty +
+      totals.astronautParbakeQty +
+      totals.saleParbakeQty +
+      parbakeDough.parbakeWasteQty;
   const directDoughBalanceQty =
     parbakeDough.doughUsageQty - expectedDirectDoughFlowQty;
   const storedParbakeOnly = isStoredParbakeOnlyDay(productSummaries);

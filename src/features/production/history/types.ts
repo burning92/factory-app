@@ -98,6 +98,14 @@ export type DateGroupInput = {
   date: string;
   doughMixQty: number | "";
   doughWasteQty: number | "";
+  /** 2026-10-12부터. 2층 피자 도우 반죽량 */
+  floor2DoughMixQty?: number | "";
+  /** 2026-10-12부터. 2층 피자 도우 폐기량 */
+  floor2DoughWasteQty?: number | "";
+  /** 2026-10-12부터. 3층 브레드 도우 반죽량 */
+  floor3DoughMixQty?: number | "";
+  /** 2026-10-12부터. 3층 브레드 도우 폐기량 */
+  floor3DoughWasteQty?: number | "";
   materials: MaterialCardInput[];
   products: ProductItemInput[];
   secondClosure: SecondClosureInput;

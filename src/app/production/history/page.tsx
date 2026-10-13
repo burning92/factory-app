@@ -36,6 +36,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { isAdminLikeRole } from "@/lib/roles";
 import { requestSecondCloseLabSync } from "@/lib/materialStockLab/clientSyncFirstCloseReturn";
 import { extraParbakeManufacturedDateFromRow } from "@/features/production/history/extraParbakeDates";
+import { isFloorSplitDoughDate, sumDoughQty } from "@/features/production/history/floorDough";
 
 const HISTORY_GROUP_STATE_KEY = "production-history:group-state";
 /** 1차 마감 전용 최근 작성자명 (출고 입력과 분리). Supabase 우선, localStorage는 보조 fallback */
@@ -131,6 +132,10 @@ function migrateDateGroupState(parsed: Record<string, unknown>): Record<string, 
       authorName: (s.authorName as string)?.trim() ? String(s.authorName).trim() : lastAuthor,
       doughMixQty: (s.doughMixQty as number | "") ?? "",
       doughWasteQty: (s.doughWasteQty as number | "") ?? "",
+      floor2DoughMixQty: (s.floor2DoughMixQty as number | "") ?? "",
+      floor2DoughWasteQty: (s.floor2DoughWasteQty as number | "") ?? "",
+      floor3DoughMixQty: (s.floor3DoughMixQty as number | "") ?? "",
+      floor3DoughWasteQty: (s.floor3DoughWasteQty as number | "") ?? "",
       materials,
       products: (s.products as DateGroupState["products"]) ?? [],
       secondClosure: (s.secondClosure as DateGroupState["secondClosure"]) ?? {
@@ -417,6 +422,12 @@ export type DateGroupState = {
   authorName: string;
   doughMixQty: number | "";
   doughWasteQty: number | "";
+  /** 2026-10-12부터 2층 피자 도우 */
+  floor2DoughMixQty?: number | "";
+  floor2DoughWasteQty?: number | "";
+  /** 2026-10-12부터 3층 브레드 도우 */
+  floor3DoughMixQty?: number | "";
+  floor3DoughWasteQty?: number | "";
   materials: MaterialCard[];
   products: ProductItem[];
   secondClosure: SecondClosure;
@@ -1007,10 +1018,42 @@ function createInitialDateGroupState(
     authorName: defaultAuthor ?? "",
     doughMixQty: "",
     doughWasteQty: "",
+    floor2DoughMixQty: "",
+    floor2DoughWasteQty: "",
+    floor3DoughMixQty: "",
+    floor3DoughWasteQty: "",
     materials: buildInitialMaterials(date, logs, materials, requiredBomMaterials, groupStateByDate),
     products,
     secondClosure,
   };
+}
+
+function FloorDoughField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number | "" | undefined;
+  onChange: (value: number | "") => void;
+}) {
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className="text-sm font-medium text-slate-400">{label}</span>
+      <input
+        type="number"
+        min={0}
+        inputMode="numeric"
+        className="w-full rounded-lg border border-slate-600 bg-space-900 px-4 py-3 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500/50"
+        placeholder="0"
+        value={value == null || value === "" ? "" : value}
+        onChange={(e) => {
+          const v = e.target.value;
+          onChange(v === "" ? "" : Math.max(0, Number(v) || 0));
+        }}
+      />
+    </label>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1446,6 +1489,23 @@ function UsageCalculationPageContent() {
     (date: string, field: "doughMixQty" | "doughWasteQty", value: number | "") => {
       const s = getOrInitGroupState(date);
       setGroupState(date, { ...s, [field]: value });
+    },
+    [getOrInitGroupState, setGroupState]
+  );
+
+  const updateFloorDough = useCallback(
+    (
+      date: string,
+      field: "floor2DoughMixQty" | "floor2DoughWasteQty" | "floor3DoughMixQty" | "floor3DoughWasteQty",
+      value: number | ""
+    ) => {
+      const s = getOrInitGroupState(date);
+      const next = { ...s, [field]: value };
+      setGroupState(date, {
+        ...next,
+        doughMixQty: sumDoughQty(next.floor2DoughMixQty, next.floor3DoughMixQty),
+        doughWasteQty: sumDoughQty(next.floor2DoughWasteQty, next.floor3DoughWasteQty),
+      });
     },
     [getOrInitGroupState, setGroupState]
   );
@@ -2152,36 +2212,69 @@ function UsageCalculationPageContent() {
                               onChange={(e) => updateAuthorName(date, e.target.value)}
                             />
                           </label>
-                          <label className="flex flex-col gap-1.5">
-                            <span className="text-sm font-medium text-slate-400">도우 반죽량 (개)</span>
-                            <input
-                              type="number"
-                              min={0}
-                              inputMode="numeric"
-                              className="w-full rounded-lg border border-slate-600 bg-space-900 px-4 py-3 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500/50"
-                              placeholder="0"
-                              value={state.doughMixQty === "" ? "" : state.doughMixQty}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                updateDough(date, "doughMixQty", v === "" ? "" : Math.max(0, Number(v) || 0));
-                              }}
-                            />
-                          </label>
-                          <label className="flex flex-col gap-1.5">
-                            <span className="text-sm font-medium text-slate-400">도우 폐기량 (개)</span>
-                            <input
-                              type="number"
-                              min={0}
-                              inputMode="numeric"
-                              className="w-full rounded-lg border border-slate-600 bg-space-900 px-4 py-3 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500/50"
-                              placeholder="0"
-                              value={state.doughWasteQty === "" ? "" : state.doughWasteQty}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                updateDough(date, "doughWasteQty", v === "" ? "" : Math.max(0, Number(v) || 0));
-                              }}
-                            />
-                          </label>
+                          {isFloorSplitDoughDate(date) ? (
+                            <>
+                              <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-lg border border-slate-700/80 bg-space-900/40 p-3">
+                                <p className="sm:col-span-2 text-sm font-medium text-slate-200">2층 피자</p>
+                                <FloorDoughField
+                                  label="도우 반죽량 (개)"
+                                  value={state.floor2DoughMixQty}
+                                  onChange={(v) => updateFloorDough(date, "floor2DoughMixQty", v)}
+                                />
+                                <FloorDoughField
+                                  label="도우 폐기량 (개)"
+                                  value={state.floor2DoughWasteQty}
+                                  onChange={(v) => updateFloorDough(date, "floor2DoughWasteQty", v)}
+                                />
+                              </div>
+                              <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-lg border border-slate-700/80 bg-space-900/40 p-3">
+                                <p className="sm:col-span-2 text-sm font-medium text-slate-200">3층 브레드</p>
+                                <FloorDoughField
+                                  label="도우 반죽량 (개)"
+                                  value={state.floor3DoughMixQty}
+                                  onChange={(v) => updateFloorDough(date, "floor3DoughMixQty", v)}
+                                />
+                                <FloorDoughField
+                                  label="도우 폐기량 (개)"
+                                  value={state.floor3DoughWasteQty}
+                                  onChange={(v) => updateFloorDough(date, "floor3DoughWasteQty", v)}
+                                />
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <label className="flex flex-col gap-1.5">
+                                <span className="text-sm font-medium text-slate-400">도우 반죽량 (개)</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  inputMode="numeric"
+                                  className="w-full rounded-lg border border-slate-600 bg-space-900 px-4 py-3 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500/50"
+                                  placeholder="0"
+                                  value={state.doughMixQty === "" ? "" : state.doughMixQty}
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    updateDough(date, "doughMixQty", v === "" ? "" : Math.max(0, Number(v) || 0));
+                                  }}
+                                />
+                              </label>
+                              <label className="flex flex-col gap-1.5">
+                                <span className="text-sm font-medium text-slate-400">도우 폐기량 (개)</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  inputMode="numeric"
+                                  className="w-full rounded-lg border border-slate-600 bg-space-900 px-4 py-3 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500/50"
+                                  placeholder="0"
+                                  value={state.doughWasteQty === "" ? "" : state.doughWasteQty}
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    updateDough(date, "doughWasteQty", v === "" ? "" : Math.max(0, Number(v) || 0));
+                                  }}
+                                />
+                              </label>
+                            </>
+                          )}
                         </div>
                       </div>
 

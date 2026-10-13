@@ -9,6 +9,7 @@ import type {
   DateGroupInput,
   ComputedResult,
 } from "@/features/production/history/types";
+import { doughQtyToNumber, isFloorSplitDoughDate } from "@/features/production/history/floorDough";
 
 /** 반죽 내역(사용일자 기준)을 원료별·LOT별 합산하여 총괄 표시용 배열로 반환. 밀가루 → 반죽원료 → 덧가루/덧기름 순. */
 function aggregateDoughUsageForJournal(
@@ -600,11 +601,27 @@ function JournalPageContent() {
                 <div className="mt-6 print:mt-4 grid grid-cols-2 gap-x-8 gap-y-4 print:gap-y-2 text-sm print:text-black leading-relaxed">
                   <div>
                     <span className="text-slate-600 print:text-gray-700 font-medium block mb-0.5">도우 반죽량</span>
-                    <p className="font-medium text-slate-900 print:text-black">{comp.doughMixQty.toLocaleString()}개</p>
+                    {isFloorSplitDoughDate(date) ? (
+                      <p className="font-medium text-slate-900 print:text-black">
+                        2층 {doughQtyToNumber(stored.dateGroup.floor2DoughMixQty).toLocaleString()}개
+                        <span className="mx-1 text-slate-400">/</span>
+                        3층 {doughQtyToNumber(stored.dateGroup.floor3DoughMixQty).toLocaleString()}개
+                      </p>
+                    ) : (
+                      <p className="font-medium text-slate-900 print:text-black">{comp.doughMixQty.toLocaleString()}개</p>
+                    )}
                   </div>
                   <div>
                     <span className="text-slate-600 print:text-gray-700 font-medium block mb-0.5">도우 폐기량</span>
-                    <p className="font-medium text-slate-900 print:text-black">{comp.doughWasteQty.toLocaleString()}개</p>
+                    {isFloorSplitDoughDate(date) ? (
+                      <p className="font-medium text-slate-900 print:text-black">
+                        2층 {doughQtyToNumber(stored.dateGroup.floor2DoughWasteQty).toLocaleString()}개
+                        <span className="mx-1 text-slate-400">/</span>
+                        3층 {doughQtyToNumber(stored.dateGroup.floor3DoughWasteQty).toLocaleString()}개
+                      </p>
+                    ) : (
+                      <p className="font-medium text-slate-900 print:text-black">{comp.doughWasteQty.toLocaleString()}개</p>
+                    )}
                   </div>
                   <div>
                     <span className="text-slate-600 print:text-gray-700 font-medium block mb-0.5">도우 사용량</span>
