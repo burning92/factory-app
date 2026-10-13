@@ -66,12 +66,12 @@ function getDefaultUsageDate(doughDateStr: string): string {
 
 const KG_PER_BAG = 25;
 const FLOUR_G_PER_BAG = KG_PER_BAG * 1000;
-const MAX_BAGS_PER_BATCH = 6;
+const MAX_BAGS_PER_BATCH = 4;
 const MIN_BAGS_REQUIRED = 2;
 /** 믹서기 잔류 등으로 인한 로스(개). 도우 중량과 무관하게 고정 합산 */
 const FIXED_LOSS_QTY = 50;
 
-/** 1회 최대 6포대 기준으로 균등 분배 제안 (예: 13 → [5,4,4]) */
+/** 1회 최대 4포대 기준으로 균등 분배 제안 (예: 13 → [4,3,3,3]) */
 function suggestBatchSplit(totalBags: number): number[] {
   if (totalBags <= 0) return [];
   const nBatches = Math.ceil(totalBags / MAX_BAGS_PER_BATCH);
@@ -247,14 +247,14 @@ function DoughUsageContent() {
   const extraKgNum = useMemo(() => Math.max(0, parseFloat(extraKg) || 0), [extraKg]);
   const actualBagsValid = actualBagsNum >= MIN_BAGS_REQUIRED;
 
-  // 여유 공간(6포대 미만)이 있는 첫 회차에 잔량 할당. 모두 6포대면 마지막 회차에 할당 (믹서 6포대 한계)
+  // 여유 공간(4포대 미만)이 있는 첫 회차에 잔량 할당. 모두 4포대면 마지막 회차에 할당
   const getTargetIndexForExtraKg = useCallback((splits: string[]) => {
     const bags = splits.map((s) => Math.max(0, parseInt(s, 10) || 0));
     const idx = bags.findIndex((b) => b < MAX_BAGS_PER_BATCH);
     return idx >= 0 ? idx : Math.max(0, bags.length - 1);
   }, []);
 
-  // 실제 투입 포대 수 변경 시 배합 분할 자동 제안 + 회차별 kg 스마트 할당 (6포대 미만 회차 또는 마지막 회차)
+  // 실제 투입 포대 수 변경 시 배합 분할 자동 제안 + 회차별 kg 스마트 할당 (4포대 미만 회차 또는 마지막 회차)
   useEffect(() => {
     if (actualBagsNum >= MIN_BAGS_REQUIRED) {
       const splits = suggestBatchSplit(actualBagsNum).map(String);
