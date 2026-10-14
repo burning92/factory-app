@@ -1,13 +1,18 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useMasterStore, type DoughLogRecord, type DoughProcessLine } from "@/store/useMasterStore";
 import type {
+  BaseUsageRow,
+  BaseWasteRow,
   BomRowRef,
   DateGroupInput,
   ComputedResult,
+  ParbakePurposeProductionLine,
+  ResolvedExtraParbake,
+  UnresolvedExtraParbake,
 } from "@/features/production/history/types";
 import { floorJournalForms } from "@/features/production/history/floorJournalQty";
 import { doughFloorLabel, doughFloorRank } from "@/features/production/doughLogFloor";
@@ -103,17 +108,29 @@ function addDays(isoDate: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-function JournalQtyCell({ label, value }: { label: string; value: number }) {
+function JournalBlock({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div>
-      <span className="text-slate-600 print:text-gray-700 font-medium block mb-0.5">{label}</span>
-      <p className="font-medium text-slate-900 print:text-black">{value.toLocaleString()}개</p>
-    </div>
+    <section className="journal-block">
+      <p className="journal-block-title">{title}</p>
+      <div className="journal-block-body">{children}</div>
+    </section>
   );
 }
 
-const journalQtyGridClass =
-  "grid grid-cols-2 gap-x-8 gap-y-4 print:gap-y-2 text-sm print:text-black leading-relaxed";
+function JournalQtyTable({ rows }: { rows: { label: string; value: number }[] }) {
+  return (
+    <table className="journal-qty-table">
+      <tbody>
+        {rows.map((row) => (
+          <tr key={row.label}>
+            <th scope="row">{row.label}</th>
+            <td>{row.value.toLocaleString()}개</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
 
 type JournalGramLine = {
   key: string;
@@ -176,6 +193,156 @@ function journalUsageGramLines(
     }
   }
   return out;
+}
+
+type DoughJournalSection = {
+  key: string;
+  label: string;
+  lines: { name: string; g: number; lot: string }[];
+};
+
+function DoughUsageBody({ sections }: { sections: DoughJournalSection[] }) {
+  const visible = sections.filter((section) => section.lines.length > 0);
+  if (visible.length === 0) {
+    return <p className="text-slate-500 print:text-gray-600">없음</p>;
+  }
+  return (
+    <div className="space-y-3">
+      {visible.map((section) => (
+        <div key={section.key}>
+          {section.label ? (
+            <p className="font-medium text-slate-900 print:text-black mb-1">{section.label}</p>
+          ) : null}
+          <ul className="list-none pl-0 space-y-1">
+            {section.lines.map((line, i) => (
+              <li key={`${section.key}-${line.name}-${line.lot}-${i}`}>
+                {line.name}: {line.g.toLocaleString()}g ({line.lot})
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GramLineList({ lines }: { lines: JournalGramLine[] }) {
+  return (
+    <ul className="list-none pl-0 space-y-1">
+      {lines.map((line) => (
+        <li key={line.key}>
+          {line.materialName} {line.grams.toLocaleString()}g ({line.expiryDate})
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function BaseWasteList({
+  rows,
+  usageRows,
+  date,
+}: {
+  rows: BaseWasteRow[];
+  usageRows: BaseUsageRow[];
+  date: string;
+}) {
+  return (
+    <ul className="list-none pl-0 space-y-1">
+      {rows.map((wasteRow, i) => {
+        if (!wasteRow.resolved || !wasteRow.baseSauceMaterialName) return null;
+        const qty = wasteRow.baseWasteQty ?? 0;
+        if (qty <= 0) return null;
+        const usageRow = usageRows[i];
+        const wasteLotRows = usageRow?.fifoLots?.filter((lot) => lot.fifoDeductedWasteQty > 0) ?? [];
+        if (wasteLotRows.length > 0) {
+          return wasteLotRows.map((lot) => (
+            <li key={`${wasteRow.baseSauceMaterialName}-${lot.lotRowId}`}>
+              {wasteRow.baseSauceMaterialName} {lot.fifoDeductedWasteQty.toLocaleString()}g ({lot.expiryDate || "—"})
+            </li>
+          ));
+        }
+        return (
+          <li key={wasteRow.baseSauceMaterialName ?? wasteRow.parbakeName ?? i}>
+            {wasteRow.baseSauceMaterialName} {qty.toLocaleString()}g ({date})
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function BaseUsageList({ rows }: { rows: BaseUsageRow[] }) {
+  return (
+    <ul className="list-none pl-0 space-y-1">
+      {rows.map((usageRow, i) => {
+        if (!usageRow.resolved || !usageRow.baseSauceMaterialName) return null;
+        const lotRows = usageRow.fifoLots?.filter((lot) => lot.effectiveUsageAfterWasteQty > 0) ?? [];
+        if (lotRows.length > 0) {
+          return lotRows.map((lot) => (
+            <li key={`${usageRow.baseSauceMaterialName}-${lot.lotRowId}`}>
+              {usageRow.baseSauceMaterialName} {lot.effectiveUsageAfterWasteQty.toLocaleString()}g ({lot.expiryDate || "—"})
+            </li>
+          ));
+        }
+        const total = usageRow.totalBaseUsageAfterWasteQty ?? 0;
+        if (total <= 0) return null;
+        return (
+          <li key={usageRow.baseSauceMaterialName ?? i}>
+            {usageRow.displayLabel ?? `${usageRow.baseSauceMaterialName} ${total.toLocaleString()}g`}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function ParbakePurposeList({ lines }: { lines: ParbakePurposeProductionLine[] }) {
+  return (
+    <ul className="list-none pl-0 space-y-1">
+      {lines
+        .filter((line) => line.role === "astronaut")
+        .map((line) => (
+          <li key={`astro-${line.parbakeName}`}>
+            우주인 파베이크(보관용): {line.parbakeName} {line.qty.toLocaleString()}개
+          </li>
+        ))}
+      {lines
+        .filter((line) => line.role === "sale")
+        .map((line) => (
+          <li key={`sale-${line.parbakeName}`}>
+            판매용 파베이크(납품용): {line.parbakeName} {line.qty.toLocaleString()}개
+          </li>
+        ))}
+    </ul>
+  );
+}
+
+function ExtraParbakeList({
+  resolved,
+  unresolved,
+}: {
+  resolved: ResolvedExtraParbake[];
+  unresolved: UnresolvedExtraParbake[];
+}) {
+  return (
+    <ul className="list-none pl-0 space-y-1">
+      {resolved
+        .filter((row) => row.qty > 0)
+        .map((row) => (
+          <li key={row.extraParbakeId}>
+            {row.parbakeName} {row.qty}개 ({row.expiryDate || "—"})
+          </li>
+        ))}
+      {unresolved
+        .filter((row) => row.qty > 0)
+        .map((row) => (
+          <li key={row.extraParbakeId} className="text-amber-800 print:text-amber-900">
+            추가 파베이크 {row.qty}개 ({parbakeExpiryFromManufacturedDate(row.manufacturedDate) || "—"}) — {row.reason}
+          </li>
+        ))}
+    </ul>
+  );
 }
 
 function JournalPageContent() {
@@ -467,14 +634,17 @@ function JournalPageContent() {
     formatCompactProductNames(compactProductLines),
     comp
   );
-  const wasteLines = [
-    ...journalWasteGramLines(breadIngredientUsageRows),
-    ...journalWasteGramLines(parbakeIngredientUsageRows),
-  ];
-  const usageLines = [
-    ...journalUsageGramLines(breadIngredientUsageRows),
-    ...journalUsageGramLines(parbakeIngredientUsageRows),
-  ];
+  const breadWasteLines = journalWasteGramLines(breadIngredientUsageRows);
+  const parbakeWasteLines = journalWasteGramLines(parbakeIngredientUsageRows);
+  const breadUsageLines = journalUsageGramLines(breadIngredientUsageRows);
+  const parbakeUsageLines = journalUsageGramLines(parbakeIngredientUsageRows);
+  const wasteLines = [...breadWasteLines, ...parbakeWasteLines];
+  const usageLines = [...breadUsageLines, ...parbakeUsageLines];
+  const floor2DoughSections = doughUsageSections.filter((section) => section.label === "2층");
+  const floor3DoughSections = doughUsageSections.filter((section) => section.label === "3층");
+  const sharedDoughSections = doughUsageSections.filter(
+    (section) => section.label !== "2층" && section.label !== "3층"
+  );
   const hasIngredientWaste = wasteLines.length > 0;
   const hasBaseWasteQty =
     showBaseOnSummary &&
@@ -636,224 +806,208 @@ function JournalPageContent() {
                 </div>
 
                 {floorForms ? (
-                  <div className="mt-6 print:mt-4 space-y-4 print:space-y-3">
-                    <div className="break-inside-avoid">
-                      <p className="text-sm font-semibold text-slate-800 print:text-black mb-2">2층 피자</p>
-                      <div className={journalQtyGridClass}>
-                        <JournalQtyCell label="도우 반죽량" value={floorForms.pizza.doughMixQty} />
-                        <JournalQtyCell label="도우 폐기량" value={floorForms.pizza.doughWasteQty} />
-                        <JournalQtyCell label="도우 사용량" value={floorForms.pizza.doughUsageQty} />
-                        <JournalQtyCell label="파베이크 폐기량" value={floorForms.pizza.parbakeWasteQty} />
-                        <JournalQtyCell label="파베이크 생산량(당일)" value={floorForms.pizza.sameDayParbakeProductionQty} />
+                  <div className="journal-floor-columns mt-4 print:mt-3 grid grid-cols-2 gap-3 print:gap-2 items-start">
+                    <JournalBlock title="2층 피자">
+                      <JournalQtyTable
+                        rows={[
+                          { label: "도우 반죽량", value: floorForms.pizza.doughMixQty },
+                          { label: "도우 폐기량", value: floorForms.pizza.doughWasteQty },
+                          { label: "도우 사용량", value: floorForms.pizza.doughUsageQty },
+                          { label: "파베이크 폐기량", value: floorForms.pizza.parbakeWasteQty },
+                          { label: "파베이크 생산량(당일)", value: floorForms.pizza.sameDayParbakeProductionQty },
+                        ]}
+                      />
+                    </JournalBlock>
+                    <JournalBlock title="3층 브레드">
+                      <JournalQtyTable
+                        rows={[
+                          { label: "도우 반죽량", value: floorForms.bread.doughMixQty },
+                          { label: "도우 폐기량", value: floorForms.bread.doughWasteQty },
+                          { label: "도우 사용량", value: floorForms.bread.doughUsageQty },
+                          { label: "브레드 폐기량", value: floorForms.bread.breadWasteQty },
+                        ]}
+                      />
+                    </JournalBlock>
+                    {sharedDoughSections.some((section) => section.lines.length > 0) ? (
+                      <div className="col-span-2">
+                        <JournalBlock title="반죽 사용량">
+                          <DoughUsageBody sections={sharedDoughSections} />
+                        </JournalBlock>
                       </div>
+                    ) : null}
+                    <div className="flex flex-col gap-3 print:gap-2">
+                      {floor2DoughSections.some((section) => section.lines.length > 0) ? (
+                        <JournalBlock title="반죽 사용량">
+                          <DoughUsageBody
+                            sections={floor2DoughSections.map((section) => ({ ...section, label: "" }))}
+                          />
+                        </JournalBlock>
+                      ) : null}
+                      {parbakeWasteLines.length > 0 ? (
+                        <JournalBlock title="원료 폐기량">
+                          <GramLineList lines={parbakeWasteLines} />
+                        </JournalBlock>
+                      ) : null}
+                      {hasBaseWasteQty ? (
+                        <JournalBlock title="베이스 폐기량">
+                          <BaseWasteList rows={baseWasteRows} usageRows={baseUsageRows} date={date} />
+                        </JournalBlock>
+                      ) : null}
+                      {showMixedBasePrompt ? (
+                        <JournalBlock title="베이스 폐기량">
+                          <p className="text-slate-500 print:text-gray-600">
+                            혼합 베이스 생산일입니다. 사용량 계산에서 파베이크 폐기량 상세(종류별)를 입력해 주세요.
+                          </p>
+                        </JournalBlock>
+                      ) : null}
+                      {parbakeUsageLines.length > 0 ? (
+                        <JournalBlock title="원료 사용량 (폐기 반영)">
+                          <GramLineList lines={parbakeUsageLines} />
+                        </JournalBlock>
+                      ) : null}
+                      {hasBaseUsage ? (
+                        <JournalBlock title="베이스 사용량">
+                          <BaseUsageList rows={baseUsageRows} />
+                        </JournalBlock>
+                      ) : null}
+                      {hasParbakePurpose ? (
+                        <JournalBlock title="파베이크 목적별 생산량">
+                          <ParbakePurposeList lines={comp.parbakePurposeProductionLines ?? []} />
+                        </JournalBlock>
+                      ) : null}
+                      {hasExtraParbake ? (
+                        <JournalBlock title="추가 파베이크 사용량">
+                          <ExtraParbakeList
+                            resolved={comp.resolvedExtraParbakes ?? []}
+                            unresolved={comp.unresolvedExtraParbakes ?? []}
+                          />
+                        </JournalBlock>
+                      ) : null}
                     </div>
-                    <div className="break-inside-avoid">
-                      <p className="text-sm font-semibold text-slate-800 print:text-black mb-2">3층 브레드</p>
-                      <div className={journalQtyGridClass}>
-                        <JournalQtyCell label="도우 반죽량" value={floorForms.bread.doughMixQty} />
-                        <JournalQtyCell label="도우 폐기량" value={floorForms.bread.doughWasteQty} />
-                        <JournalQtyCell label="도우 사용량" value={floorForms.bread.doughUsageQty} />
-                        <JournalQtyCell label="브레드 폐기량" value={floorForms.bread.breadWasteQty} />
-                      </div>
+                    <div className="flex flex-col gap-3 print:gap-2">
+                      {floor3DoughSections.some((section) => section.lines.length > 0) ? (
+                        <JournalBlock title="반죽 사용량">
+                          <DoughUsageBody
+                            sections={floor3DoughSections.map((section) => ({ ...section, label: "" }))}
+                          />
+                        </JournalBlock>
+                      ) : null}
+                      {breadWasteLines.length > 0 ? (
+                        <JournalBlock title="원료 폐기량">
+                          <GramLineList lines={breadWasteLines} />
+                        </JournalBlock>
+                      ) : null}
+                      {breadUsageLines.length > 0 ? (
+                        <JournalBlock title="원료 사용량">
+                          <GramLineList lines={breadUsageLines} />
+                        </JournalBlock>
+                      ) : null}
                     </div>
                   </div>
                 ) : (
-                  <div className={journalQtyGridClass + " mt-6 print:mt-4"}>
-                    <JournalQtyCell label="도우 반죽량" value={comp.doughMixQty} />
-                    <JournalQtyCell label="도우 폐기량" value={comp.doughWasteQty} />
-                    <JournalQtyCell label="도우 사용량" value={comp.doughUsageQty} />
-                    {!storedParbakeOnlyNoDough && (
-                      <JournalQtyCell
-                        label={hasBreadDerived ? "브레드 폐기량" : "파베이크 폐기량"}
-                        value={hasBreadDerived ? (comp.breadWasteQty ?? 0) : comp.parbakeWasteQty}
+                  <>
+                    <div className="journal-block mt-4 print:mt-3">
+                      <JournalQtyTable
+                        rows={[
+                          { label: "도우 반죽량", value: comp.doughMixQty },
+                          { label: "도우 폐기량", value: comp.doughWasteQty },
+                          { label: "도우 사용량", value: comp.doughUsageQty },
+                          ...(!storedParbakeOnlyNoDough
+                            ? [
+                                {
+                                  label: hasBreadDerived ? "브레드 폐기량" : "파베이크 폐기량",
+                                  value: hasBreadDerived ? (comp.breadWasteQty ?? 0) : comp.parbakeWasteQty,
+                                },
+                              ]
+                            : []),
+                          ...(comp.parbakeWasteQty > 0 && hasBreadDerived
+                            ? [{ label: "파베이크 폐기량", value: comp.parbakeWasteQty }]
+                            : []),
+                          ...(!hasBreadDerived
+                            ? [{ label: "파베이크 생산량(당일)", value: comp.sameDayParbakeProductionQty }]
+                            : []),
+                        ]}
                       />
-                    )}
-                    {comp.parbakeWasteQty > 0 && hasBreadDerived && (
-                      <JournalQtyCell label="파베이크 폐기량" value={comp.parbakeWasteQty} />
-                    )}
-                    {!hasBreadDerived && (
-                      <JournalQtyCell label="파베이크 생산량(당일)" value={comp.sameDayParbakeProductionQty} />
-                    )}
-                  </div>
-                )}
-
-                <div
-                  className={
-                    hasSummaryRightColumn
-                      ? "journal-summary-split mt-6 print:mt-4 grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 gap-x-8 gap-y-2 items-start"
-                      : "mt-6 print:mt-4"
-                  }
-                >
-                  <div className="journal-section">
-                    <p className="journal-section-title">반죽 사용량</p>
-                    <div className="journal-section-body journal-section-list">
-                      {doughUsageSections.some((section) => section.lines.length > 0) ? (
-                        <div className="space-y-3">
-                          {doughUsageSections.map((section) =>
-                            section.lines.length === 0 ? null : (
-                              <div key={section.key}>
-                                {section.label ? (
-                                  <p className="font-medium text-slate-900 print:text-black mb-1">{section.label}</p>
-                                ) : null}
-                                <ul className="list-none pl-0 space-y-1">
-                                  {section.lines.map((line, i) => (
-                                    <li key={`${section.key}-${line.name}-${line.lot}-${i}`}>
-                                      {line.name}: {line.g.toLocaleString()}g ({line.lot})
-                                    </li>
-                                  ))}
-                                </ul>
+                    </div>
+                    <div
+                      className={
+                        hasSummaryRightColumn
+                          ? "journal-summary-split mt-3 print:mt-2 grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 gap-3 items-start"
+                          : "mt-3 print:mt-2"
+                      }
+                    >
+                      <div className="journal-section">
+                        <p className="journal-section-title">반죽 사용량</p>
+                        <div className="journal-section-body journal-section-list">
+                          <DoughUsageBody sections={doughUsageSections} />
+                        </div>
+                      </div>
+                      {hasSummaryRightColumn ? (
+                        <div>
+                          {hasIngredientWaste ? (
+                            <div className="journal-section">
+                              <p className="journal-section-title">원료 폐기량</p>
+                              <div className="journal-section-body">
+                                <GramLineList lines={wasteLines} />
                               </div>
-                            )
-                          )}
-                        </div>
-                      ) : (
-                        <p className="text-slate-500 print:text-gray-600">없음</p>
-                      )}
-                    </div>
-                  </div>
-
-                  {hasSummaryRightColumn ? (
-                    <div>
-                      {hasIngredientWaste ? (
-                        <div className="journal-section">
-                          <p className="journal-section-title">원료 폐기량</p>
-                          <ul className="journal-section-body journal-section-list list-none pl-0 space-y-1">
-                            {wasteLines.map((line) => (
-                              <li key={line.key}>
-                                {line.materialName}{" "}
-                                {line.grams.toLocaleString()}g ({line.expiryDate})
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
-                      {hasBaseWasteQty ? (
-                        <div className="journal-section">
-                          <p className="journal-section-title">베이스 폐기량</p>
-                          <div className="journal-section-body journal-section-list">
-                            <ul className="list-none pl-0 space-y-1">
-                              {baseWasteRows.map((wasteRow, i) => {
-                                if (!wasteRow.resolved || !wasteRow.baseSauceMaterialName) return null;
-                                const qty = wasteRow.baseWasteQty ?? 0;
-                                if (qty <= 0) return null;
-                                const usageRow = baseUsageRows[i];
-                                const wasteLotRows =
-                                  usageRow?.fifoLots?.filter((l) => l.fifoDeductedWasteQty > 0) ?? [];
-                                if (wasteLotRows.length > 0) {
-                                  return wasteLotRows.map((lot) => (
-                                    <li key={`${wasteRow.baseSauceMaterialName}-${lot.lotRowId}`}>
-                                      {wasteRow.baseSauceMaterialName}{" "}
-                                      {lot.fifoDeductedWasteQty.toLocaleString()}g (
-                                      {lot.expiryDate || "—"})
-                                    </li>
-                                  ));
-                                }
-                                return (
-                                  <li key={wasteRow.baseSauceMaterialName ?? wasteRow.parbakeName ?? i}>
-                                    {wasteRow.baseSauceMaterialName} {qty.toLocaleString()}g ({date})
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          </div>
-                        </div>
-                      ) : null}
-                      {showMixedBasePrompt ? (
-                        <div className="journal-section">
-                          <p className="journal-section-title">베이스 폐기량</p>
-                          <p className="journal-section-body text-slate-500 print:text-gray-600">
-                            혼합 베이스 생산일입니다. 사용량 계산에서 파베이크 폐기량 상세(종류별)를 입력해 주세요.
-                          </p>
-                        </div>
-                      ) : null}
-                      {usageLines.length > 0 ? (
-                        <div className="journal-section">
-                          <p className="journal-section-title">원료 사용량 (폐기 반영)</p>
-                          <ul className="journal-section-body journal-section-list list-none pl-0 space-y-1">
-                            {usageLines.map((line) => (
-                              <li key={line.key}>
-                                {line.materialName}{" "}
-                                {line.grams.toLocaleString()}g ({line.expiryDate})
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
-                      {hasBaseUsage ? (
-                        <div className="journal-section">
-                          <p className="journal-section-title">베이스 사용량</p>
-                          <div className="journal-section-body journal-section-list">
-                            <ul className="list-none pl-0 space-y-1">
-                              {baseUsageRows.map((usageRow, i) => {
-                                if (!usageRow.resolved || !usageRow.baseSauceMaterialName) return null;
-                                const lotRows = usageRow.fifoLots?.filter((l) => l.effectiveUsageAfterWasteQty > 0) ?? [];
-                                if (lotRows.length > 0) {
-                                  return lotRows.map((lot) => (
-                                    <li key={`${usageRow.baseSauceMaterialName}-${lot.lotRowId}`}>
-                                      {usageRow.baseSauceMaterialName} {lot.effectiveUsageAfterWasteQty.toLocaleString()}g ({lot.expiryDate || "—"})
-                                    </li>
-                                  ));
-                                }
-                                const total = usageRow.totalBaseUsageAfterWasteQty ?? 0;
-                                if (total <= 0) return null;
-                                return (
-                                  <li key={usageRow.baseSauceMaterialName ?? i}>
-                                    {usageRow.displayLabel ?? `${usageRow.baseSauceMaterialName} ${total.toLocaleString()}g`}
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          </div>
-                        </div>
-                      ) : null}
-                      {hasParbakePurpose ? (
-                        <div className="journal-section">
-                          <p className="journal-section-title">파베이크 목적별 생산량</p>
-                          <ul className="journal-section-body journal-section-list list-none pl-0 space-y-1">
-                            {comp.parbakePurposeProductionLines
-                              .filter((l) => l.role === "astronaut")
-                              .map((l) => (
-                                <li key={`astro-${l.parbakeName}`}>
-                                  우주인 파베이크(보관용): {l.parbakeName}{" "}
-                                  {l.qty.toLocaleString()}개
-                                </li>
-                              ))}
-                            {comp.parbakePurposeProductionLines
-                              .filter((l) => l.role === "sale")
-                              .map((l) => (
-                                <li key={`sale-${l.parbakeName}`}>
-                                  판매용 파베이크(납품용): {l.parbakeName}{" "}
-                                  {l.qty.toLocaleString()}개
-                                </li>
-                              ))}
-                          </ul>
-                        </div>
-                      ) : null}
-                      {hasExtraParbake ? (
-                        <div className="journal-section">
-                          <p className="journal-section-title">추가 파베이크 사용량</p>
-                          <ul className="journal-section-body journal-section-list list-none pl-0 space-y-1">
-                            {comp.resolvedExtraParbakes
-                              ?.filter((r) => r.qty > 0)
-                              .map((r) => (
-                                <li key={r.extraParbakeId}>
-                                  {r.parbakeName} {r.qty}개 ({r.expiryDate || "—"})
-                                </li>
-                              ))}
-                            {comp.unresolvedExtraParbakes
-                              ?.filter((r) => r.qty > 0)
-                              .map((r) => (
-                                <li key={r.extraParbakeId} className="text-amber-800 print:text-amber-900">
-                                  추가 파베이크 {r.qty}개 (
-                                  {parbakeExpiryFromManufacturedDate(r.manufacturedDate) || "—"}) — {r.reason}
-                                </li>
-                              ))}
-                          </ul>
+                            </div>
+                          ) : null}
+                          {hasBaseWasteQty ? (
+                            <div className="journal-section">
+                              <p className="journal-section-title">베이스 폐기량</p>
+                              <div className="journal-section-body">
+                                <BaseWasteList rows={baseWasteRows} usageRows={baseUsageRows} date={date} />
+                              </div>
+                            </div>
+                          ) : null}
+                          {showMixedBasePrompt ? (
+                            <div className="journal-section">
+                              <p className="journal-section-title">베이스 폐기량</p>
+                              <p className="journal-section-body text-slate-500 print:text-gray-600">
+                                혼합 베이스 생산일입니다. 사용량 계산에서 파베이크 폐기량 상세(종류별)를 입력해 주세요.
+                              </p>
+                            </div>
+                          ) : null}
+                          {usageLines.length > 0 ? (
+                            <div className="journal-section">
+                              <p className="journal-section-title">원료 사용량 (폐기 반영)</p>
+                              <div className="journal-section-body">
+                                <GramLineList lines={usageLines} />
+                              </div>
+                            </div>
+                          ) : null}
+                          {hasBaseUsage ? (
+                            <div className="journal-section">
+                              <p className="journal-section-title">베이스 사용량</p>
+                              <div className="journal-section-body">
+                                <BaseUsageList rows={baseUsageRows} />
+                              </div>
+                            </div>
+                          ) : null}
+                          {hasParbakePurpose ? (
+                            <div className="journal-section">
+                              <p className="journal-section-title">파베이크 목적별 생산량</p>
+                              <div className="journal-section-body">
+                                <ParbakePurposeList lines={comp.parbakePurposeProductionLines ?? []} />
+                              </div>
+                            </div>
+                          ) : null}
+                          {hasExtraParbake ? (
+                            <div className="journal-section">
+                              <p className="journal-section-title">추가 파베이크 사용량</p>
+                              <div className="journal-section-body">
+                                <ExtraParbakeList
+                                  resolved={comp.resolvedExtraParbakes ?? []}
+                                  unresolved={comp.unresolvedExtraParbakes ?? []}
+                                />
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
                       ) : null}
                     </div>
-                  ) : null}
-                </div>
+                  </>
+                )}
               </section>
             );
           }

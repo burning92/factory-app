@@ -123,11 +123,17 @@ input:focus, select:focus, textarea:focus {
     break-inside: avoid;
     page-break-inside: avoid;
   }
-  .journal-summary-split {
+  .journal-summary-split,
+  .journal-floor-columns {
     display: grid !important;
     grid-template-columns: 1fr 1fr;
-    column-gap: 8mm;
+    column-gap: 4mm;
     align-items: start;
+  }
+  .journal-block-title {
+    background: #f1f5f9 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }
 
@@ -169,6 +175,101 @@ input:focus, select:focus, textarea:focus {
 }
 .journal-section-list li:last-child {
   margin-bottom: 0;
+}
+
+.journal-block {
+  border: 1px solid #cbd5e1;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.journal-block-title {
+  margin: 0;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.4;
+  color: #1e293b;
+  background: #f1f5f9;
+  border-bottom: 1px solid #cbd5e1;
+}
+.journal-block-body {
+  padding: 0.35rem 0.6rem 0.45rem;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  color: #475569;
+}
+.journal-qty-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+.journal-qty-table th {
+  text-align: left;
+  font-weight: 500;
+  color: #475569;
+  padding: 0.18rem 0.5rem 0.18rem 0;
+  vertical-align: baseline;
+}
+.journal-qty-table td {
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #0f172a;
+  padding: 0.18rem 0;
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+.journal-qty-table tr + tr th,
+.journal-qty-table tr + tr td {
+  border-top: 1px solid #e2e8f0;
+}
+.journal-summary-split .journal-section {
+  border: 1px solid #cbd5e1;
+  margin-top: 0.55rem;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.journal-summary-split > .journal-section,
+.journal-summary-split > div > .journal-section:first-of-type {
+  margin-top: 0;
+}
+.journal-summary-split .journal-section-title {
+  margin: 0;
+  padding: 0.3rem 0.6rem;
+  background: #f1f5f9;
+  border-bottom: 1px solid #cbd5e1;
+  font-size: 0.8125rem;
+}
+.journal-summary-split .journal-section-body {
+  padding: 0.35rem 0.6rem 0.45rem;
+}
+@media print {
+  .journal-block,
+  .journal-summary-split .journal-section {
+    border-color: #94a3b8;
+  }
+  .journal-block-title,
+  .journal-summary-split .journal-section-title {
+    color: #111;
+    background: #f1f5f9 !important;
+    border-bottom-color: #94a3b8;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .journal-block-body {
+    color: #333;
+  }
+  .journal-qty-table th {
+    color: #333;
+  }
+  .journal-qty-table td {
+    color: #111;
+  }
+  .journal-qty-table tr + tr th,
+  .journal-qty-table tr + tr td {
+    border-top-color: #e2e8f0;
+  }
 }
 
 /* 월간 플래닝 인쇄: A3 가로, 주차별 리스트형 게시판 */
