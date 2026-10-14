@@ -9,7 +9,7 @@ import type {
   DateGroupInput,
   ComputedResult,
 } from "@/features/production/history/types";
-import { doughQtyToNumber, isFloorSplitDoughDate } from "@/features/production/history/floorDough";
+import { floorJournalForms } from "@/features/production/history/floorJournalQty";
 import { doughFloorLabel, doughFloorRank } from "@/features/production/doughLogFloor";
 
 /** 반죽 내역(사용일자 기준)을 원료별·LOT별 합산하여 총괄 표시용 배열로 반환. 밀가루 → 반죽원료 → 덧가루/덧기름 순. */
@@ -102,6 +102,18 @@ function addDays(isoDate: string, days: number): string {
   d.setDate(d.getDate() + days);
   return d.toISOString().slice(0, 10);
 }
+
+function JournalQtyCell({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <span className="text-slate-600 print:text-gray-700 font-medium block mb-0.5">{label}</span>
+      <p className="font-medium text-slate-900 print:text-black">{value.toLocaleString()}개</p>
+    </div>
+  );
+}
+
+const journalQtyGridClass =
+  "grid grid-cols-2 gap-x-8 gap-y-4 print:gap-y-2 text-sm print:text-black leading-relaxed";
 
 type JournalGramLine = {
   key: string;
@@ -396,6 +408,16 @@ function JournalPageContent() {
   }
 
   const comp = stored.computedResult;
+  const floorForms = floorJournalForms({
+    date,
+    floor2DoughMixQty: stored.dateGroup.floor2DoughMixQty,
+    floor2DoughWasteQty: stored.dateGroup.floor2DoughWasteQty,
+    floor3DoughMixQty: stored.dateGroup.floor3DoughMixQty,
+    floor3DoughWasteQty: stored.dateGroup.floor3DoughWasteQty,
+    parbakeWasteQty: comp.parbakeWasteQty,
+    breadWasteQty: comp.breadWasteQty ?? 0,
+    storedParbakeOnly: isStoredParbakeOnlyDay(comp.productSummaries ?? []),
+  });
   const compactProductLines = collectCompactProductLines({
     computed: comp,
     snapshotProducts: stored.dateGroup.products,
@@ -580,7 +602,9 @@ function JournalPageContent() {
                       <tr className="bg-slate-50 print:bg-white text-left">
                         <th className="px-2 py-1.5 font-medium whitespace-nowrap">제품명</th>
                         <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">도우반죽량</th>
-                        <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">도우사용량</th>
+                        {!floorForms && (
+                          <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">도우사용량</th>
+                        )}
                         <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">보관용파베이크사용수량</th>
                         <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">도우폐기량</th>
                         <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">완제품폐기량</th>
@@ -592,9 +616,11 @@ function JournalPageContent() {
                         <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
                           {compactQty.doughMixQty.toLocaleString()}개
                         </td>
-                        <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
-                          {compactQty.doughUsageQty.toLocaleString()}개
-                        </td>
+                        {!floorForms && (
+                          <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
+                            {compactQty.doughUsageQty.toLocaleString()}개
+                          </td>
+                        )}
                         <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
                           {compactQty.storedParbakeUsedQty.toLocaleString()}개
                         </td>
@@ -609,72 +635,47 @@ function JournalPageContent() {
                   </table>
                 </div>
 
-                <div className="mt-6 print:mt-4 grid grid-cols-2 gap-x-8 gap-y-4 print:gap-y-2 text-sm print:text-black leading-relaxed">
-                  <div>
-                    <span className="text-slate-600 print:text-gray-700 font-medium block mb-0.5">도우 반죽량</span>
-                    {isFloorSplitDoughDate(date) ? (
-                      <p className="font-medium text-slate-900 print:text-black">
-                        2층 {doughQtyToNumber(stored.dateGroup.floor2DoughMixQty).toLocaleString()}개
-                        <span className="mx-1 text-slate-400">/</span>
-                        3층 {doughQtyToNumber(stored.dateGroup.floor3DoughMixQty).toLocaleString()}개
-                      </p>
-                    ) : (
-                      <p className="font-medium text-slate-900 print:text-black">{comp.doughMixQty.toLocaleString()}개</p>
+                {floorForms ? (
+                  <div className="mt-6 print:mt-4 space-y-4 print:space-y-3">
+                    <div className="break-inside-avoid">
+                      <p className="text-sm font-semibold text-slate-800 print:text-black mb-2">2층 피자</p>
+                      <div className={journalQtyGridClass}>
+                        <JournalQtyCell label="도우 반죽량" value={floorForms.pizza.doughMixQty} />
+                        <JournalQtyCell label="도우 폐기량" value={floorForms.pizza.doughWasteQty} />
+                        <JournalQtyCell label="도우 사용량" value={floorForms.pizza.doughUsageQty} />
+                        <JournalQtyCell label="파베이크 폐기량" value={floorForms.pizza.parbakeWasteQty} />
+                        <JournalQtyCell label="파베이크 생산량(당일)" value={floorForms.pizza.sameDayParbakeProductionQty} />
+                      </div>
+                    </div>
+                    <div className="break-inside-avoid">
+                      <p className="text-sm font-semibold text-slate-800 print:text-black mb-2">3층 브레드</p>
+                      <div className={journalQtyGridClass}>
+                        <JournalQtyCell label="도우 반죽량" value={floorForms.bread.doughMixQty} />
+                        <JournalQtyCell label="도우 폐기량" value={floorForms.bread.doughWasteQty} />
+                        <JournalQtyCell label="도우 사용량" value={floorForms.bread.doughUsageQty} />
+                        <JournalQtyCell label="브레드 폐기량" value={floorForms.bread.breadWasteQty} />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={journalQtyGridClass + " mt-6 print:mt-4"}>
+                    <JournalQtyCell label="도우 반죽량" value={comp.doughMixQty} />
+                    <JournalQtyCell label="도우 폐기량" value={comp.doughWasteQty} />
+                    <JournalQtyCell label="도우 사용량" value={comp.doughUsageQty} />
+                    {!storedParbakeOnlyNoDough && (
+                      <JournalQtyCell
+                        label={hasBreadDerived ? "브레드 폐기량" : "파베이크 폐기량"}
+                        value={hasBreadDerived ? (comp.breadWasteQty ?? 0) : comp.parbakeWasteQty}
+                      />
+                    )}
+                    {comp.parbakeWasteQty > 0 && hasBreadDerived && (
+                      <JournalQtyCell label="파베이크 폐기량" value={comp.parbakeWasteQty} />
+                    )}
+                    {!hasBreadDerived && (
+                      <JournalQtyCell label="파베이크 생산량(당일)" value={comp.sameDayParbakeProductionQty} />
                     )}
                   </div>
-                  <div>
-                    <span className="text-slate-600 print:text-gray-700 font-medium block mb-0.5">도우 폐기량</span>
-                    {isFloorSplitDoughDate(date) ? (
-                      <p className="font-medium text-slate-900 print:text-black">
-                        2층 {doughQtyToNumber(stored.dateGroup.floor2DoughWasteQty).toLocaleString()}개
-                        <span className="mx-1 text-slate-400">/</span>
-                        3층 {doughQtyToNumber(stored.dateGroup.floor3DoughWasteQty).toLocaleString()}개
-                      </p>
-                    ) : (
-                      <p className="font-medium text-slate-900 print:text-black">{comp.doughWasteQty.toLocaleString()}개</p>
-                    )}
-                  </div>
-                  <div>
-                    <span className="text-slate-600 print:text-gray-700 font-medium block mb-0.5">도우 사용량</span>
-                    <p className="font-medium text-slate-900 print:text-black">
-                      {comp.doughUsageQty.toLocaleString()}개
-                    </p>
-                  </div>
-                  {!storedParbakeOnlyNoDough && (
-                    <div>
-                      <span className="text-slate-600 print:text-gray-700 font-medium block mb-0.5">
-                        {hasBreadDerived ? "브레드 폐기량" : "파베이크 폐기량"}
-                      </span>
-                      <p className="font-medium text-slate-900 print:text-black">
-                        {(hasBreadDerived
-                          ? (comp.breadWasteQty ?? 0)
-                          : comp.parbakeWasteQty
-                        ).toLocaleString()}
-                        개
-                      </p>
-                    </div>
-                  )}
-                  {comp.parbakeWasteQty > 0 && hasBreadDerived && (
-                    <div>
-                      <span className="text-slate-600 print:text-gray-700 font-medium block mb-0.5">
-                        파베이크 폐기량
-                      </span>
-                      <p className="font-medium text-slate-900 print:text-black">
-                        {comp.parbakeWasteQty.toLocaleString()}개
-                      </p>
-                    </div>
-                  )}
-                  {!hasBreadDerived && (
-                    <div>
-                      <span className="text-slate-600 print:text-gray-700 font-medium block mb-0.5">
-                        파베이크 생산량(당일)
-                      </span>
-                      <p className="font-medium text-slate-900 print:text-black">
-                        {comp.sameDayParbakeProductionQty.toLocaleString()}개
-                      </p>
-                    </div>
-                  )}
-                </div>
+                )}
 
                 <div
                   className={
