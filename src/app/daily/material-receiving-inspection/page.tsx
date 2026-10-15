@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react";
+import { getDailyLogAccess } from "@/app/daily/dailyLogPermissions";
 
 type LogStatus = "draft" | "submitted" | "approved" | "rejected";
 type LogRow = {
@@ -15,6 +16,9 @@ type LogRow = {
   approved_at: string | null;
   approved_by_name: string | null;
   reject_reason: string | null;
+  author_user_id: string | null;
+  submitted_by: string | null;
+  submitted_at: string | null;
 };
 type ItemSummary = {
   names: string[];
@@ -72,7 +76,7 @@ function monthRangeIsoKst(year: number, month: number): { start: string; end: st
 }
 
 export default function DailyMaterialReceivingInspectionListPage() {
-  const { viewOrganizationCode } = useAuth();
+  const { user, profile, viewOrganizationCode } = useAuth();
   const orgCode = viewOrganizationCode ?? "100";
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [itemSummaryByLogId, setItemSummaryByLogId] = useState<Record<string, ItemSummary>>({});
@@ -88,7 +92,7 @@ export default function DailyMaterialReceivingInspectionListPage() {
     const { start, end } = monthRangeIsoKst(year, month);
     const { data, error } = await supabase
       .from("daily_material_receiving_inspection_logs")
-      .select("id, received_at, author_name, status, approved_at, approved_by_name, reject_reason")
+      .select("id, received_at, author_name, status, approved_at, approved_by_name, reject_reason, author_user_id, submitted_by, submitted_at")
       .eq("organization_code", orgCode)
       .gte("received_at", start)
       .lt("received_at", end)
@@ -135,7 +139,7 @@ export default function DailyMaterialReceivingInspectionListPage() {
   }, [fetchLogs]);
 
   const getRowHref = (log: LogRow) => {
-    if (log.status === "draft" || log.status === "rejected") return `/materials/material-receiving-inspection/${log.id}/edit`;
+    if (getDailyLogAccess(log, user?.id, profile?.role).canEdit) return `/materials/material-receiving-inspection/${log.id}/edit`;
     return `/materials/material-receiving-inspection/${log.id}`;
   };
 
@@ -291,6 +295,7 @@ export default function DailyMaterialReceivingInspectionListPage() {
                   </div>
                 </Link>
                 <div className="flex items-center pr-2 gap-1 shrink-0">
+                  {getDailyLogAccess(log, user?.id, profile?.role).canEdit && (
                   <button
                     type="button"
                     onClick={(e) => {
@@ -304,6 +309,8 @@ export default function DailyMaterialReceivingInspectionListPage() {
                   >
                     <Pencil className="w-4 h-4" strokeWidth={2} />
                   </button>
+                  )}
+                  {getDailyLogAccess(log, user?.id, profile?.role).canDelete && (
                   <button
                     type="button"
                     onClick={async (e) => {
@@ -326,6 +333,7 @@ export default function DailyMaterialReceivingInspectionListPage() {
                   >
                     <Trash2 className="w-4 h-4" strokeWidth={2} />
                   </button>
+                  )}
                 </div>
               </div>
             </li>

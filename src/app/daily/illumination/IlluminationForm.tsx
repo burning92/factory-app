@@ -10,6 +10,8 @@ import {
   conformityFromLux,
   parseLux,
 } from "@/features/daily/illuminationChecklist";
+import { useDailyLogFormAccess } from "@/app/daily/useDailyLogFormAccess";
+import DailyLogLockNotice from "@/app/daily/DailyLogLockNotice";
 
 type LogStatus = "draft" | "submitted" | "approved" | "rejected";
 
@@ -76,6 +78,11 @@ export function IlluminationForm({ mode, editLogId }: Props) {
 
   const orgCode = viewOrganizationCode ?? "100";
   const inspectorName = (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
+  const { access, assertWritable } = useDailyLogFormAccess("daily_illumination_logs", currentLogId, currentLogStatus);
+  const canEdit = access.canEdit;
+  const canSubmit =
+    access.canSubmit &&
+    (currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus == null);
 
   const evaluatedRows = useMemo(() => {
     return (storedItems ?? ILLUMINATION_CHECKLIST).map((item) => {
@@ -257,6 +264,7 @@ export function IlluminationForm({ mode, editLogId }: Props) {
       };
 
       let logId = currentLogId;
+      if (logId) await assertWritable(logId);
       if (mode === "edit" && logId) {
         const { error: updateErr } = await supabase
           .from("daily_illumination_logs")
@@ -313,6 +321,7 @@ export function IlluminationForm({ mode, editLogId }: Props) {
     orgCode,
     persistItems,
     user?.id,
+    assertWritable,
   ]);
 
   if (!loadDone) {
@@ -350,6 +359,8 @@ export function IlluminationForm({ mode, editLogId }: Props) {
           <span className="text-slate-200">{statusLabel(currentLogStatus)}</span>
         </div>
       )}
+
+      <DailyLogLockNotice reason={access.lockReason} />
 
       <div className="rounded-xl border border-slate-700/60 bg-slate-800/50 p-4 mb-6 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
         <div>
@@ -473,12 +484,12 @@ export function IlluminationForm({ mode, editLogId }: Props) {
         <button
           type="button"
           onClick={() => void saveLog(false)}
-          disabled={saving}
+          disabled={saving || !canEdit}
           className="px-6 py-2.5 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-white font-medium text-sm"
         >
           {saving ? "저장 중…" : "저장"}
         </button>
-        {(currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus == null) && (
+        {canSubmit && (
           <button
             type="button"
             onClick={() => void saveLog(true)}

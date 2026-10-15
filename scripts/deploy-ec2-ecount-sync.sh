@@ -36,13 +36,7 @@ echo "=== 6. route 파일 존재 여부 ==="
 find src/app/api -type f 2>/dev/null | grep -E "ecount-inventory|sync" || echo "NOT_FOUND"
 
 echo ""
-echo "=== 7. curl POST (sync API) ==="
-curl -i -s -X POST https://factory.armoredfresh.com/api/internal/ecount-inventory/sync \
-  -H "Content-Type: application/json" \
-  -H "x-sync-token: af_factory_sync_2026_J7mP4qX9vN2kR8tH5cL1zW6sY3uD0eFa" \
-  -d '{"masterRows":[],"inventoryRows":[]}' | head -30
-
-echo ""
-echo "=== 8. curl GET (라우트 확인) ==="
+echo "=== 7. curl GET (sync 라우트 확인) ==="
+# POST 는 재고 현재고 표를 통째로 바꾸므로 배포 확인에 쓰지 않는다
 curl -s -o /dev/null -w "%{http_code}" https://factory.armoredfresh.com/api/internal/ecount-inventory/sync
 echo ""

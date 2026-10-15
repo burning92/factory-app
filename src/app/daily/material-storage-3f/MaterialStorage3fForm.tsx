@@ -16,6 +16,8 @@ import {
   type MaterialStorage3fResultMap,
   type MaterialStorage3fRoomKey,
 } from "@/features/daily/materialStorage3fChecklist";
+import { useDailyLogFormAccess } from "@/app/daily/useDailyLogFormAccess";
+import DailyLogLockNotice from "@/app/daily/DailyLogLockNotice";
 
 type LogStatus = "draft" | "submitted" | "approved" | "rejected";
 
@@ -97,9 +99,11 @@ export function MaterialStorage3fForm({ mode, editLogId }: Props) {
     });
   }, [hasAnyIssue, inspectionDate, correctiveDatetimeManuallyEdited]);
 
-  const canEdit = true;
+  const { access, assertWritable } = useDailyLogFormAccess("daily_material_storage_3f_logs", currentLogId, currentLogStatus);
+  const canEdit = access.canEdit;
   const canSubmit =
-    currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus === null;
+    access.canSubmit &&
+    (currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus === null);
 
   useEffect(() => {
     if (mode === "new" && authorName) {
@@ -270,6 +274,7 @@ export function MaterialStorage3fForm({ mode, editLogId }: Props) {
       const payload = baseHeaderFields();
       let logId: string;
       if (mode === "edit" && currentLogId) {
+        await assertWritable(currentLogId);
         const { error: updateErr } = await supabase
           .from("daily_material_storage_3f_logs")
           .update(payload)
@@ -285,6 +290,7 @@ export function MaterialStorage3fForm({ mode, editLogId }: Props) {
           .maybeSingle();
         const existingRow = existing as { id: string; status: LogStatus } | null;
         if (existingRow) {
+          await assertWritable(existingRow.id);
           const { error: updateErr } = await supabase
             .from("daily_material_storage_3f_logs")
             .update(payload)
@@ -314,7 +320,7 @@ export function MaterialStorage3fForm({ mode, editLogId }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [inspectionDate, baseHeaderFields, mode, currentLogId, orgCode, user?.id, persistItems, currentLogStatus]);
+  }, [inspectionDate, baseHeaderFields, mode, currentLogId, orgCode, user?.id, persistItems, currentLogStatus, assertWritable]);
 
   const handleSubmit = useCallback(async () => {
     const date = inspectionDate.trim();
@@ -326,6 +332,7 @@ export function MaterialStorage3fForm({ mode, editLogId }: Props) {
     setToast(null);
     try {
       let logId = currentLogId;
+      if (logId) await assertWritable(logId);
       if (!logId) {
         const { data: existing } = await supabase
           .from("daily_material_storage_3f_logs")
@@ -336,6 +343,7 @@ export function MaterialStorage3fForm({ mode, editLogId }: Props) {
         const existingRow = existing as { id: string; status: LogStatus } | null;
         if (existingRow) {
           logId = existingRow.id;
+          await assertWritable(logId);
         } else {
           const { data: inserted, error: insertErr } = await supabase
             .from("daily_material_storage_3f_logs")
@@ -376,7 +384,7 @@ export function MaterialStorage3fForm({ mode, editLogId }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [inspectionDate, currentLogId, orgCode, baseHeaderFields, user?.id, persistItems]);
+  }, [inspectionDate, currentLogId, orgCode, baseHeaderFields, user?.id, persistItems, assertWritable]);
 
   if (!loadDone) {
     return (
@@ -403,11 +411,7 @@ export function MaterialStorage3fForm({ mode, editLogId }: Props) {
         </div>
       )}
 
-      {currentLogStatus === "approved" && (
-        <div className="mb-4 px-4 py-3 rounded-lg text-sm bg-emerald-900/20 border border-emerald-700/50 text-emerald-200">
-          승인 완료된 일지입니다. 필요 시 수정 후 저장할 수 있습니다.
-        </div>
-      )}
+      <DailyLogLockNotice reason={access.lockReason} />
 
       <div className="mb-6">
         <label className="block text-sm font-medium text-slate-400 mb-1">점검일자</label>
@@ -496,7 +500,7 @@ export function MaterialStorage3fForm({ mode, editLogId }: Props) {
       )}
 
       <div className="flex flex-wrap justify-end gap-2 mb-10">
-        <button type="button" onClick={handleSave} disabled={saving} className="px-6 py-2.5 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-white font-medium text-sm">
+        <button type="button" onClick={handleSave} disabled={saving || !canEdit} className="px-6 py-2.5 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-white font-medium text-sm">
           {saving ? "저장 중…" : "저장"}
         </button>
         {canSubmit && (

@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { Pencil, Trash2 } from "lucide-react";
+import { getDailyLogAccess } from "@/app/daily/dailyLogPermissions";
 
 type LogStatus = "draft" | "submitted" | "approved" | "rejected";
 
@@ -21,6 +22,9 @@ type LogRow = {
   approved_by_name: string | null;
   reject_reason: string | null;
   created_at: string;
+  author_user_id: string | null;
+  submitted_by: string | null;
+  submitted_at: string | null;
 };
 
 function formatDate(iso: string | null): string {
@@ -61,7 +65,7 @@ function statusBadgeClass(s: LogStatus): string {
 }
 
 export default function DailyColdStorageHygieneListPage() {
-  const { viewOrganizationCode } = useAuth();
+  const { user, profile, viewOrganizationCode } = useAuth();
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; error?: boolean } | null>(null);
@@ -73,7 +77,7 @@ export default function DailyColdStorageHygieneListPage() {
     setLoading(true);
     const { data, error } = await supabase
       .from("daily_cold_storage_hygiene_logs")
-      .select("id, inspection_date, author_name, status, approved_at, approved_by_name, reject_reason, created_at")
+      .select("id, inspection_date, author_name, status, approved_at, approved_by_name, reject_reason, created_at, author_user_id, submitted_by, submitted_at")
       .eq("organization_code", orgCode)
       .order("inspection_date", { ascending: false })
       .limit(100);
@@ -91,7 +95,7 @@ export default function DailyColdStorageHygieneListPage() {
   }, [fetchLogs]);
 
   const getRowHref = (log: LogRow) => {
-    if (log.status === "draft" || log.status === "rejected") return `/daily/cold-storage-hygiene/${log.id}/edit`;
+    if (getDailyLogAccess(log, user?.id, profile?.role).canEdit) return `/daily/cold-storage-hygiene/${log.id}/edit`;
     return `/daily/cold-storage-hygiene/${log.id}`;
   };
 
@@ -179,6 +183,7 @@ export default function DailyColdStorageHygieneListPage() {
                   </div>
 
                   <div className="flex items-center gap-1 shrink-0">
+                      {getDailyLogAccess(log, user?.id, profile?.role).canEdit && (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -192,6 +197,8 @@ export default function DailyColdStorageHygieneListPage() {
                       >
                         <Pencil className="w-4 h-4" strokeWidth={2} />
                       </button>
+                      )}
+                      {getDailyLogAccess(log, user?.id, profile?.role).canDelete && (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -206,6 +213,7 @@ export default function DailyColdStorageHygieneListPage() {
                       >
                         <Trash2 className="w-4 h-4" strokeWidth={2} />
                       </button>
+                      )}
                     </div>
                 </div>
                 {log.status === "approved" && (log.approved_at || log.approved_by_name) && (

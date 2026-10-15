@@ -20,6 +20,13 @@ import {
   type ReceivingStorageCategory,
 } from "@/features/daily/materialReceivingInspection";
 import { requestMaterialReceiptLabSync } from "@/lib/materialStockLab/clientSyncMaterialReceipt";
+import {
+  RECEIVING_ITEMS_TABLE,
+  RECEIVING_ITEM_COLUMNS_WITHOUT_PHOTO,
+  loadReceivingPhotosOneByOne,
+} from "@/features/daily/receivingPhotoQuery";
+import { useDailyLogFormAccess } from "@/app/daily/useDailyLogFormAccess";
+import DailyLogLockNotice from "@/app/daily/DailyLogLockNotice";
 
 type LogStatus = "draft" | "submitted" | "approved" | "rejected";
 
@@ -167,6 +174,12 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
   const [toast, setToast] = useState<{ message: string; error?: boolean } | null>(null);
   const [currentLogId, setCurrentLogId] = useState<string | null>(null);
   const [currentLogStatus, setCurrentLogStatus] = useState<LogStatus | null>(null);
+  const [photoLoad, setPhotoLoad] = useState<{ done: number; total: number; error: string | null }>({
+    done: 0,
+    total: 0,
+    error: null,
+  });
+  const photosReady = photoLoad.error === null && photoLoad.done >= photoLoad.total;
   const [loadDone, setLoadDone] = useState(mode === "new");
   const [deviationManuallyEdited, setDeviationManuallyEdited] = useState(false);
   const [correctiveDatetimeManuallyEdited, setCorrectiveDatetimeManuallyEdited] = useState(false);
@@ -273,9 +286,15 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
     }
   }, [mode, authorName]);
 
-  const canEdit = true;
+  const { access, assertWritable } = useDailyLogFormAccess(
+    "daily_material_receiving_inspection_logs",
+    currentLogId,
+    currentLogStatus
+  );
+  const canEdit = access.canEdit;
   const canSubmit =
-    currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus === null;
+    access.canSubmit &&
+    (currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus === null);
 
   useEffect(() => {
     if (mode !== "edit" || !editLogId) {
@@ -321,12 +340,13 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
       });
 
       const { data: itemsData } = await supabase
-        .from("daily_material_receiving_inspection_log_items")
-        .select("*")
+        .from(RECEIVING_ITEMS_TABLE)
+        .select(RECEIVING_ITEM_COLUMNS_WITHOUT_PHOTO)
         .eq("log_id", log.id)
         .order("line_index", { ascending: true });
       if (cancelled) return;
-      const rows = (itemsData ?? []) as Array<{
+      const rows = (itemsData ?? []) as unknown as Array<{
+        id: string;
         storage_category: string;
         item_name: string;
         box_qty: number | null;
@@ -335,14 +355,14 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
         box_weight_g: number | null;
         unit_weight_g: number | null;
         expiry_or_lot: string | null;
-        label_photo_url: string | null;
         conformity: string;
         remarks: string | null;
       }>;
       if (rows.length > 0) {
+        const clientIdByItemId = new Map(rows.map((r) => [r.id, createSafeId()]));
         setLines(
           rows.map((r) => ({
-            clientId: createSafeId(),
+            clientId: clientIdByItemId.get(r.id)!,
             storage_category:
               r.storage_category === "frozen" || r.storage_category === "room"
                 ? r.storage_category
@@ -357,11 +377,28 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
             expiry_input_mode: parseExpiryValue(r.expiry_or_lot ?? null).mode,
             expiry_date_value: parseExpiryValue(r.expiry_or_lot ?? null).dateValue,
             expiry_text_value: parseExpiryValue(r.expiry_or_lot ?? null).textValue,
-            label_photo_url: r.label_photo_url ?? "",
+            label_photo_url: "",
             conformity: r.conformity === "O" || r.conformity === "X" ? r.conformity : "",
             remarks: r.remarks ?? "",
           }))
         );
+        setPhotoLoad({ done: 0, total: rows.length, error: null });
+        setLoadDone(true);
+        try {
+          await loadReceivingPhotosOneByOne(supabase, rows.map((r) => r.id), (itemId, url, done) => {
+            if (cancelled) return;
+            const clientId = clientIdByItemId.get(itemId);
+            if (url && clientId) {
+              setLines((prev) => prev.map((l) => (l.clientId === clientId ? { ...l, label_photo_url: url } : l)));
+            }
+            setPhotoLoad({ done, total: rows.length, error: null });
+          });
+        } catch (e) {
+          if (!cancelled) {
+            setPhotoLoad({ done: 0, total: rows.length, error: e instanceof Error ? e.message : String(e) });
+          }
+        }
+        return;
       } else {
         setLines([emptyLine()]);
       }
@@ -470,6 +507,11 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
   }, [orgCode, authorName, receivedAtLocal, correctivePayload]);
 
   const validateLinesForSave = useCallback(() => {
+    if (!photosReady) {
+      return photoLoad.error
+        ? "기존 라벨 사진을 불러오지 못해 저장할 수 없습니다. 새로고침 후 다시 시도해 주세요. (저장하면 사진이 지워질 수 있음)"
+        : "기존 라벨 사진을 불러오는 중입니다. 완료 후 저장해 주세요.";
+    }
     if (effectiveLines.length === 0) {
       return "품목을 1개 이상 입력해 주세요. (품목명 필수)";
     }
@@ -479,7 +521,7 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
       }
     }
     return null;
-  }, [effectiveLines]);
+  }, [effectiveLines, photosReady, photoLoad.error]);
 
   const handleSave = useCallback(async () => {
     const msg = validateLinesForSave();
@@ -493,6 +535,7 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
       const payload = baseHeaderFields();
       let logId: string;
       if (mode === "edit" && currentLogId) {
+        await assertWritable(currentLogId);
         const { error: updateErr } = await supabase
           .from("daily_material_receiving_inspection_logs")
           .update(payload)
@@ -537,6 +580,7 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
     effectiveLines,
     currentLogStatus,
     receivedAtLocal,
+    assertWritable,
   ]);
 
   const handleSubmit = useCallback(async () => {
@@ -549,6 +593,7 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
     setToast(null);
     try {
       let logId = currentLogId;
+      if (logId) await assertWritable(logId);
       if (!logId) {
         const { data: inserted, error: insertErr } = await supabase
           .from("daily_material_receiving_inspection_logs")
@@ -593,7 +638,7 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [validateLinesForSave, currentLogId, baseHeaderFields, user?.id, persistItems, effectiveLines, receivedAtLocal]);
+  }, [validateLinesForSave, currentLogId, baseHeaderFields, user?.id, persistItems, effectiveLines, receivedAtLocal, assertWritable]);
 
   const updateLine = useCallback((clientId: string, patch: Partial<LineState>) => {
     setLines((prev) => prev.map((l) => (l.clientId === clientId ? { ...l, ...patch } : l)));
@@ -760,9 +805,15 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
         </div>
       )}
 
-      {currentLogStatus === "approved" && (
-        <div className="mb-4 px-4 py-3 rounded-lg text-sm bg-emerald-900/20 border border-emerald-700/50 text-emerald-200">
-          승인 완료된 일지입니다. 필요 시 수정 후 저장할 수 있습니다.
+      <DailyLogLockNotice reason={access.lockReason} />
+
+      {photoLoad.total > 0 && !photosReady && (
+        <div
+          className={`mb-4 px-4 py-2 rounded-lg text-sm ${photoLoad.error ? "bg-red-900/30 text-red-200" : "bg-slate-800/80 border border-slate-600 text-slate-300"}`}
+        >
+          {photoLoad.error
+            ? `${photoLoad.error} — 사진을 모두 불러오기 전에는 저장할 수 없습니다.`
+            : `기존 라벨 사진 불러오는 중 (${photoLoad.done}/${photoLoad.total}) — 완료 후 저장할 수 있습니다.`}
         </div>
       )}
 
@@ -1195,7 +1246,7 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
         <button
           type="button"
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || !photosReady || !canEdit}
           className="px-6 py-2.5 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-white font-medium text-sm"
         >
           {saving ? "저장 중…" : "저장"}
@@ -1204,7 +1255,7 @@ export function MaterialReceivingInspectionForm({ mode, editLogId }: Props) {
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={saving}
+            disabled={saving || !photosReady}
             className="px-6 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-medium text-sm"
           >
             {saving ? "처리 중…" : "제출"}

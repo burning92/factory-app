@@ -9,6 +9,8 @@ import {
   normalizeWorkerHygieneCategoryTitle,
 } from "@/features/daily/workerHygieneChecklist";
 import type { HygieneFormResults, HygieneItemResult } from "@/features/daily/hygieneChecklist";
+import { useDailyLogFormAccess } from "@/app/daily/useDailyLogFormAccess";
+import DailyLogLockNotice from "@/app/daily/DailyLogLockNotice";
 
 type LogStatus = "draft" | "submitted" | "approved" | "rejected";
 
@@ -89,9 +91,11 @@ export function WorkerHygieneForm({ mode, editLogId }: Props) {
     });
   }, [hasAnyX, inspectionDate, correctiveDatetimeManuallyEdited]);
 
-  const canEdit = true;
+  const { access, assertWritable } = useDailyLogFormAccess("daily_worker_hygiene_logs", currentLogId, currentLogStatus);
+  const canEdit = access.canEdit;
   const canSubmit =
-    currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus === null;
+    access.canSubmit &&
+    (currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus === null);
 
   const setItemResult = useCallback((key: string, value: HygieneItemResult) => {
     setResults((prev) => ({ ...prev, [key]: value }));
@@ -211,6 +215,7 @@ export function WorkerHygieneForm({ mode, editLogId }: Props) {
 
       let logId: string;
       if (mode === "edit" && currentLogId) {
+        await assertWritable(currentLogId);
         const { error: updateErr } = await supabase
           .from("daily_worker_hygiene_logs")
           .update(payload)
@@ -226,6 +231,7 @@ export function WorkerHygieneForm({ mode, editLogId }: Props) {
           .maybeSingle();
         const existingRow = existing as { id: string; status: LogStatus } | null;
         if (existingRow) {
+          await assertWritable(existingRow.id);
           const { error: updateErr } = await supabase
             .from("daily_worker_hygiene_logs")
             .update(payload)
@@ -289,6 +295,7 @@ export function WorkerHygieneForm({ mode, editLogId }: Props) {
     user?.id,
     currentLogId,
     currentLogStatus,
+    assertWritable,
   ]);
 
   const handleSubmit = useCallback(async () => {
@@ -301,6 +308,7 @@ export function WorkerHygieneForm({ mode, editLogId }: Props) {
     setToast(null);
     try {
       let logId = currentLogId;
+      if (logId) await assertWritable(logId);
       if (!logId) {
         const { data: existing } = await supabase
           .from("daily_worker_hygiene_logs")
@@ -311,6 +319,7 @@ export function WorkerHygieneForm({ mode, editLogId }: Props) {
         const existingRow = existing as { id: string; status: LogStatus } | null;
         if (existingRow) {
           logId = existingRow.id;
+          await assertWritable(logId);
         } else {
           const { data: inserted, error: insertErr } = await supabase
             .from("daily_worker_hygiene_logs")
@@ -381,7 +390,7 @@ export function WorkerHygieneForm({ mode, editLogId }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [inspectionDate, orgCode, currentLogId, user?.id, authorName, results, correctivePayload]);
+  }, [inspectionDate, orgCode, currentLogId, user?.id, authorName, results, correctivePayload, assertWritable]);
 
   if (!loadDone) {
     return (
@@ -444,11 +453,7 @@ export function WorkerHygieneForm({ mode, editLogId }: Props) {
         </div>
       )}
 
-      {currentLogStatus === "approved" && (
-        <div className="mb-4 px-4 py-3 rounded-lg text-sm bg-emerald-900/20 border border-emerald-700/50 text-emerald-200">
-          승인 완료된 일지입니다. 필요 시 수정 후 저장할 수 있습니다.
-        </div>
-      )}
+      <DailyLogLockNotice reason={access.lockReason} />
 
       <div className="mb-6">
         <label className="block text-sm font-medium text-slate-400 mb-1">점검일자</label>
@@ -578,7 +583,7 @@ export function WorkerHygieneForm({ mode, editLogId }: Props) {
         <button
           type="button"
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || !canEdit}
           className="px-6 py-2.5 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-white font-medium text-sm"
         >
           {saving ? "저장 중…" : "저장"}

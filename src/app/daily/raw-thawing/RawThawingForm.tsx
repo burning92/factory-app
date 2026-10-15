@@ -12,6 +12,8 @@ import {
   parseOptionalNum,
   type ThawingResult,
 } from "@/features/daily/rawThawing";
+import { useDailyLogFormAccess } from "@/app/daily/useDailyLogFormAccess";
+import DailyLogLockNotice from "@/app/daily/DailyLogLockNotice";
 
 type LogStatus = "draft" | "submitted" | "approved" | "rejected";
 type Props = { mode: "new" | "edit"; editLogId?: string };
@@ -259,9 +261,11 @@ export function RawThawingForm({ mode, editLogId }: Props) {
     if (!lots.includes(selectedLot)) setSelectedLot(lots[0]);
   }, [selectedItemCode, lotOptions, selectedLot]);
 
-  const canEdit = true;
+  const { access, assertWritable } = useDailyLogFormAccess("daily_raw_thawing_logs", currentLogId, currentLogStatus);
+  const canEdit = access.canEdit;
   const canSubmit =
-    currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus === null;
+    access.canSubmit &&
+    (currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus === null);
 
   useEffect(() => {
     if (mode !== "edit" || !editLogId) {
@@ -406,6 +410,7 @@ export function RawThawingForm({ mode, editLogId }: Props) {
       const payload = baseHeaderFields();
       let logId: string;
       if (mode === "edit" && currentLogId) {
+        await assertWritable(currentLogId);
         const { error: updateErr } = await supabase.from("daily_raw_thawing_logs").update(payload).eq("id", currentLogId);
         if (updateErr) throw updateErr;
         logId = currentLogId;
@@ -430,7 +435,7 @@ export function RawThawingForm({ mode, editLogId }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [thawingDate, baseHeaderFields, mode, currentLogId, currentLogStatus, user?.id]);
+  }, [thawingDate, baseHeaderFields, mode, currentLogId, currentLogStatus, user?.id, assertWritable]);
 
   const handleSubmit = useCallback(async () => {
     const date = thawingDate.trim();
@@ -442,6 +447,7 @@ export function RawThawingForm({ mode, editLogId }: Props) {
     setToast(null);
     try {
       let logId = currentLogId;
+      if (logId) await assertWritable(logId);
       if (!logId) {
         const { data: inserted, error: insertErr } = await supabase
           .from("daily_raw_thawing_logs")
@@ -475,7 +481,7 @@ export function RawThawingForm({ mode, editLogId }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [thawingDate, currentLogId, baseHeaderFields, user?.id]);
+  }, [thawingDate, currentLogId, baseHeaderFields, user?.id, assertWritable]);
 
   if (!loadDone) {
     return <div className="min-h-[calc(100vh-3.5rem)] p-4 md:p-6 max-w-2xl mx-auto"><p className="text-slate-500 text-sm">불러오는 중…</p></div>;
@@ -499,11 +505,7 @@ export function RawThawingForm({ mode, editLogId }: Props) {
         </div>
       )}
 
-      {currentLogStatus === "approved" && (
-        <div className="mb-4 px-4 py-3 rounded-lg text-sm bg-emerald-900/20 border border-emerald-700/50 text-emerald-200">
-          승인 완료된 일지입니다. 필요 시 수정 후 저장할 수 있습니다.
-        </div>
-      )}
+      <DailyLogLockNotice reason={access.lockReason} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
         <div>
@@ -678,7 +680,7 @@ export function RawThawingForm({ mode, editLogId }: Props) {
       )}
 
       <div className="flex flex-wrap justify-end gap-2 mb-10">
-        <button type="button" onClick={handleSave} disabled={saving} className="px-6 py-2.5 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-white font-medium text-sm">{saving ? "저장 중..." : "저장"}</button>
+        <button type="button" onClick={handleSave} disabled={saving || !canEdit} className="px-6 py-2.5 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-white font-medium text-sm">{saving ? "저장 중..." : "저장"}</button>
         {canSubmit && (
           <button type="button" onClick={handleSubmit} disabled={saving} className="px-6 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-medium text-sm">{saving ? "처리 중…" : "제출"}</button>
         )}

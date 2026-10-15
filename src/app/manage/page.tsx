@@ -381,6 +381,10 @@ export default function ManagePage() {
         <Link href="/admin/logs" className="text-slate-400 hover:text-slate-300">
           로그 조회
         </Link>
+        <span className="text-slate-600 mx-2">·</span>
+        <Link href="/admin/haccp-export" className="text-cyan-400 hover:text-cyan-300 font-medium">
+          HACCP 기록 내보내기
+        </Link>
       </p>
       {error && (
         <p className="text-red-400 text-sm" role="alert">

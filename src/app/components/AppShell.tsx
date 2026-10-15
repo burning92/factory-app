@@ -213,6 +213,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     router.replace("/");
     return null;
   }
+  const isHaccpExportPath = pathname === "/admin/haccp-export" || pathname.startsWith("/admin/haccp-export/");
+  if (isHaccpExportPath && !isAdminLikeRole(profile?.role)) {
+    router.replace("/");
+    return null;
+  }
 
   const showTabBar = true;
   /** 경로(/harang) 또는 보기 모드(200)일 때 라이트 하랑 쉘 — '/' 하랑 작업 홈과 동일 테마 */

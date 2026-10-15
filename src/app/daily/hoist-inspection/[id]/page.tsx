@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import {
@@ -10,8 +10,10 @@ import {
   type HoistOverallAssessment,
 } from "@/features/daily/hoistInspectionChecklist";
 import { canShowDailyApproveReject } from "@/app/daily/dailyLogPermissions";
+import DailyLogActions from "@/app/daily/DailyLogActions";
 
 type LogHeader = {
+  [key: string]: unknown;
   id: string;
   inspection_date: string;
   author_name: string | null;
@@ -60,7 +62,6 @@ function overallAssessmentLabel(v: HoistOverallAssessment | null): string {
 }
 
 export default function DailyHoistInspectionViewPage() {
-  const router = useRouter();
   const params = useParams();
   const id = typeof params?.id === "string" ? params.id : "";
   const { user, profile } = useAuth();
@@ -336,29 +337,14 @@ export default function DailyHoistInspectionViewPage() {
         </div>
       )}
 
-      <div className="flex flex-wrap justify-end gap-2 mb-6">
-        <Link
-          href={`/daily/hoist-inspection/${id}/edit`}
-          className="px-4 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium"
-        >
-          수정
-        </Link>
-        <button
-          type="button"
-          onClick={async () => {
-            if (!window.confirm("이 점검기록을 삭제할까요?")) return;
-            setActionLoading(true);
-            const { error: err } = await supabase.from("daily_hoist_inspection_logs").delete().eq("id", id);
-            setActionLoading(false);
-            if (err) setError(err.message);
-            else router.push("/daily/hoist-inspection");
-          }}
-          disabled={actionLoading}
-          className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-medium"
-        >
-          {actionLoading ? "처리 중…" : "삭제"}
-        </button>
-      </div>
+      <DailyLogActions
+        table="daily_hoist_inspection_logs"
+        logId={id}
+        log={header}
+        editHref={`/daily/hoist-inspection/${id}/edit`}
+        listHref="/daily/hoist-inspection"
+        onChanged={load}
+      />
 
       {rejectModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">

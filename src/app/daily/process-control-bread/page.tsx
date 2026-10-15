@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { Pencil, Trash2 } from "lucide-react";
+import { getDailyLogAccess } from "@/app/daily/dailyLogPermissions";
 
 type LogStatus = "draft" | "submitted" | "approved" | "rejected";
 
@@ -17,6 +18,9 @@ type LogRow = {
   approved_at: string | null;
   approved_by_name: string | null;
   reject_reason: string | null;
+  author_user_id: string | null;
+  submitted_by: string | null;
+  submitted_at: string | null;
 };
 
 function formatDate(iso: string | null): string {
@@ -57,7 +61,7 @@ function statusBadgeClass(s: LogStatus): string {
 }
 
 export default function DailyProcessControlBreadListPage() {
-  const { viewOrganizationCode } = useAuth();
+  const { user, profile, viewOrganizationCode } = useAuth();
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; error?: boolean } | null>(null);
@@ -69,7 +73,7 @@ export default function DailyProcessControlBreadListPage() {
     setLoading(true);
     const { data, error } = await supabase
       .from("daily_process_control_bread_logs")
-      .select("id, inspection_date, author_name, product_name, status, approved_at, approved_by_name, reject_reason")
+      .select("id, inspection_date, author_name, product_name, status, approved_at, approved_by_name, reject_reason, author_user_id, submitted_by, submitted_at")
       .eq("organization_code", orgCode)
       .order("inspection_date", { ascending: false })
       .limit(100);
@@ -87,7 +91,7 @@ export default function DailyProcessControlBreadListPage() {
   }, [fetchLogs]);
 
   const getRowHref = (log: LogRow) => {
-    if (log.status === "draft" || log.status === "rejected") return `/daily/process-control-bread/${log.id}/edit`;
+    if (getDailyLogAccess(log, user?.id, profile?.role).canEdit) return `/daily/process-control-bread/${log.id}/edit`;
     return `/daily/process-control-bread/${log.id}`;
   };
 
@@ -150,12 +154,16 @@ export default function DailyProcessControlBreadListPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
+                      {getDailyLogAccess(log, user?.id, profile?.role).canEdit && (
                       <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `/daily/process-control-bread/${log.id}/edit`; }} className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-700/60 bg-slate-900/30 hover:bg-slate-700/40 text-slate-200" title="수정" aria-label="수정">
                         <Pencil className="w-4 h-4" strokeWidth={2} />
                       </button>
+                      )}
+                      {getDailyLogAccess(log, user?.id, profile?.role).canDelete && (
                       <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); void handleDelete(log.id); }} disabled={deletingId === log.id} className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-red-700/40 bg-red-900/10 hover:bg-red-900/25 text-red-200 disabled:opacity-50" title="삭제" aria-label="삭제">
                         <Trash2 className="w-4 h-4" strokeWidth={2} />
                       </button>
+                      )}
                     </div>
                 </div>
                 {log.status === "approved" && (log.approved_at || log.approved_by_name) && (

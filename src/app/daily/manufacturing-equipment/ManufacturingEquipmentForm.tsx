@@ -15,6 +15,8 @@ import {
   resolveTrackedEquipmentId,
 } from "@/features/equipment/trackedEquipment";
 import { canWriteEquipmentHistory } from "@/features/equipment/equipmentHistoryPermissions";
+import { useDailyLogFormAccess } from "@/app/daily/useDailyLogFormAccess";
+import DailyLogLockNotice from "@/app/daily/DailyLogLockNotice";
 
 type LogStatus = "draft" | "submitted" | "approved" | "rejected";
 type ItemResult = "O" | "X";
@@ -76,7 +78,11 @@ export function ManufacturingEquipmentForm({ mode, editLogId }: Props) {
   const orgCode = viewOrganizationCode ?? "100";
   const canRegisterIncident = canWriteEquipmentHistory(profile?.role);
   const authorName = (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
-  const canSubmit = currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus === null;
+  const { access, assertWritable } = useDailyLogFormAccess("daily_manufacturing_equipment_logs", currentLogId, currentLogStatus);
+  const canEdit = access.canEdit;
+  const canSubmit =
+    access.canSubmit &&
+    (currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus === null);
   const hasAnyX = useMemo(() => Object.values(results).some((v) => v === "X"), [results]);
 
   const autoDeviationText = useMemo(() => {
@@ -328,6 +334,7 @@ export function ManufacturingEquipmentForm({ mode, editLogId }: Props) {
     };
     let logId: string;
     if (mode === "edit" && currentLogId) {
+      await assertWritable(currentLogId);
       const { error: updateErr } = await supabase
         .from("daily_manufacturing_equipment_logs")
         .update(payload)
@@ -343,6 +350,7 @@ export function ManufacturingEquipmentForm({ mode, editLogId }: Props) {
         .maybeSingle();
       const existingRow = existing as { id: string; status: LogStatus } | null;
       if (existingRow) {
+        await assertWritable(existingRow.id);
         const { error: updateErr } = await supabase
           .from("daily_manufacturing_equipment_logs")
           .update(payload)
@@ -364,7 +372,7 @@ export function ManufacturingEquipmentForm({ mode, editLogId }: Props) {
       }
     }
     return logId;
-  }, [inspectionDate, orgCode, authorName, hasAnyX, corrective, mode, currentLogId, user?.id]);
+  }, [inspectionDate, orgCode, authorName, hasAnyX, corrective, mode, currentLogId, user?.id, assertWritable]);
 
   const handleSave = useCallback(async () => {
     if (!inspectionDate.trim()) {
@@ -503,6 +511,8 @@ export function ManufacturingEquipmentForm({ mode, editLogId }: Props) {
           {toast.message}
         </div>
       )}
+
+      <DailyLogLockNotice reason={access.lockReason} />
 
       {currentLogStatus != null && (
         <div className="mb-4 px-4 py-2 rounded-lg text-sm bg-slate-800/80 border border-slate-600">
@@ -727,7 +737,7 @@ export function ManufacturingEquipmentForm({ mode, editLogId }: Props) {
         <button
           type="button"
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || !canEdit}
           className="px-6 py-2.5 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-white font-medium text-sm"
         >
           {saving ? "저장 중…" : "저장"}
@@ -736,7 +746,7 @@ export function ManufacturingEquipmentForm({ mode, editLogId }: Props) {
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={saving}
+            disabled={saving || !canEdit}
             className="px-6 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-medium text-sm"
           >
             {saving ? "처리 중…" : "제출"}

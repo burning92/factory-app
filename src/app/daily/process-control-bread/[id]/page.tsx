@@ -8,8 +8,10 @@ import { supabase } from "@/lib/supabase";
 import { PROCESS_CONTROL_BREAD_STAGES } from "@/features/daily/processControlBreadChecklist";
 import { canShowDailyApproveReject } from "@/app/daily/dailyLogPermissions";
 import { displayToppingWeightRows } from "@/app/daily/process-control-bread/toppingWeightChecks";
+import DailyLogActions from "@/app/daily/DailyLogActions";
 
 type LogHeader = {
+  [key: string]: unknown;
   id: string;
   inspection_date: string;
   author_name: string | null;
@@ -237,10 +239,14 @@ export default function DailyProcessControlBreadViewPage() {
         </div>
       )}
 
-      <div className="flex flex-wrap justify-end gap-2 mb-6">
-        <Link href={`/daily/process-control-bread/${id}/edit`} className="px-4 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium">수정</Link>
-        <button type="button" onClick={async () => { if (!window.confirm("이 점검일지를 삭제할까요?")) return; setActionLoading(true); const { error: err } = await supabase.from("daily_process_control_bread_logs").delete().eq("id", id); setActionLoading(false); if (err) setError(err.message); else router.push("/daily/process-control-bread"); }} disabled={actionLoading} className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-medium">삭제</button>
-      </div>
+      <DailyLogActions
+        table="daily_process_control_bread_logs"
+        logId={id}
+        log={header}
+        editHref={`/daily/process-control-bread/${id}/edit`}
+        listHref="/daily/process-control-bread"
+        onChanged={load}
+      />
 
       {rejectModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">

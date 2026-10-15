@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { Pencil, Trash2 } from "lucide-react";
+import { getDailyLogAccess } from "@/app/daily/dailyLogPermissions";
 
 type LogStatus = "draft" | "submitted" | "approved" | "rejected";
 type LogRow = {
@@ -18,6 +19,9 @@ type LogRow = {
   approved_at: string | null;
   approved_by_name: string | null;
   reject_reason: string | null;
+  author_user_id: string | null;
+  submitted_by: string | null;
+  submitted_at: string | null;
 };
 
 function statusLabel(s: LogStatus): string {
@@ -34,7 +38,7 @@ function statusBadgeClass(s: LogStatus): string {
 }
 
 export default function DailyRawThawingListPage() {
-  const { viewOrganizationCode } = useAuth();
+  const { user, profile, viewOrganizationCode } = useAuth();
   const orgCode = viewOrganizationCode ?? "100";
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,7 +49,7 @@ export default function DailyRawThawingListPage() {
     setLoading(true);
     const { data, error } = await supabase
       .from("daily_raw_thawing_logs")
-      .select("id, thawing_date, planned_use_date, material_name, lot_no, author_name, status, approved_at, approved_by_name, reject_reason")
+      .select("id, thawing_date, planned_use_date, material_name, lot_no, author_name, status, approved_at, approved_by_name, reject_reason, author_user_id, submitted_by, submitted_at")
       .eq("organization_code", orgCode)
       .order("thawing_date", { ascending: false })
       .limit(100);
@@ -61,7 +65,7 @@ export default function DailyRawThawingListPage() {
   }, [fetchLogs]);
 
   const getRowHref = (log: LogRow) => {
-    if (log.status === "draft" || log.status === "rejected") return `/daily/raw-thawing/${log.id}/edit`;
+    if (getDailyLogAccess(log, user?.id, profile?.role).canEdit) return `/daily/raw-thawing/${log.id}/edit`;
     return `/daily/raw-thawing/${log.id}`;
   };
 
@@ -100,8 +104,12 @@ export default function DailyRawThawingListPage() {
                     {log.planned_use_date && <p className="mt-1 text-xs text-slate-500">사용예정일: {log.planned_use_date}</p>}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
+                      {getDailyLogAccess(log, user?.id, profile?.role).canEdit && (
                       <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `/daily/raw-thawing/${log.id}/edit`; }} className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-700/60 bg-slate-900/30 hover:bg-slate-700/40 text-slate-200" title="수정"><Pencil className="w-4 h-4" strokeWidth={2} /></button>
+                      )}
+                      {getDailyLogAccess(log, user?.id, profile?.role).canDelete && (
                       <button type="button" onClick={async (e) => { e.preventDefault(); e.stopPropagation(); if (!window.confirm("이 일지를 삭제할까요?")) return; setDeletingId(log.id); const { error } = await supabase.from("daily_raw_thawing_logs").delete().eq("id", log.id); setDeletingId(null); if (error) setToast({ message: error.message, error: true }); else fetchLogs(); }} disabled={deletingId === log.id} className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-red-700/40 bg-red-900/10 hover:bg-red-900/25 text-red-200 disabled:opacity-50" title="삭제"><Trash2 className="w-4 h-4" strokeWidth={2} /></button>
+                      )}
                     </div>
                 </div>
                 {log.status === "rejected" && log.reject_reason && <p className="mt-1 text-xs text-amber-400/90 line-clamp-1">{log.reject_reason}</p>}

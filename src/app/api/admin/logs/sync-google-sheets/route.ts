@@ -2,9 +2,28 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
 import { isAdminLikeRole } from "@/lib/roles";
+import { RECEIVING_ITEMS_TABLE } from "@/features/daily/receivingPhotoQuery";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+
+function chunkIds(ids: string[], size: number): string[][] {
+  const out: string[][] = [];
+  for (let i = 0; i < ids.length; i += size) out.push(ids.slice(i, i + size));
+  return out;
+}
+
+/** 시트 셀(5만 자 제한)에 base64 사진을 보내지 않는다. 원본은 audit_logs에 그대로 남아 있다. */
+function omitInlinePhotos(data: unknown): unknown {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return data ?? null;
+  const out: Record<string, unknown> = { ...(data as Record<string, unknown>) };
+  for (const [key, value] of Object.entries(out)) {
+    if (typeof value === "string" && value.startsWith("data:image/")) {
+      out[key] = `[사진 생략: ${value.length.toLocaleString("ko-KR")}자, 원본은 감사로그에 보존]`;
+    }
+  }
+  return out;
+}
 
 export async function POST(request: Request) {
   const webhookUrl = process.env.LOGS_SHEETS_WEBHOOK_URL ?? "";
@@ -67,7 +86,7 @@ export async function POST(request: Request) {
     admin
       .from("audit_logs")
       .select(
-        "id, created_at, actor_login_id, actor_display_name, actor_role, action, target_table, target_id, target_label, before_data, after_data, meta, ip_address, user_agent"
+        "id, created_at, actor_login_id, actor_display_name, actor_role, action, target_table, target_id, target_label, meta, ip_address, user_agent"
       )
       .gte("created_at", sinceIso)
       .order("created_at", { ascending: true })
@@ -76,12 +95,28 @@ export async function POST(request: Request) {
   if (accessRes.error) return NextResponse.json({ error: accessRes.error.message }, { status: 500 });
   if (auditRes.error) return NextResponse.json({ error: auditRes.error.message }, { status: 500 });
 
+  const auditRows: Record<string, unknown>[] = (auditRes.data ?? []).map((row) => ({ ...row }));
+  const auditById = new Map(auditRows.map((row) => [String(row.id), row]));
+  const photoTableIds = auditRows.filter((row) => row.target_table === RECEIVING_ITEMS_TABLE).map((row) => String(row.id));
+  const otherIds = auditRows.filter((row) => row.target_table !== RECEIVING_ITEMS_TABLE).map((row) => String(row.id));
+  const dataBatches = [...chunkIds(otherIds, 100), ...chunkIds(photoTableIds, 5)];
+  for (const ids of dataBatches) {
+    const { data, error } = await admin.from("audit_logs").select("id, before_data, after_data").in("id", ids);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    for (const item of data ?? []) {
+      const row = auditById.get(String(item.id));
+      if (!row) continue;
+      row.before_data = omitInlinePhotos(item.before_data);
+      row.after_data = omitInlinePhotos(item.after_data);
+    }
+  }
+
   const payload = {
     secret: webhookSecret,
     generated_at: new Date().toISOString(),
     days,
     access_rows: accessRes.data ?? [],
-    audit_rows: auditRes.data ?? [],
+    audit_rows: auditRows,
   };
 
   const webhookRes = await fetch(webhookUrl, {

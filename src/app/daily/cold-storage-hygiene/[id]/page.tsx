@@ -16,8 +16,10 @@ import {
   type ColdStorageTempKey,
 } from "@/features/daily/coldStorageHygieneTemperature";
 import { canShowDailyApproveReject } from "@/app/daily/dailyLogPermissions";
+import DailyLogActions from "@/app/daily/DailyLogActions";
 
 type LogHeader = {
+  [key: string]: unknown;
   id: string;
   inspection_date: string;
   author_name: string | null;
@@ -427,29 +429,14 @@ export default function DailyColdStorageHygieneViewPage() {
         </div>
       )}
 
-      <div className="flex flex-wrap justify-end gap-2 mb-6">
-        <Link
-          href={`/daily/cold-storage-hygiene/${id}/edit`}
-          className="px-4 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium"
-        >
-          수정
-        </Link>
-        <button
-          type="button"
-          onClick={async () => {
-            if (!window.confirm("이 점검일지를 삭제할까요?")) return;
-            setActionLoading(true);
-            const { error: err } = await supabase.from("daily_cold_storage_hygiene_logs").delete().eq("id", id);
-            setActionLoading(false);
-            if (err) setError(err.message);
-            else router.push("/daily/cold-storage-hygiene");
-          }}
-          disabled={actionLoading}
-          className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-medium"
-        >
-          삭제
-        </button>
-      </div>
+      <DailyLogActions
+        table="daily_cold_storage_hygiene_logs"
+        logId={id}
+        log={header}
+        editHref={`/daily/cold-storage-hygiene/${id}/edit`}
+        listHref="/daily/cold-storage-hygiene"
+        onChanged={load}
+      />
 
       {rejectModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">

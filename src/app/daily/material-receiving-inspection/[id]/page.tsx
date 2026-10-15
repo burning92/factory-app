@@ -7,8 +7,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { RECEIVING_STORAGE_OPTIONS } from "@/features/daily/materialReceivingInspection";
 import { canShowDailyApproveReject } from "@/app/daily/dailyLogPermissions";
+import DailyLogActions from "@/app/daily/DailyLogActions";
+import {
+  RECEIVING_ITEMS_TABLE,
+  RECEIVING_ITEM_COLUMNS_WITHOUT_PHOTO,
+  loadReceivingPhotosOneByOne,
+} from "@/features/daily/receivingPhotoQuery";
 
 type LogHeader = {
+  [key: string]: unknown;
   id: string;
   received_at: string;
   author_name: string | null;
@@ -76,6 +83,7 @@ export default function DailyMaterialReceivingInspectionViewPage() {
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [rejectReasonInput, setRejectReasonInput] = useState("");
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   const canApproveReject = canShowDailyApproveReject(profile?.role, header?.status);
   const approverName = (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
@@ -119,13 +127,24 @@ export default function DailyMaterialReceivingInspectionViewPage() {
     }
     setHeader(logData as LogHeader);
     const { data: itemsData, error: itemsErr } = await supabase
-      .from("daily_material_receiving_inspection_log_items")
-      .select("*")
+      .from(RECEIVING_ITEMS_TABLE)
+      .select(RECEIVING_ITEM_COLUMNS_WITHOUT_PHOTO)
       .eq("log_id", id)
       .order("line_index", { ascending: true });
-    if (itemsErr) setItems([]);
-    else setItems((itemsData ?? []) as LogItem[]);
+    const loaded = itemsErr
+      ? []
+      : ((itemsData ?? []) as unknown as Omit<LogItem, "label_photo_url">[]).map((item) => ({ ...item, label_photo_url: null }));
+    setItems(loaded);
     setLoading(false);
+    if (loaded.length === 0) return;
+    setPhotoError(null);
+    try {
+      await loadReceivingPhotosOneByOne(supabase, loaded.map((item) => item.id), (itemId, url) => {
+        if (url) setItems((prev) => prev.map((item) => (item.id === itemId ? { ...item, label_photo_url: url } : item)));
+      });
+    } catch (e) {
+      setPhotoError(e instanceof Error ? e.message : String(e));
+    }
   }, [id, router]);
 
   useEffect(() => {
@@ -180,7 +199,9 @@ export default function DailyMaterialReceivingInspectionViewPage() {
         {items.length === 0 ? (
           <p className="text-slate-500 text-sm">등록된 품목이 없습니다.</p>
         ) : (
-          items.map((row) => (
+          <>
+          {photoError && <p className="text-red-300 text-xs">{photoError}</p>}
+          {items.map((row) => (
             <section
               key={row.id}
               className="rounded-xl border border-slate-700/60 bg-slate-800/50 p-4 space-y-2 text-sm"
@@ -243,7 +264,8 @@ export default function DailyMaterialReceivingInspectionViewPage() {
                 </div>
               )}
             </section>
-          ))
+          ))}
+          </>
         )}
       </div>
 
@@ -324,32 +346,14 @@ export default function DailyMaterialReceivingInspectionViewPage() {
         </div>
       )}
 
-      <div className="flex flex-wrap justify-end gap-2 mb-6">
-        <Link
-          href={`/materials/material-receiving-inspection/${id}/edit`}
-          className="px-4 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium"
-        >
-          수정
-        </Link>
-        <button
-          type="button"
-          onClick={async () => {
-            if (!window.confirm("이 일지를 삭제할까요?")) return;
-            setActionLoading(true);
-            const { error: err } = await supabase
-              .from("daily_material_receiving_inspection_logs")
-              .delete()
-              .eq("id", id);
-            setActionLoading(false);
-            if (err) setError(err.message);
-            else router.push("/materials/material-receiving-inspection");
-          }}
-          disabled={actionLoading}
-          className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-medium"
-        >
-          삭제
-        </button>
-      </div>
+      <DailyLogActions
+        table="daily_material_receiving_inspection_logs"
+        logId={id}
+        log={header}
+        editHref={`/materials/material-receiving-inspection/${id}/edit`}
+        listHref="/materials/material-receiving-inspection"
+        onChanged={load}
+      />
 
       {rejectModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">

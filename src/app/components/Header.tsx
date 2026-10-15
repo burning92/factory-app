@@ -81,6 +81,7 @@ const DESKTOP_DROPDOWN_MANAGEMENT: DropdownItem[] = [
   { href: "/admin/equipment", label: "제조설비등록" },
   { href: "/admin/equipment-options", label: "설비옵션관리" },
   { href: "/admin/logs", label: "로그조회" },
+  { href: "/admin/haccp-export", label: "HACCP 기록 내보내기" },
 ];
 
 /** 워커: 생산계획 */

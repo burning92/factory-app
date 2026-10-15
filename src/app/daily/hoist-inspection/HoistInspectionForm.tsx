@@ -9,6 +9,8 @@ import {
   HOIST_OVERALL_ASSESSMENT_OPTIONS,
   type HoistOverallAssessment,
 } from "@/features/daily/hoistInspectionChecklist";
+import { useDailyLogFormAccess } from "@/app/daily/useDailyLogFormAccess";
+import DailyLogLockNotice from "@/app/daily/DailyLogLockNotice";
 
 type LogStatus = "draft" | "submitted" | "approved" | "rejected";
 type ItemResult = "O" | "X";
@@ -49,7 +51,11 @@ export function HoistInspectionForm({ mode, editLogId }: Props) {
 
   const orgCode = viewOrganizationCode ?? "100";
   const authorName = (profile?.display_name ?? "").trim() || (profile?.login_id ?? "").trim();
-  const canSubmit = currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus === null;
+  const { access, assertWritable } = useDailyLogFormAccess("daily_hoist_inspection_logs", currentLogId, currentLogStatus);
+  const canEdit = access.canEdit;
+  const canSubmit =
+    access.canSubmit &&
+    (currentLogStatus === "draft" || currentLogStatus === "rejected" || currentLogStatus === null);
   const hasAnyX = useMemo(() => Object.values(results).some((v) => v === "X"), [results]);
 
   const autoDeviationText = useMemo(() => {
@@ -231,6 +237,7 @@ export function HoistInspectionForm({ mode, editLogId }: Props) {
     };
     let logId: string;
     if (mode === "edit" && currentLogId) {
+      await assertWritable(currentLogId);
       const { error: updateErr } = await supabase
         .from("daily_hoist_inspection_logs")
         .update(payload)
@@ -246,6 +253,7 @@ export function HoistInspectionForm({ mode, editLogId }: Props) {
         .maybeSingle();
       const existingRow = existing as { id: string; status: LogStatus } | null;
       if (existingRow) {
+        await assertWritable(existingRow.id);
         const { error: updateErr } = await supabase
           .from("daily_hoist_inspection_logs")
           .update(payload)
@@ -267,7 +275,7 @@ export function HoistInspectionForm({ mode, editLogId }: Props) {
       }
     }
     return logId;
-  }, [inspectionDate, orgCode, authorName, overallAssessment, hasAnyX, corrective, mode, currentLogId, user?.id]);
+  }, [inspectionDate, orgCode, authorName, overallAssessment, hasAnyX, corrective, mode, currentLogId, user?.id, assertWritable]);
 
   const handleSave = useCallback(async () => {
     if (!inspectionDate.trim()) {
@@ -384,6 +392,8 @@ export function HoistInspectionForm({ mode, editLogId }: Props) {
           </span>
         </div>
       )}
+
+      <DailyLogLockNotice reason={access.lockReason} />
 
       <div className="mb-6">
         <label className="block text-sm font-medium text-slate-400 mb-1">점검일자</label>
@@ -524,7 +534,7 @@ export function HoistInspectionForm({ mode, editLogId }: Props) {
         <button
           type="button"
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || !canEdit}
           className="px-6 py-2.5 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-white font-medium text-sm"
         >
           {saving ? "저장 중…" : "저장"}
