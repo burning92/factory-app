@@ -3,15 +3,23 @@ import { HACCP_LOGS, type HaccpLogSpec } from "@/features/haccpExport/catalog";
 import type { AccountProfile } from "@/features/haccpExport/flags";
 import { detectFloorFromColumn, detectFloorFromRecord, isColdTempColumn, type FloorValue } from "@/features/haccpExport/floor";
 import {
-  fetchDeleteAudits,
+  columnsOf,
   fetchAuditsForIds,
   fetchFilteredHeaders,
   fetchItemsForHeaders,
   fetchPages,
+  fetchPeriodDeleteAudits,
   HaccpExportError,
+  loadEquipmentMaster,
   loadProfilesWithOrg,
+  loadServerColumnCatalog,
+  type ColumnCatalog,
+  type PhotoKind,
   type Row,
 } from "@/features/haccpExport/load";
+import { buildEquipmentFloorIndex, type EquipmentFloorIndex, type EquipmentMasterRow } from "@/features/haccpArchive/floors";
+
+const CORRECTION_COLUMNS = "id,created_at,kind,target_table,target_ids,target_columns,reason,requested_by_name,approved_by_name,approved_at";
 import { checkPhotos, type PhotoCheck } from "@/features/haccpExport/photos";
 
 export type LoadedLog = {
@@ -21,6 +29,8 @@ export type LoadedLog = {
   headerDbCount: number;
   itemDbCount: number;
   nullDateCount: number;
+  /** 입고검수 항목 사진 종류(본문은 읽지 않음) */
+  photoKinds: Map<string, PhotoKind>;
 };
 
 export type FloorTally = Record<FloorValue | "none", number> & { units: number };
@@ -33,6 +43,8 @@ export type ExportBundle = {
   profiles: Map<string, AccountProfile>;
   audits: Map<string, Row[]>;
   deleteAudits: Row[];
+  corrections: Row[];
+  equipment: EquipmentFloorIndex;
   org000: Row[];
   org000SameDayOrg100: Row[];
   photos: Map<string, PhotoCheck>;
@@ -64,18 +76,26 @@ export function tallyFloors(log: LoadedLog): FloorTally {
   return tally;
 }
 
-async function fetchOrg000(admin: SupabaseClient, from: string, to: string): Promise<{ rows: Row[]; sameDay: Row[] }> {
+async function fetchOrg000(admin: SupabaseClient, from: string, to: string, catalog: ColumnCatalog): Promise<{ rows: Row[]; sameDay: Row[] }> {
   const air = HACCP_LOGS.find((log) => log.key === "air");
   if (!air) return { rows: [], sameDay: [] };
+  const columns = columnsOf(catalog, air.headerTable);
   const rows = await fetchPages(admin, air.headerTable, (query) =>
     query.eq("organization_code", "000").gte(air.dateColumn, from).lte(air.dateColumn, to)
-  );
+  , columns);
   const dates = Array.from(new Set(rows.map((row) => String(row.inspection_date ?? "")).filter(Boolean)));
   if (dates.length === 0) return { rows, sameDay: [] };
   const sameDay = await fetchPages(admin, air.headerTable, (query) =>
     query.eq("organization_code", "100").in("inspection_date", dates)
-  );
+  , columns);
   return { rows, sameDay };
+}
+
+function photoCheckOf(kind: PhotoKind | undefined): PhotoCheck | null {
+  if (!kind) return { kind: "NULL", access: "대상 없음", httpStatus: "" };
+  if (kind.kind === "empty") return { kind: "빈 문자열", access: "대상 없음", httpStatus: "" };
+  if (kind.kind === "data") return { kind: "인라인 data URL", access: "DB에 본문 있음(엑셀 제외)", httpStatus: "" };
+  return null;
 }
 
 export async function assembleExport(
@@ -83,15 +103,17 @@ export async function assembleExport(
   specs: HaccpLogSpec[],
   from: string,
   to: string,
-  options: { checkPhotos: boolean }
+  options: { checkPhotos: boolean; catalog?: ColumnCatalog }
 ): Promise<ExportBundle> {
+  const catalog = options.catalog ?? (await loadServerColumnCatalog());
   const logs: LoadedLog[] = [];
   for (const spec of specs) {
-    const headers = await fetchFilteredHeaders(admin, spec, from, to);
+    const headers = await fetchFilteredHeaders(admin, spec, from, to, catalog);
     const items = await fetchItemsForHeaders(
       admin,
       spec,
-      headers.rows.map((row) => String(row.id))
+      headers.rows.map((row) => String(row.id)),
+      catalog
     );
     logs.push({
       spec,
@@ -100,18 +122,18 @@ export async function assembleExport(
       headerDbCount: headers.dbCount,
       itemDbCount: items.dbCount,
       nullDateCount: headers.nullDateCount,
+      photoKinds: items.photoKinds,
     });
   }
 
   const profiles = await loadProfilesWithOrg(admin);
   const audits = new Map<string, Row[]>();
-  const tables: string[] = [];
   for (const log of logs) {
-    tables.push(log.spec.headerTable);
     const headerAudits = await fetchAuditsForIds(
       admin,
       log.spec.headerTable,
-      log.headers.map((row) => String(row.id))
+      log.headers.map((row) => String(row.id)),
+      catalog
     );
     for (const audit of headerAudits) {
       const key = auditKey(log.spec.headerTable, String(audit.target_id ?? ""));
@@ -120,11 +142,11 @@ export async function assembleExport(
       audits.set(key, list);
     }
     if (log.spec.itemTable) {
-      tables.push(log.spec.itemTable);
       const itemAudits = await fetchAuditsForIds(
         admin,
         log.spec.itemTable,
-        log.items.map((row) => String(row.id))
+        log.items.map((row) => String(row.id)),
+        catalog
       );
       for (const audit of itemAudits) {
         const key = auditKey(log.spec.itemTable, String(audit.target_id ?? ""));
@@ -135,17 +157,30 @@ export async function assembleExport(
     }
   }
 
-  const deleteAudits = await fetchDeleteAudits(admin, Array.from(new Set(tables)));
-  const org = await fetchOrg000(admin, from, to);
+  const deleteAudits = await fetchPeriodDeleteAudits(admin, logs, from, to, catalog);
+  const org = await fetchOrg000(admin, from, to, catalog);
+  const equipment = buildEquipmentFloorIndex((await loadEquipmentMaster(admin)) as unknown as EquipmentMasterRow[]);
+  const periodIds = new Set<string>([
+    ...logs.flatMap((log) => log.headers.map((row) => String(row.id))),
+    ...deleteAudits.map((row) => String(row.일지ID ?? "")),
+  ]);
+  const corrections = (await fetchPages(admin, "data_corrections", (query) => query, CORRECTION_COLUMNS)).filter((row) =>
+    ((row.target_ids as string[] | null) ?? []).some((id) => periodIds.has(String(id)))
+  );
 
   const photos = new Map<string, PhotoCheck>();
   if (options.checkPhotos) {
     const receiving = logs.find((log) => log.spec.photoColumn);
-    if (receiving?.spec.photoColumn) {
-      const column = receiving.spec.photoColumn;
-      const checked = await checkPhotos(
-        receiving.items.map((row) => ({ id: String(row.id), url: row[column] }))
-      );
+    if (receiving) {
+      const urls: { id: string; url: unknown }[] = [];
+      for (const row of receiving.items) {
+        const id = String(row.id);
+        const kind = receiving.photoKinds.get(id);
+        const fixed = photoCheckOf(kind);
+        if (fixed) photos.set(id, fixed);
+        else urls.push({ id, url: kind?.url });
+      }
+      const checked = await checkPhotos(urls);
       checked.forEach((photo, id) => photos.set(id, photo));
     }
   }
@@ -158,6 +193,8 @@ export async function assembleExport(
     profiles,
     audits,
     deleteAudits,
+    corrections,
+    equipment,
     org000: org.rows,
     org000SameDayOrg100: org.sameDay,
     photos,

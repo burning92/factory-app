@@ -13,7 +13,9 @@ import {
   isColdTempColumn,
   type FloorValue,
 } from "@/features/haccpExport/floor";
-import { HaccpExportError } from "@/features/haccpExport/load";
+import { DELETE_AUDIT_LOOKBACK_DAYS, HaccpExportError, PHOTO_OMITTED_MARK } from "@/features/haccpExport/load";
+import { provenanceLabel, STORAGE_LABEL } from "@/features/haccpArchive/provenance";
+import { resolveItemFloor } from "@/features/haccpArchive/floors";
 import {
   EMPTY_STRING_MARK,
   formatKstDisplay,
@@ -138,6 +140,8 @@ function headerGrid(log: LoadedLog, bundle: ExportBundle): Grid {
     "분석_계정소속조직",
     "분석_승인정합",
     "분석_이력추적",
+    "분석_저장위치",
+    "분석_작성경로",
     ...tzColumns.map((column) => `표시KST_${column}`),
   ];
   const rows = log.headers.map((row) => {
@@ -153,6 +157,12 @@ function headerGrid(log: LoadedLog, bundle: ExportBundle): Grid {
       profile ? profile.organization_code : null,
       approvalConsistencyLabel(row, approver),
       auditTraceLabel(auditCount),
+      STORAGE_LABEL,
+      provenanceLabel(
+        (bundle.audits.get(auditKey(log.spec.headerTable, String(row.id))) ?? [])
+          .filter((a) => a.action === "create")
+          .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))[0]
+      ),
       ...tzColumns.map((column) => formatKstDisplay(row[column])),
     ];
   });
@@ -162,13 +172,17 @@ function headerGrid(log: LoadedLog, bundle: ExportBundle): Grid {
 function itemGrid(log: LoadedLog, bundle: ExportBundle): Grid | null {
   if (!log.spec.itemTable) return null;
   const keys = orderedKeys(log.items, ["id", "log_id", "created_at"]);
-  const columns = [...keys, "분석_문구상층"];
+  const columns = [...keys, "분석_문구상층", "분석_층", "분석_층근거"];
   if (log.spec.photoColumn) columns.push("분석_사진종류", "분석_사진접근", "분석_사진HTTP");
   const rows = log.items.map((row) => {
     const photo = log.spec.photoColumn ? bundle.photos.get(String(row.id)) : undefined;
+    const equipmentText = log.spec.key === "mfg" || log.spec.key === "air" ? String(row.question_text ?? "") || null : null;
+    const floor = resolveItemFloor(row, bundle.equipment, equipmentText);
     const base = [
       ...keys.map((key) => (key in row ? row[key] : null)),
       detectFloorFromRecord(row),
+      floor.floor,
+      floor.basis || null,
     ];
     if (log.spec.photoColumn) base.push(photo?.kind ?? null, photo?.access ?? null, photo?.httpStatus ?? null);
     return base;
@@ -197,9 +211,13 @@ function coverRows(bundle: ExportBundle, mode: string): unknown[][] {
     ["감사로그", AUDIT_NOTE],
     ["이력 표시", `연결 이력이 없는 헤더는 ${AUDIT_MISSING_LABEL} 이다. 이 문구를 무수정으로 읽지 않는다.`],
     ["층", "원본 시트의 분석_문구상층은 항목 문자열에 1층/2층/3층이 하나만 있을 때만 적는다. 비어 있으면 층을 배정하지 않은 것이다."],
+    ["층(설비마스터)", "분석_층은 분석_문구상층이 없을 때 설비마스터에서 설비명이 하나의 층으로만 대응되면 그 층을 적고, 분석_층근거에 관리번호를 남긴다. 같은 이름이 여러 층에 있거나 전층이면 비운다."],
+    ["삭제이력 범위", `선택 기간 일지의 삭제만 담는다. 일지 삭제는 삭제 전 기록일이 기간 안인 것, 세부항목 삭제는 기간 안 일지에 속한 것이다(기간 시작 ${DELETE_AUDIT_LOOKBACK_DAYS}일 전 이후 감사로그에서 찾음).`],
+    ["정정이력", "정정이력 시트는 기간 안 일지를 대상으로 한 정정 요청서(data_corrections)다. 정정 전 원본(before_snapshot)은 Drive 정정·보완 이력 보관본에 있다."],
     ["부자재 창고", "일지 이름에 3F가 있어도 항목 문구에 층이 없으면 3층으로 넣지 않는다."],
     ["제조설비 2층", "2층 분류는 층 단어 없이 저장된 과거 일지가 있다. 그 행은 2층으로 추정하지 않는다."],
-    ["사진", "입고 표시사진은 원본 URL 또는 data URL을 유지하고, 분석_사진접근에 확인 결과를 따로 적는다."],
+    ["사진", `입고 표시사진 본문(base64 data URL)은 엑셀에 넣지 않고 ${PHOTO_OMITTED_MARK} 로 표시한다. 원본은 DB와 Drive 비공개 보관본(지정 관리자 계정 열람)에 있다. http 주소는 그대로 적고 분석_사진접근에 확인 결과를 적는다.`],
+    ["작성 경로", "분석_저장위치는 현재 저장 위치다. 분석_작성경로는 일지 생성 감사로그가 있을 때만 적고, 없으면 출처 미확인이다(AppSheet 등 이전 시스템 기록일 수 있으며 단정하지 않는다)."],
     ["긴 값", "Excel 셀 한도를 넘는 값은 긴텍스트 시트에 나눠 두고, 원래 칸에는 참조 문구를 넣는다."],
     ["기록일 없음", "기록일 컬럼이 NULL인 행은 기간 필터에 넣지 않는다. 검증 시트의 기록일NULL이 그 건수다."],
   ];
@@ -348,8 +366,10 @@ export async function buildFullWorkbook(
     auditGrid(bundle),
     {
       name: "삭제이력",
-      columns: ["target_table", "target_id", "id", "created_at", "표시KST_created_at", "actor_display_name", "target_label", "before_data"],
+      columns: ["구분", "일지ID", "target_table", "target_id", "id", "created_at", "표시KST_created_at", "actor_display_name", "target_label", "before_data"],
       rows: bundle.deleteAudits.map((audit) => [
+        audit.구분 ?? null,
+        audit.일지ID ?? null,
         audit.target_table,
         audit.target_id,
         audit.id,
@@ -359,7 +379,25 @@ export async function buildFullWorkbook(
         audit.target_label,
         audit.before_data ?? null,
       ]),
-      idColumn: 2,
+      idColumn: 4,
+    },
+    {
+      name: "정정이력",
+      columns: ["id", "created_at", "표시KST_created_at", "구분", "target_table", "target_ids", "target_columns", "reason", "requested_by_name", "approved_by_name", "approved_at", "표시KST_approved_at"],
+      rows: bundle.corrections.map((row) => [
+        row.id,
+        row.created_at,
+        formatKstDisplay(row.created_at),
+        row.kind === "reopen" ? "승인 취소 후 재검토(앱)" : row.kind === "direct_sql" ? "직접 정정(SQL)" : row.kind ?? null,
+        row.target_table,
+        ((row.target_ids as unknown[] | null) ?? []).join(", "),
+        ((row.target_columns as unknown[] | null) ?? []).join(", "),
+        row.reason,
+        row.requested_by_name,
+        row.approved_by_name,
+        row.approved_at,
+        formatKstDisplay(row.approved_at),
+      ]),
     },
     ...detail,
   ]);
